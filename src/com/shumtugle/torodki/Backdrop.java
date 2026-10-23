@@ -88,15 +88,17 @@ final class Backdrop {
         int c = mix(low, 0xFF3C73C0, k);
         // glow round the sun side, close to the horizon
         float glow = Math.max(0f, toSun);
-        glow = glow * glow * glow * (float) Math.exp(-el * 9f);
-        c = mix(c, 0xFFFFD69A, glow * 0.75f);
+        float halo = glow * glow * (float) Math.exp(-el * 5f);
+        glow = glow * glow * glow * glow * (float) Math.exp(-el * 9f);
+        c = mix(c, 0xFFFFC97E, halo * 0.55f);
+        c = mix(c, 0xFFFFF0C8, glow * 0.8f);
         // clouds: thin streaks, stretched along the horizon
         double az = Math.atan2(dx, dz);
         float n = fbm((float) (az * 2.6), el * 22f + 3f);
-        float dens = smooth(0.63f, 0.8f, n) * (float) Math.exp(-el * 2.2f) * (el > 0.01f ? 1f : el * 100f);
+        float dens = smooth(0.66f, 0.82f, n) * (float) Math.exp(-el * 2.2f) * (el > 0.01f ? 1f : el * 100f);
         if (dens > 0.01f) {
             float under = fbm((float) (az * 5.0) + 11f, el * 40f);
-            int cl = mix(0xFFF0B49C, 0xFFFFE2C6, Math.max(0f, toSun) * 0.6f);
+            int cl = mix(0xFFEFA98F, 0xFFFFD9B8, Math.max(0f, toSun) * 0.7f);
             cl = mix(cl, 0xFFC1A3B6, smooth(0.45f, 0.75f, under) * 0.55f);
             c = mix(c, cl, Math.min(1f, dens * 1.3f));
         }

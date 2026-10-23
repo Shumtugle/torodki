@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6
+- People are round now: shaded heads, tapered limbs, shorts, trousers or skirts, long
+  hair, hats and bags.
+- Cars are little sedans with windscreens, side glass, chrome bumpers, lights and plates;
+  a row of them is parked along both curbs, and traffic cones stand by the plinth.
+- Shadows of people and cars are soft, with blurred edges and fading tails.
+- A warm fill light on everything that faces the thrower; a stronger glow on the sun side
+  of the sky.
+
 ## 0.5
 - Evening by the sea. A low sun from the left lays long, dark shadows across the road:
   dappled shadows of palm crowns, the shadow of the plinth and of every piece.

@@ -20,7 +20,7 @@ final class Raster {
 
     // sun: direction toward it, and the shadow map basis
     // a low evening sun from the left, over the promenade: long shadows across the street
-    static final float LX = -0.80f, LY = 0.31f, LZ = -0.20f;
+    static final float LX = -0.80f, LY = 0.30f, LZ = -0.10f;
     private float e1x, e1y, e1z, e2x, e2y, e2z;
     static final int SM = 320;
     private final float[] sm = new float[SM * SM];
@@ -427,7 +427,7 @@ final class Raster {
             float ndl = nx * sunX() + ny * sunY() + nz * sunZ();
             int c = flat ? color : light(color, nx, ny, nz, ndl);
             if (pat == PAT_FACADE) {
-                lightK(ny, ndl, fk);
+                lightK(nz, ny, ndl, fk);
                 facadeBase = color;
             }
             for (int k = 0; k < 4; k++) {
@@ -464,7 +464,7 @@ final class Raster {
     /** Sun and sky light on a base color for a face normal. */
     static int light(int color, float nx, float ny, float nz, float ndl) {
         float[] k = KL.get();
-        lightK(ny, ndl, k);
+        lightK(nz, ny, ndl, k);
         float rr = k[0], gg = k[1], b = k[2];
         int r = (int) (((color >> 16) & 0xFF) * rr), g = (int) (((color >> 8) & 0xFF) * gg), bl = (int) ((color & 0xFF) * b);
         return 0xFF000000 | (Math.min(255, r) << 16) | (Math.min(255, g) << 8) | Math.min(255, bl);
@@ -479,6 +479,22 @@ final class Raster {
 
     /** Light on a surface as three channel factors: blue sky from above, a warm low sun. */
     static void lightK(float ny, float ndl, float[] out) {
+        lightK(0f, ny, ndl, out);
+    }
+
+    /**
+     * The same, with a warm fill on faces turned toward the viewer, as the evening
+     * light bounces back off the street and the houses.
+     */
+    static void lightK(float nz, float ny, float ndl, float[] out) {
+        float fill = Math.max(0f, -nz) * (1f - Math.abs(ny)) * 0.42f;
+        lightK0(ny, ndl, out);
+        out[0] += fill * 1.0f;
+        out[1] += fill * 0.78f;
+        out[2] += fill * 0.55f;
+    }
+
+    private static void lightK0(float ny, float ndl, float[] out) {
         float sun = Math.max(0f, ndl);
         float sky = 0.5f + 0.5f * ny;
         out[0] = 0.27f + 0.10f * sky + 1.08f * sun;
@@ -584,6 +600,57 @@ final class Raster {
                 }
             }
         }
+    }
+
+    private final float[] sd = new float[3];
+
+    /**
+     * A soft shadow on the ground: a capsule from (ax, az) to (bx, bz), radius ra at the
+     * first end and rb at the other, its edge blurred and its tail fading. Only ground
+     * the sun still reaches, and nothing standing in front, takes it.
+     */
+    void softShadow(float ax, float az, float bx, float bz, float ra, float rb, float strength) {
+        float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+        float rm = Math.max(ra, rb);
+        for (int i = 0; i < 8; i++) {
+            float x = ((i & 4) == 0 ? ax : bx) + ((i & 1) == 0 ? -rm : rm);
+            float z = ((i & 4) == 0 ? az : bz) + ((i & 2) == 0 ? -rm : rm);
+            float v = depth(x, 0f, z);
+            if (v < 0.3f) return;
+            project(x, 0f, z, rw);
+            minX = Math.min(minX, rw[0]);
+            maxX = Math.max(maxX, rw[0]);
+            minY = Math.min(minY, rw[1]);
+            maxY = Math.max(maxY, rw[1]);
+        }
+        int x0 = Math.max(0, (int) minX), x1 = Math.min(w - 1, (int) maxX + 1);
+        int y0 = Math.max(0, (int) minY), y1 = Math.min(h - 1, (int) maxY + 1);
+        float ex = bx - ax, ez = bz - az, el2 = Math.max(1e-6f, ex * ex + ez * ez);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) {
+                int k = y * w + x;
+                if (lit[k] != 1) continue;
+                viewToWorld((x + 0.5f - cx) / f, (cy - y - 0.5f) / f, 1f, sd);
+                if (sd[1] >= -1e-3f) continue;
+                float t = -camY / sd[1];
+                if (Math.abs(zb[k] * t - 1f) > 0.02f) continue;     // not the ground here
+                float gxw = camX + sd[0] * t - ax, gzw = camZ + sd[2] * t - az;
+                float u = Math.max(0f, Math.min(1f, (gxw * ex + gzw * ez) / el2));
+                float dx = gxw - ex * u, dz = gzw - ez * u;
+                float dist = (float) Math.sqrt(dx * dx + dz * dz);
+                float r = ra + (rb - ra) * u;
+                if (dist >= r) continue;
+                float edge = (r - dist) / (r * 0.65f);
+                if (edge > 1f) edge = 1f;
+                edge = edge * edge * (3f - 2f * edge);
+                float a = strength * edge * (1f - 0.55f * u);
+                int c = col[k];
+                int cr = (c >> 16) & 0xFF, cg = (c >> 8) & 0xFF, cb = c & 0xFF;
+                int sr = cr * SH_R >> 8, sg = cg * SH_G >> 8, sb = cb * SH_B >> 8;
+                col[k] = 0xFF000000 | ((int) (cr + (sr - cr) * a) << 16) | ((int) (cg + (sg - cg) * a) << 8)
+                        | (int) (cb + (sb - cb) * a);
+                if (a > 0.55f) lit[k] = 2;
+            }
     }
 
     private final float[] gx = new float[8], gy = new float[8], gz = new float[8];

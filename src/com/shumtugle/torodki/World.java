@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.5";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.6";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -134,7 +134,7 @@ final class World implements Physics.Listener {
         seed = seedOf(lv);
         phys.clear();
         pieces.clear();
-        plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0xFFE8D9BC);
+        plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0xFFF2E3C6);
         plinth.setPose(0f, Builder.TOP * 0.5f, Builder.CZ, 1, 0, 0, 0);
         phys.add(plinth);
         ArrayList<Body> made = standingBuilding(lv, seed);
