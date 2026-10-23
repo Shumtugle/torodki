@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.33";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.34";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -818,13 +818,15 @@ final class World implements Physics.Listener {
             host.sound(Synth.DTMF + k, 0.8f, 1f);
             host.buzz(8);
             String key = KEYS[k];
-            if (key.equals("C")) dialled.setLength(0);
+            if (key.equals("C")) dialled.setLength(Math.max(0, dialled.length() - 1));
             else if (key.equals("CALL")) {
                 int lv = dialled.length() == 0 ? -1 : Integer.parseInt(dialled.toString());
                 if (lv < 2 || lv > best()) {
+                    // no such number: the line says so in three rising beeps, the display shakes
                     wrongAt = booth;
                     dialled.setLength(0);
-                    host.sound(Synth.ALARM, 0.25f, 1.6f);
+                    host.sound(Synth.BUSY, 0.7f, 1f);
+                    host.buzz(30);
                     return;
                 }
                 dialled.setLength(0);
@@ -849,6 +851,27 @@ final class World implements Physics.Listener {
         }
     }
 
+    // pictures for the keys, a cell to a character
+    private static final String[] HANDSET = {
+            ".XXXXXXX.",
+            "XXXXXXXXX",
+            "XXX...XXX",
+            "XX.....XX"};
+    private static final String[] ERASE = {
+            "...X.....",
+            "..XX.....",
+            ".XXXXXXXX",
+            "..XX.....",
+            "...X....."};
+
+    /** A little picture of cells, centered on a point. */
+    private static void glyph(Px f, String[] rows, int cx, int cy, int s, int c) {
+        int x0 = cx - rows[0].length() * s / 2, y0 = cy - rows.length * s / 2;
+        for (int j = 0; j < rows.length; j++)
+            for (int i = 0; i < rows[j].length(); i++)
+                if (rows[j].charAt(i) == 'X') f.rect(x0 + i * s, y0 + j * s, x0 + (i + 1) * s, y0 + (j + 1) * s, c);
+    }
+
     private void drawBooth(Px f) {
         for (int k = 0; k < f.a.length; k++) f.a[k] = Backdrop.mix(f.a[k], 0xFF101418, 0.55f);
         int top = boothTop(), bot = h - 10;
@@ -856,7 +879,7 @@ final class World implements Physics.Listener {
         f.rect(BX0 - 6, top - 22, BX1 + 6, bot, 0xFF5E1612);
         f.rect(BX0 - 10, top - 30, BX1 + 10, top - 20, 0xFF4A100C);
         f.rect(W / 2 - 40, top - 19, W / 2 + 40, top - 7, 0xFF2A2420);
-        PixelFont.draw(f, "TELEPHONE", W / 2 - PixelFont.width("TELEPHONE", 1) / 2, top - 16, 1, 0xFFFFE6A0);
+        glyph(f, HANDSET, W / 2, top - 13, 2, 0xFFFFE6A0);
         f.rect(BX0, top, BX1, bot - 6, 0xFF2A2E33);
         // the telephone: a steel case, a small green display
         int cx0 = BX0 + 8, cx1 = BX1 - 8;
@@ -865,16 +888,22 @@ final class World implements Physics.Listener {
         int dy = top + 24;
         f.rect(cx0 + 12, dy, cx1 - 12, dy + 52, 0xFF1A1E16);
         f.rect(cx0 + 14, dy + 2, cx1 - 14, dy + 50, 0xFF9DB86A);
-        boolean wrong = booth - wrongAt < 1.2f;
+        float since = booth - wrongAt;
+        boolean wrong = since < 1f;
         int ink = 0xFF243014;
         if (wrong) {
-            PixelFont.draw(f, "NO SUCH", W / 2 - PixelFont.width("NO SUCH", 1) / 2, dy + 12, 1, ink);
-            PixelFont.draw(f, "LEVEL", W / 2 - PixelFont.width("LEVEL", 1) / 2, dy + 24, 1, ink);
+            // a number that is not there: the display blinks dark and shakes its dashes
+            boolean dark = ((int) (since * 10f) & 1) == 0;
+            if (dark) f.rect(cx0 + 14, dy + 2, cx1 - 14, dy + 50, 0xFF5E7040);
+            int sh = Math.round((float) Math.sin(since * 60f) * 4f * (1f - since));
+            for (int i = -1; i <= 1; i++) f.rect(W / 2 + i * 22 - 7 + sh, dy + 24, W / 2 + i * 22 + 7 + sh, dy + 28, ink);
         } else {
-            String shown = dialled.length() == 0 ? (((int) (booth * 2f) & 1) == 0 ? "_" : " ") : dialled.toString();
-            PixelFont.draw(f, "LEVEL", cx0 + 20, dy + 8, 1, ink);
-            PixelFont.draw(f, shown, W / 2 - PixelFont.width(shown, 3) / 2 + 18, dy + 8, 3, ink);
-            String up = "2 TO " + best();
+            if (dialled.length() > 0) {
+                String shown = dialled.toString();
+                PixelFont.draw(f, shown, W / 2 - PixelFont.width(shown, 3) / 2, dy + 8, 3, ink);
+            } else if (((int) (booth * 2f) & 1) == 0) f.rect(W / 2 - 7, dy + 26, W / 2 + 7, dy + 29, ink);
+            // the numbers that answer: from the second to the farthest reached
+            String up = "2-" + best();
             PixelFont.draw(f, up, W / 2 - PixelFont.width(up, 1) / 2, dy + 38, 1, 0xFF4A5E2A);
         }
         // the keypad: steel keys, the pressed one sunk for a moment
@@ -889,10 +918,9 @@ final class World implements Physics.Listener {
             int o = pressed ? 2 : 0;
             f.rect(bx, by + o, bx + KW, by + KH + o, 0xFF6A7076);
             f.rect(bx + 2, by + 2 + o, bx + KW - 2, by + KH - 2 + o, face);
-            String t = KEYS[k];
-            int sc = t.length() == 1 ? 2 : 1;
-            PixelFont.draw(f, t, bx + KW / 2 - PixelFont.width(t, sc) / 2, by + KH / 2 - 3 * sc + o, sc,
-                    call ? 0xFFF2F8EC : 0xFF2A2420);
+            if (call) glyph(f, HANDSET, bx + KW / 2, by + KH / 2 + o, 4, 0xFFF2F8EC);
+            else if (clear) glyph(f, ERASE, bx + KW / 2, by + KH / 2 + o, 4, 0xFF2A2420);
+            else PixelFont.draw(f, KEYS[k], bx + KW / 2 - PixelFont.width(KEYS[k], 2) / 2, by + KH / 2 - 6 + o, 2, 0xFF2A2420);
         }
         // the golem's red button, and the hook to hang up on
         int gy = golemY();
@@ -901,7 +929,7 @@ final class World implements Physics.Listener {
         PixelFont.draw(f, "GOLEM", W / 2 - PixelFont.width("GOLEM", 2) / 2, gy + 10, 2, 0xFFFFE8D8);
         f.rect(W / 2 - 46, gy + 46, W / 2 + 46, gy + 66, 0xFF1E1C1A);
         f.rect(W / 2 - 40, gy + 42, W / 2 + 40, gy + 50, 0xFF2E2C2A);
-        PixelFont.draw(f, "HANG UP", W / 2 - PixelFont.width("HANG UP", 1) / 2, gy + 54, 1, 0xFFE8E2D6);
+        PixelFont.draw(f, "HOME", W / 2 - PixelFont.width("HOME", 1) / 2, gy + 54, 1, 0xFFE8E2D6);
         // the doors fold away to the sides as it opens
         float k = Math.min(1f, booth / 0.6f);
         int half = (BX1 - BX0) / 2, open = Math.round(half * k * k * (3f - 2f * k));
@@ -1495,7 +1523,7 @@ final class World implements Physics.Listener {
             f.rect(cx, y + 1, cx + 9, y + 10, 0xFF5A3A0E);
             f.rect(cx + 1, y + 2, cx + 8, y + 9, whole ? (i < 2 ? 0xFFFFB13A : 0xFFFFE07A) : 0xFF3A3236);
         }
-        String lv = "LEVEL " + (level + 1);
+        String lv = String.valueOf(level + 1);
         PixelFont.draw(f, lv, W - 7 - PixelFont.width(lv, 1), y + 15, 1, 0xFF6A4A1A);
     }
 
@@ -2034,7 +2062,14 @@ final class World implements Physics.Listener {
         boolean plastic = a.material == Body.WATER || (b != null && b.material == Body.WATER);
         float gain = Math.min(1f, (speed - 1f) / 5f);
         if (hammerHit) gain = Math.min(1.3f, gain * 1.4f + 0.2f);
-        if (b == null || other == null) {
+        int street = voiceOf(a);
+        if (street < 0 && b != null) street = voiceOf(b);
+        if (street >= 0) {
+            if (speed > 1.2f || hammerHit) {
+                float rate = street == Synth.PLASTIC ? 1.35f : street == Synth.CLANG ? 0.9f : 1f;
+                host.sound(street, gain * (street == Synth.CLANG ? 0.85f : 1f), rate * (0.92f + fx.nextFloat() * 0.16f));
+            }
+        } else if (b == null || other == null) {
             if (speed > 1.6f) host.sound(Synth.GROUND, gain * 0.9f, 0.9f + fx.nextFloat() * 0.2f);
         } else {
             boolean stone = a.material == Body.STONE || b.material == Body.STONE || other.material == Body.PLINTH
@@ -2046,11 +2081,23 @@ final class World implements Physics.Listener {
         if (hammerHit) host.buzz((int) Math.min(60f, 10f + speed * 3f));
         if (speed > 2.2f && other != null && other.material != Body.WATER) {
             int n = (int) Math.min(14f, speed * 1.2f);
-            boolean dusty = other.material == Body.STONE || other.material == Body.PLINTH;
+            boolean dusty = other.material == Body.STONE || other.material == Body.PLINTH || other.material == Body.SANDBAG;
+            int dust = other.material == Body.SANDBAG ? 0xFFDCC79C : 0xFFE6DCC8;
             for (int i = 0; i < n; i++)
-                spawn(x, y, z, dusty && (i & 1) == 0, dusty ? 0xFFE6DCC8 : Backdrop.scale(other.tint, 0.8f), speed * 0.35f);
+                spawn(x, y, z, dusty && (i & 1) == 0, dusty ? dust : Backdrop.scale(other.tint, 0.8f), speed * 0.35f);
         } else if (speed > 3f && b == null) {
             for (int i = 0; i < 4; i++) spawn(x, 0.02f, z, true, 0xFFD8CFC0, 1f);
+        }
+    }
+
+    /** The sound of a street thing knocked about, or -1 for a plain block. */
+    private static int voiceOf(Body b) {
+        switch (b.material) {
+            case Body.BARREL: return Synth.CLANG;
+            case Body.TYRE: return Synth.RUBBER;
+            case Body.SANDBAG: return Synth.SAND;
+            case Body.CONE: return Synth.PLASTIC;
+            default: return -1;
         }
     }
 
@@ -2339,6 +2386,10 @@ final class World implements Physics.Listener {
             }
             if (b.gone) continue;
             if (b.material == Body.WATER) drawBottle(b, scale, drop, i + 2);
+            else if (b.material == Body.BARREL) drawDrum(b, scale, drop, i + 2);
+            else if (b.material == Body.CONE) drawCone(b, scale, drop, i + 2);
+            else if (b.material == Body.TYRE) drawTyre(b, scale, drop, i + 2);
+            else if (b.material == Body.SANDBAG) drawBag(b, scale, drop, i + 2);
             else drawBody(b, scale, drop, i + 2);
             if (b.radius > 0f) ras.shadowBall(b.px, b.py + drop, b.pz, b.radius * scale);
             else ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
@@ -2678,6 +2729,176 @@ final class World implements Physics.Listener {
                 b.r01 * Raster.sunX() + b.r11 * Raster.sunY() + b.r21 * Raster.sunZ()), Raster.PAT_FLAT, id << 3, false);
     }
 
+    // ---- street things: turned shapes, solid, seen from outside ----
+
+    /**
+     * A solid of revolution round the body's own up axis, the near facets only: profile
+     * heights as a share of the half height, radii as a share of r, a color per band.
+     * Inward turns the facets to face the axis, for the inside of a hole. Rust, if any,
+     * eats into a few facets; shine adds a sun glint.
+     */
+    private void lathe(Body b, float r, float hh, float drop, int id, float[] ys, float[] rs, int[] cols,
+                       boolean inward, float rust, float shine) {
+        float px = b.px, py = b.py + drop, pz = b.pz;
+        float out = inward ? -1f : 1f;
+        for (int seg = 0; seg < ys.length - 1; seg++) {
+            float y0 = ys[seg] * hh, y1 = ys[seg + 1] * hh, r0 = rs[seg] * r, r1 = rs[seg + 1] * r;
+            float slope = (r0 - r1) / Math.max(1e-4f, y1 - y0);
+            for (int i = 0; i < SIDES; i++) {
+                float ca = COS[i], sa = SIN[i], cb = COS[i + 1], sb = SIN[i + 1];
+                float mc = (ca + cb) * 0.5f, ms = (sa + sb) * 0.5f;
+                float nlx = mc * out, nly = slope * out, nlz = ms * out;
+                float nl = (float) Math.sqrt(nlx * nlx + nly * nly + nlz * nlz);
+                nlx /= nl;
+                nly /= nl;
+                nlz /= nl;
+                float nx = b.r00 * nlx + b.r01 * nly + b.r02 * nlz;
+                float ny = b.r10 * nlx + b.r11 * nly + b.r12 * nlz;
+                float nz = b.r20 * nlx + b.r21 * nly + b.r22 * nlz;
+                float ym = (y0 + y1) * 0.5f, rm = (r0 + r1) * 0.5f;
+                float fxw = px + b.r00 * (mc * rm) + b.r01 * ym + b.r02 * (ms * rm);
+                float fyw = py + b.r10 * (mc * rm) + b.r11 * ym + b.r12 * (ms * rm);
+                float fzw = pz + b.r20 * (mc * rm) + b.r21 * ym + b.r22 * (ms * rm);
+                float vx = ras.camX - fxw, vy = ras.camY - fyw, vz = ras.camZ - fzw;
+                if (vx * nx + vy * ny + vz * nz <= 0f) continue;
+                float ndl = nx * Raster.sunX() + ny * Raster.sunY() + nz * Raster.sunZ();
+                int c = Raster.light(cols[seg], nx, ny, nz, ndl);
+                if (shine > 0f) {
+                    float vl = (float) Math.sqrt(vx * vx + vy * vy + vz * vz);
+                    float hx2 = Raster.sunX() + vx / vl, hy2 = Raster.sunY() + vy / vl, hz2 = Raster.sunZ() + vz / vl;
+                    float hl = (float) Math.sqrt(hx2 * hx2 + hy2 * hy2 + hz2 * hz2);
+                    float sp = Math.max(0f, (nx * hx2 + ny * hy2 + nz * hz2) / hl);
+                    sp = sp * sp * sp * sp;
+                    sp = sp * sp * sp;
+                    c = Backdrop.mix(c, 0xFFFFFFFF, sp * shine);
+                }
+                if (rust > 0f) {
+                    int h = (i * 7 + seg * 13 + id * 29) & 15;
+                    if (h < 4) c = Backdrop.mix(c, 0xFF6E3F22, rust * (0.5f + h * 0.15f));
+                }
+                for (int k = 0; k < 4; k++) {
+                    float cc = k == 0 || k == 3 ? ca : cb, ss = k == 0 || k == 3 ? sa : sb;
+                    float rr = k < 2 ? r0 : r1, yy = k < 2 ? y0 : y1;
+                    qx[k] = px + b.r00 * cc * rr + b.r01 * yy + b.r02 * ss * rr;
+                    qy[k] = py + b.r10 * cc * rr + b.r11 * yy + b.r12 * ss * rr;
+                    qz[k] = pz + b.r20 * cc * rr + b.r21 * yy + b.r22 * ss * rr;
+                }
+                ras.poly(qx, qy, qz, null, null, 4, c, Raster.PAT_FLAT, id << 3, false);
+            }
+        }
+    }
+
+    /**
+     * A flat ring across the body's up axis at height y, centered off the axis by (ox, oz),
+     * facing up or down; drawn only when it faces the eye. An inner radius of zero makes it
+     * a disc.
+     */
+    private void ring(Body b, float y, float ox, float oz, float rIn, float rOut, float drop, int col, boolean up, int id) {
+        float sg = up ? 1f : -1f;
+        float nx = b.r01 * sg, ny = b.r11 * sg, nz = b.r21 * sg;
+        float cx = b.px + b.r00 * ox + b.r01 * y + b.r02 * oz;
+        float cy = b.py + drop + b.r10 * ox + b.r11 * y + b.r12 * oz;
+        float cz = b.pz + b.r20 * ox + b.r21 * y + b.r22 * oz;
+        if ((ras.camX - cx) * nx + (ras.camY - cy) * ny + (ras.camZ - cz) * nz <= 0f) return;
+        int c = Raster.light(col, nx, ny, nz, nx * Raster.sunX() + ny * Raster.sunY() + nz * Raster.sunZ());
+        if (rIn <= 0f) {
+            for (int i = 0; i < SIDES; i++) {
+                float lx = COS[i] * rOut, lz = SIN[i] * rOut;
+                qx[i] = cx + b.r00 * lx + b.r02 * lz;
+                qy[i] = cy + b.r10 * lx + b.r12 * lz;
+                qz[i] = cz + b.r20 * lx + b.r22 * lz;
+            }
+            ras.poly(qx, qy, qz, null, null, SIDES, c, Raster.PAT_FLAT, id << 3, false);
+            return;
+        }
+        for (int i = 0; i < SIDES; i++) {
+            for (int k = 0; k < 4; k++) {
+                int j = k == 0 || k == 3 ? i : i + 1;
+                float rr = k < 2 ? rOut : rIn;
+                float lx = COS[j] * rr, lz = SIN[j] * rr;
+                qx[k] = cx + b.r00 * lx + b.r02 * lz;
+                qy[k] = cy + b.r10 * lx + b.r12 * lz;
+                qz[k] = cz + b.r20 * lx + b.r22 * lz;
+            }
+            ras.poly(qx, qy, qz, null, null, 4, c, Raster.PAT_FLAT, id << 3, false);
+        }
+    }
+
+    // a steel drum: the chimes at the ends, two rolling hoops pressed out of the side
+    private static final float[] DRUM_Y = {-1f, -0.93f, -0.4f, -0.35f, -0.3f, 0.3f, 0.35f, 0.4f, 0.93f, 1f};
+    private static final float[] DRUM_R = {0.96f, 0.97f, 0.97f, 1.04f, 0.97f, 0.97f, 1.04f, 0.97f, 0.97f, 0.96f};
+    private final int[] drumCol = new int[9];
+
+    private void drawDrum(Body b, float scale, float drop, int id) {
+        float r = b.hx * scale, hh = b.hy * scale;
+        int paint = b.tint, rim = Backdrop.scale(paint, 0.72f), hoop = Backdrop.mix(paint, 0xFFFFFFFF, 0.1f);
+        for (int k = 0; k < 9; k++) drumCol[k] = k == 0 || k == 8 ? rim : k == 2 || k == 3 || k == 5 || k == 6 ? hoop : paint;
+        lathe(b, r, hh, drop, id, DRUM_Y, DRUM_R, drumCol, false, 0.55f, 0.45f);
+        // the lid sits a little down inside the top chime; a bung near its edge
+        int lid = Backdrop.scale(paint, 0.86f);
+        ring(b, hh * 0.95f, 0f, 0f, 0f, r * 0.9f, drop, lid, true, id);
+        ring(b, hh, 0f, 0f, r * 0.86f, r * 0.96f, drop, rim, true, id);
+        ring(b, hh * 0.955f, r * 0.5f, r * 0.2f, 0f, r * 0.12f, drop, 0xFF3A3A3C, true, id);
+        ring(b, -hh, 0f, 0f, 0f, r * 0.96f, drop, rim, false, id);
+    }
+
+    // a road cone: a square black foot, the cone in orange with two white bands
+    private static final float[] CONE_Y = {-0.8f, -0.12f, 0.12f, 0.36f, 0.56f, 1f};
+    private static final float[] CONE_R = new float[CONE_Y.length];
+    private static final int[] CONE_COL = {0xFFF0641E, 0xFFF4F2EC, 0xFFF0641E, 0xFFF4F2EC, 0xFFF0641E};
+
+    static {
+        for (int i = 0; i < CONE_Y.length; i++) CONE_R[i] = 0.74f - (CONE_Y[i] + 0.8f) / 1.8f * 0.62f;
+    }
+
+    private void drawCone(Body b, float scale, float drop, int id) {
+        float r = b.hx * scale, hh = b.hy * scale;
+        float fy = -hh * 0.9f;
+        ras.box(b.px + b.r01 * fy, b.py + drop + b.r11 * fy, b.pz + b.r21 * fy, b.r00, b.r01, b.r02,
+                b.r10, b.r11, b.r12, b.r20, b.r21, b.r22, r, hh * 0.1f, b.hz * scale, 0xFF34302E, Raster.PAT_FLAT, id << 3);
+        lathe(b, r, hh, drop, id, CONE_Y, CONE_R, CONE_COL, false, 0f, 0.3f);
+        ring(b, hh, 0f, 0f, 0f, r * CONE_R[CONE_R.length - 1], drop, 0xFFD85414, true, id);
+    }
+
+    // a car tyre lying flat: the tread, the sidewalls round the hole, the inside of the hole
+    private static final float[] TYRE_Y = {-1f, -0.62f, -0.12f, 0.12f, 0.62f, 1f};
+    private static final float[] TYRE_R = {0.86f, 1f, 1f, 0.97f, 1f, 0.86f};
+    private static final float[] HOLE_Y = {-1f, 1f};
+    private static final float[] HOLE_R = {0.52f, 0.52f};
+    private final int[] tyreCol = new int[5];
+    private static final int[] HOLE_COL = {0xFF141415};
+
+    private void drawTyre(Body b, float scale, float drop, int id) {
+        float r = b.hx * scale, hh = b.hy * scale;
+        int rubber = b.tint, side = Backdrop.scale(rubber, 1.15f);
+        // the tread, worn shiny, split by a dark groove round the middle
+        tyreCol[0] = side;
+        tyreCol[1] = Backdrop.scale(rubber, 0.9f);
+        tyreCol[2] = 0xFF121213;
+        tyreCol[3] = Backdrop.scale(rubber, 0.9f);
+        tyreCol[4] = side;
+        lathe(b, r, hh, drop, id, HOLE_Y, HOLE_R, HOLE_COL, true, 0f, 0f);
+        lathe(b, r, hh, drop, id, TYRE_Y, TYRE_R, tyreCol, false, 0f, 0.25f);
+        ring(b, hh, 0f, 0f, r * 0.52f, r * 0.86f, drop, side, true, id);
+        ring(b, -hh, 0f, 0f, r * 0.52f, r * 0.86f, drop, side, false, id);
+    }
+
+    /** A bag of sand: a box of sacking rounded off by layers, a seam across one end. */
+    private void drawBag(Body b, float scale, float drop, int id) {
+        float hx = b.hx * scale, hy = b.hy * scale, hz = b.hz * scale;
+        int c = b.tint;
+        ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                hx, hy * 0.62f, hz, c, Raster.PAT_GRAIN, id << 3);
+        ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                hx * 0.95f, hy * 0.86f, hz * 0.9f, c, Raster.PAT_GRAIN, id << 3);
+        ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                hx * 0.86f, hy, hz * 0.76f, Backdrop.mix(c, 0xFFFFFFFF, 0.06f), Raster.PAT_GRAIN, id << 3);
+        float sx = hx * 0.8f;
+        ras.box(b.px + b.r00 * sx, b.py + drop + b.r10 * sx, b.pz + b.r20 * sx, b.r00, b.r01, b.r02,
+                b.r10, b.r11, b.r12, b.r20, b.r21, b.r22, hx * 0.03f, hy * 0.9f, hz * 0.93f,
+                Backdrop.scale(c, 0.7f), Raster.PAT_FLAT, id << 3);
+    }
+
     // hammer parts in the hammer's own frame: center, half sizes, color, pattern
     private static final float[][] PARTS = {
             {-0.1f, 0f, 0f, 0.31f, 0.03f, 0.03f},       // handle
@@ -2893,9 +3114,9 @@ final class World implements Physics.Listener {
         f.rect(bx, by, bx + fill, by + 6, on <= 1f - CLEAR ? 0xFF6FBF5A : 0xFFE8963C);
         int mark = bx + Math.round(bw * (1f - CLEAR));
         f.rect(mark, by - 3, mark + 1, by + 9, 0xFF5A3A0E);
-        String lv = "LEVEL " + (level + 1);
+        String lv = String.valueOf(level + 1);
         PixelFont.draw(f, lv, bx + bw - PixelFont.width(lv, 1), by + 12, 1, 0xFF6A4A1A);
-        String v = "V" + VERSION;
+        String v = VERSION;
         PixelFont.draw(f, v, W - PixelFont.width(v, 1) - 3, h - 10, 1, 0xFF8A8478);
     }
 

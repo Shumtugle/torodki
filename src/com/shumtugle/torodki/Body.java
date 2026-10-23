@@ -7,8 +7,10 @@ package com.shumtugle.torodki;
  */
 final class Body {
     static final int WOOD = 0, STONE = 1, HAMMER = 2, PLINTH = 3, GLASS = 4, WATER = 5, BALL = 6, CAR = 7, BALLOON = 8, GOLD = 9;
-    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f, 760f, 1500f, 0f, 160f, 4000f};
-    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f, 0.55f, 0.45f, 0.6f, 0.95f, 0.8f};
+    // street things: an empty steel drum, a road cone, a car tyre, a bag of sand
+    static final int BARREL = 10, CONE = 11, TYRE = 12, SANDBAG = 13;
+    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f, 760f, 1500f, 0f, 160f, 4000f, 380f, 220f, 320f, 1600f};
+    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f, 0.55f, 0.45f, 0.6f, 0.95f, 0.8f, 0.45f, 0.6f, 0.95f, 0.95f};
 
     static final float INERTIA = 3f;
 

@@ -39,6 +39,7 @@ final class Builder {
             "PILE", "CRADLE", "CROWN", "GROWN"};
     static final int FIRST_KINDS = 8, RECIPES = 11, GROWN = 11;
     static final int BALLS_FROM = 14;        // level, counted from 0
+    static final int STREET_FROM = 9;        // drums, tyres, cones and sandbags, counted from 0
     // the recipes after the first eight: every other one carries balls
     private static final int[] LATE = {8, 0, 9, 1, 10, 2, 8, 3, 9, 4, 10, 5, 8, 6, 9, 7, 10};
 
@@ -136,6 +137,61 @@ final class Builder {
     static final float BALL_R = 0.17f;
     static final int[] BALL_COLORS = {0xFF22357E, 0xFF6E1A2A, 0xFF34204A, 0xFF17604A, 0xFFB24A18, 0xFF1E1E26};
 
+    // ---- street things, in recipe units ----
+
+    static final float DRUM_D = 0.3f, DRUM_H = 0.44f, TYRE_D = 0.4f, TYRE_H = 0.13f, CONE_W = 0.3f, CONE_H = 0.46f;
+    static final float BAG_H = 0.13f;
+    static final int[] DRUM_COLORS = {0xFF2F5D8C, 0xFFB23A2E, 0xFF3F6B45, 0xFFD9A62B, 0xFF6B6E72, 0xFF2B2F36};
+    static final int[] BAG_COLORS = {0xFFC9AE7C, 0xFFBFA06A, 0xFFD2BA8A, 0xFF9C9A6A};
+    static final int TYRE_COLOR = 0xFF2E2D2F;
+
+    /** Any body by its bottom-center point; returns the height of its top. */
+    private float thing(float x, float bottom, float z, float sx, float sy, float sz, int material, int tint) {
+        float wx = x * S, wy = TOP + (bottom + sy * 0.5f) * S, wz = BASE_CZ + z * S;
+        Body b = new Body(sx * 0.5f * S, sy * 0.5f * S, sz * 0.5f * S, material, tint);
+        b.setPose(wx, wy, wz, 1, 0, 0, 0);
+        b.homeX = wx;
+        b.homeY = wy;
+        b.homeZ = wz;
+        out.add(b);
+        return bottom + sy;
+    }
+
+    /** An empty steel drum standing on end. */
+    private float drum(float x, float bottom, float z) {
+        return thing(x, bottom, z, DRUM_D, DRUM_H, DRUM_D, Body.BARREL, DRUM_COLORS[rnd.nextInt(DRUM_COLORS.length)]);
+    }
+
+    /** Old car tyres lying flat, one on another. */
+    private float tyres(float x, float bottom, float z, int n) {
+        for (int i = 0; i < n; i++) bottom = thing(x, bottom, z, TYRE_D, TYRE_H, TYRE_D, Body.TYRE, TYRE_COLOR);
+        return bottom;
+    }
+
+    /** A road cone on its square foot. */
+    private float cone(float x, float bottom, float z) {
+        return thing(x, bottom, z, CONE_W, CONE_H, CONE_W, Body.CONE, 0xFFF0641E);
+    }
+
+    /** Sandbags laid like bricks, two or three courses: heavy, dead, hard to shift. */
+    private float bags(float cx, float hw, float y, float d) {
+        int n = Math.max(2, Math.round(2f * hw / 0.44f));
+        float bw = 2f * hw / n;
+        int rows = 2 + rnd.nextInt(2);
+        int tint = BAG_COLORS[rnd.nextInt(BAG_COLORS.length)];
+        for (int r = 0; r < rows; r++) {
+            if ((r & 1) == 0) {
+                for (int c = 0; c < n; c++) thing(cx - hw + bw * (c + 0.5f), y, 0, bw - 0.01f, BAG_H, d, Body.SANDBAG, tint);
+            } else {
+                thing(cx - hw + bw * 0.25f, y, 0, bw * 0.5f - 0.01f, BAG_H, d, Body.SANDBAG, tint);
+                for (int c = 0; c < n - 1; c++) thing(cx - hw + bw * (c + 1f), y, 0, bw - 0.01f, BAG_H, d, Body.SANDBAG, tint);
+                thing(cx + hw - bw * 0.25f, y, 0, bw * 0.5f - 0.01f, BAG_H, d, Body.SANDBAG, tint);
+            }
+            y += BAG_H;
+        }
+        return y;
+    }
+
     /** A ball with its center at a point in recipe units above the plinth top. */
     private void ballAt(float x, float cy, float z) {
         float wx = x * S, wy = TOP + cy * S, wz = BASE_CZ + z * S;
@@ -172,6 +228,7 @@ final class Builder {
     private int budget;
     private float maxH;
     private boolean useBottles, useBalls, useBalloons;
+    private boolean useDrums, useTyres, useBags, useCones;
     private static final int[] BALLOON_COLORS = {0xFFE8483C, 0xFFF2C230, 0xFF3F8FD8, 0xFF5DBE6A, 0xFFE87AB0, 0xFFF29A3A};
 
     private void grown(int level) {
@@ -180,6 +237,11 @@ final class Builder {
         useBottles = rnd.nextFloat() < (water ? 0.8f : 0.3f);
         useBalls = level >= BALLS_FROM && rnd.nextFloat() < 0.45f;
         useBalloons = level >= BALLS_FROM + 2 && rnd.nextFloat() < 0.45f;
+        boolean street = level >= STREET_FROM;
+        useDrums = street && rnd.nextFloat() < 0.4f;
+        useTyres = street && rnd.nextFloat() < 0.4f;
+        useBags = street && rnd.nextFloat() < 0.35f;
+        useCones = street && rnd.nextFloat() < 0.4f;
         float hw = 0.95f + rnd.nextFloat() * 0.35f;
         float d = 0.34f + rnd.nextInt(3) * 0.08f;
         if (useBalls || useBalloons) d = Math.max(d, 0.46f);
@@ -217,8 +279,13 @@ final class Builder {
             float wBalloon = useBalloons && deep ? 1.2f : 0f, wBall = useBalls && deep ? 1.2f : 0f;
             float wBottle = useBottles ? 1.4f : 0f, wSteps = storey == 0 && hw > 0.6f ? 0.5f : 0f;
             float wWall = 1.1f, wPortal = 1.6f, wFence = hw > 0.45f ? 0.9f : 0f, wDeck = storey > 0 && hw > 0.5f ? 0.5f : 0f;
-            float r = rnd.nextFloat() * (wBalloon + wBall + wBottle + wSteps + wWall + wPortal + wFence + wDeck);
-            if ((r -= wBalloon) < 0f) top = carried(cx, hw, y, d, 2);
+            float wDrum = useDrums ? 1.3f : 0f, wTyre = useTyres ? 1.2f : 0f, wBags = useBags && storey < 2 ? 1.2f : 0f;
+            float r = rnd.nextFloat() * (wBalloon + wBall + wBottle + wSteps + wWall + wPortal + wFence + wDeck
+                    + wDrum + wTyre + wBags);
+            if ((r -= wDrum) < 0f) top = carried(cx, hw, y, d, 3);
+            else if ((r -= wTyre) < 0f) top = carried(cx, hw, y, d, 4);
+            else if ((r -= wBags) < 0f) top = bags(cx, hw, y, d);
+            else if ((r -= wBalloon) < 0f) top = carried(cx, hw, y, d, 2);
             else if ((r -= wBall) < 0f) top = carried(cx, hw, y, d, 1);
             else if ((r -= wBottle) < 0f) top = carried(cx, hw, y, d, 0);
             else if ((r -= wSteps) < 0f) {
@@ -317,8 +384,10 @@ final class Builder {
         return y;
     }
 
-    /** Cubes stacked into a little column. */
+    /** Cubes stacked into a little column; or a stack of tyres, or a drum. */
     private float column(float cx, float hw, float y, boolean stone) {
+        if (useTyres && rnd.nextFloat() < 0.4f) return tyres(cx, y, 0, 2 + rnd.nextInt(3));
+        if (useDrums && rnd.nextFloat() < 0.35f) return drum(cx, y, 0);
         float c = Math.min(2f * hw, 0.34f);
         int n = 1 + rnd.nextInt(3);
         for (int i = 0; i < n; i++) y = put(cx, y, 0, c, c, c, stone && i == 0);
@@ -340,15 +409,30 @@ final class Builder {
 
     /**
      * A slab carried by something that gives way: water bottles (0) that burst, polished
-     * balls on pads (1) that roll out, or balloons (2) that pop and fly off.
+     * balls on pads (1) that roll out, balloons (2) that pop and fly off, empty steel
+     * drums (3) that ring and roll, or stacks of old tyres (4) that bounce away.
      */
     private float carried(float cx, float hw, float y, float d, int what) {
         float top;
         float o = Math.max(0.2f, hw - 0.18f);
-        if (what == 0) {
+        if (what == 0 || what == 3) {
             int n = hw > 0.8f ? 3 : 2;
             top = y;
-            for (int i = 0; i < n; i++) top = Math.max(top, bottle(cx - o + 2f * o * i / (n - 1), y, 0));
+            for (int i = 0; i < n; i++) {
+                float x = cx - o + 2f * o * i / (n - 1);
+                top = Math.max(top, what == 0 ? bottle(x, y, 0) : drum(x, y, 0));
+            }
+        } else if (what == 4) {
+            int n = 3 + rnd.nextInt(2);
+            boolean four = d >= 0.5f;
+            float zo = d / 2f - TYRE_D / 2f + 0.03f;
+            top = y;
+            for (int i = -1; i <= 1; i += 2) {
+                if (four) {
+                    tyres(cx + i * o, y, -zo, n);
+                    top = Math.max(top, tyres(cx + i * o, y, zo, n));
+                } else top = Math.max(top, tyres(cx + i * o, y, 0, n));
+            }
         } else {
             float zo = d / 2f - 0.15f;
             top = y;
@@ -365,10 +449,16 @@ final class Builder {
         return put(cx, top, 0, 2f * hw + 0.06f, 0.1f, d + 0.04f, false);
     }
 
-    /** What crowns a tower: a cube, a ball, a bottle, three cubes, or nothing. */
+    /** What crowns a tower: a cube, a ball, a bottle, three cubes, road cones, or nothing. */
     private void cap(float cx, float hw, float y, float d) {
         float r = rnd.nextFloat();
         if (out.size() >= budget + 4 || r < 0.15f) return;
+        if (useCones && rnd.nextFloat() < 0.5f) {
+            int n = hw >= 0.5f ? 2 + rnd.nextInt(2) : 1;
+            float step = Math.min(0.34f, 2f * hw / n);
+            for (int i = 0; i < n; i++) cone(cx + (i - (n - 1) / 2f) * step, y, 0);
+            return;
+        }
         if (useBalls && r < 0.35f && hw >= 0.2f) nested(cx, y, 0);
         else if (r < 0.42f && hw >= 0.2f) {
             // a balanced T: a plank on one narrow post, a weight at each end

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.34
+- New parts for grown buildings, from the 10th level: empty steel drums in faded paint
+  with rust, that ring when struck; old car tyres stacked into columns, that bounce
+  with a dull rubber thump; road cones on the tops; sandbags laid like bricks as heavy
+  footings, that land without a ring in a puff of sand.
+- No words in the game any more, apart from GOLEM and HOME in the booth. A number the
+  telephone does not know answers with three rising beeps, the display blinking dark
+  and its dashes shaking. The keys C and CALL are pictures now: an arrow that wipes the
+  last digit, and a handset. The sign on the booth's roof is a handset too; the corner
+  shows the level as a bare number.
+
 ## 0.33
 - The golem's world: on the way down from the sky the street turns red and black, every
   color still alive under the filter, and the golem burns in a flickering golden fire.

@@ -1,0 +1,10 @@
+# A hammer into a building of tyres: the street things fly and thump.
+screen 1096 2560
+level 15
+wait 1.5
+throwat 0 3.2 11.5 16
+wait 0.9
+shot hit1
+wait 2
+shot hit2
+state

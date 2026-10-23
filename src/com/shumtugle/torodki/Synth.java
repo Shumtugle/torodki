@@ -13,8 +13,10 @@ final class Synth {
     static final int RATE = 22050;
     static final int WOOD = 0, STONE = 1, GROUND = 2, WHOOSH = 3, THUNDER = 4, CATCH = 5, TOCK = 6, GLASS = 7;
     static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11, POP = 12, ROAR = 13, BEAT = 14, RING = 15, DOOR = 16, DTMF = 17;
+    // after the twelve keypad tones
+    static final int CLANG = DTMF + 12, SAND = DTMF + 13, RUBBER = DTMF + 14, BUSY = DTMF + 15;
 
-    final float[][] bank = new float[DTMF + 12][];
+    final float[][] bank = new float[DTMF + 16][];
 
     Synth() {
         Random r = new Random(7);
@@ -42,6 +44,12 @@ final class Synth {
         // the keypad's tones, in the order of its keys: 1 2 3, 4 5 6, 7 8 9, C 0 CALL
         float[] lo = {697f, 770f, 852f, 941f}, hi = {1209f, 1336f, 1477f};
         for (int k = 0; k < 12; k++) bank[DTMF + k] = tone(lo[k / 3], hi[k % 3]);
+        // an empty steel drum: a few far-apart modes that ring on
+        bank[CLANG] = knock(r, 0.7f, new float[]{214f, 538f, 911f, 1447f, 2210f}, new float[]{0.8f, 0.75f, 0.5f, 0.32f, 0.2f},
+                new float[]{6f, 8f, 11f, 15f, 21f}, 0.5f, 0.5f);
+        bank[SAND] = sand(r);
+        bank[RUBBER] = rubber(r);
+        bank[BUSY] = busy();
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
     }
@@ -123,6 +131,54 @@ final class Synth {
             float t = i / (float) RATE;
             float env = Math.min(1f, t * 300f) * Math.min(1f, (0.13f - t) * 300f);
             s[i] = ((float) Math.sin(2 * Math.PI * a * t) + (float) Math.sin(2 * Math.PI * b * t)) * 0.25f * env;
+        }
+        return s;
+    }
+
+    /** A bag of sand dropped: no ring at all, a dull low push and a hiss of grains. */
+    private static float[] sand(Random r) {
+        int n = (int) (0.28f * RATE);
+        float[] s = new float[n];
+        float lp = 0f, lp2 = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float v = (float) Math.sin(2 * Math.PI * (70f - 30f * t) * t) * (float) Math.exp(-22f * t);
+            lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.3f;
+            lp2 += (lp - lp2) * 0.3f;
+            v += (lp - lp2) * 1.6f * (float) Math.exp(-14f * t);
+            s[i] = v * Math.min(1f, t * 600f) * 0.75f;
+        }
+        return s;
+    }
+
+    /** A tyre bouncing: a low rubbery bonk that sags in pitch. */
+    private static float[] rubber(Random r) {
+        int n = (int) (0.3f * RATE);
+        float[] s = new float[n];
+        float ph = 0f, lp = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            ph += (150f - 120f * t) / RATE;
+            float v = (float) Math.sin(2 * Math.PI * ph) * (float) Math.exp(-13f * t);
+            v += 0.3f * (float) Math.sin(4 * Math.PI * ph) * (float) Math.exp(-30f * t);
+            lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.1f;
+            v += lp * 0.8f * (float) Math.exp(-60f * t);
+            s[i] = v * Math.min(1f, t * 800f) * 0.7f;
+        }
+        return s;
+    }
+
+    /** The line's answer to a number that is not there: three short rising beeps. */
+    private static float[] busy() {
+        int n = (int) (0.9f * RATE);
+        float[] s = new float[n];
+        float[] f = {950f, 1400f, 1800f};
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            int k = (int) (t / 0.3f);
+            float u = t - k * 0.3f;
+            float env = u < 0.24f ? Math.min(1f, u * 400f) * Math.min(1f, (0.24f - u) * 400f) : 0f;
+            s[i] = (float) Math.sin(2 * Math.PI * f[Math.min(2, k)] * t) * 0.3f * env;
         }
         return s;
     }
