@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.22";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.23";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -36,6 +36,9 @@ final class World implements Physics.Listener {
         /** Heavy throws the gods have given and the player has not used yet. */
         void saveGifts(int heavy);
         int loadGifts();
+        /** How many times running the building of the saved level has been lost. */
+        void saveFails(int fails);
+        int loadFails();
         /** A file shipped with the game, or null. */
         byte[] asset(String name);
     }
@@ -113,6 +116,12 @@ final class World implements Physics.Listener {
     private boolean tapOnHammer;
     private float downAt;
     private float giftShown = -1f;            // when the gift was announced in the sky
+    // the golden hammer: lose the same building ten times running and the gods give one
+    // throw that scatters it whatever it hits, as the very first building did
+    static final int GOLD_AFTER = 10;
+    int fails;
+    boolean goldOn;
+    private boolean goldGift, goldThrow;
     private boolean aimedBefore;
     private float flightTime;
     private float retX, retY, retZ;
@@ -145,6 +154,7 @@ final class World implements Physics.Listener {
         life = new Life();
         level = Math.max(0, host.loadLevel());
         heavyLeft = Math.max(0, Math.min(HEAVY_MAX, host.loadGifts()));
+        fails = Math.max(0, host.loadFails());
         phys.listener = this;
     }
 
@@ -210,7 +220,12 @@ final class World implements Physics.Listener {
 
     /** Raises the building for a level: tested for standing still, asleep, ready to fall. */
     void startLevel(int lv, boolean animate) {
+        if (lv != level) {
+            fails = 0;
+            host.saveFails(0);
+        }
         level = lv;
+        goldOn = fails >= GOLD_AFTER;
         host.saveLevel(level);
         seed = seedOf(lv);
         if (zoomed) setZoomed(false);
@@ -632,7 +647,8 @@ final class World implements Physics.Listener {
         hammer.vy = dy / t - 0.5f * Physics.G * t;
         hammer.vz = dz / t;
         spinSign = aimX < W * 0.5f ? 1f : -1f;
-        heavyThrow = heavyOn && heavyLeft > 0;
+        goldThrow = goldOn;
+        heavyThrow = !goldThrow && heavyOn && heavyLeft > 0;
         if (heavyThrow) {
             hammer.scaleMass(HEAVY_MASS);
             heavyLeft--;
@@ -816,6 +832,7 @@ final class World implements Physics.Listener {
             if (k >= 1f) {
                 host.sound(Synth.CATCH, 0.8f, heavyThrow ? 0.75f : 1f);
                 host.buzz(heavyThrow ? 45 : 25);
+                goldThrow = false;
                 if (heavyThrow) {
                     hammer.scaleMass(1f / HEAVY_MASS);
                     heavyThrow = false;
@@ -915,6 +932,18 @@ final class World implements Physics.Listener {
         // the first building is the gods' welcome: they all laugh aloud
         sky.begin(verdict, level == 0 && verdict == Sky.OVATION);
         giftShown = -1f;
+        goldGift = false;
+        if (verdict == Sky.YAWN) {
+            fails++;
+            host.saveFails(fails);
+            if (fails == GOLD_AFTER) {
+                goldGift = true;
+                giftShown = 0f;
+            }
+        } else if (fails > 0) {
+            fails = 0;
+            host.saveFails(0);
+        }
         if (verdict == Sky.OVATION) {
             // the gods give the heavy hammer, and put it in the hand for the next building
             heavyLeft = Math.min(HEAVY_MAX, heavyLeft + HEAVY_GIFT);
@@ -1006,7 +1035,13 @@ final class World implements Physics.Listener {
             return;
         }
         // the first building flies to pieces at the first touch of the hammer
-        if (level == 0 && hammerHit && other != null && other != plinth && !blasted) {
+        if ((level == 0 || goldThrow) && hammerHit && other != null && other != plinth && other.material != Body.CAR
+                && !blasted) {
+            if (goldThrow) {
+                goldOn = false;
+                fails = 0;
+                host.saveFails(0);
+            }
             blasted = true;
             blastX = x;
             blastY = y;
@@ -1571,17 +1606,21 @@ final class World implements Physics.Listener {
                     b.hx, b.hy * 0.8f, b.hz);
         }
         boolean heavy = hs == HAND ? heavyOn : heavyThrow;
-        drawParts(heavy, 1f, 900);
+        boolean gold = hs == HAND ? goldOn : goldThrow;
+        drawParts(heavy || gold, 1f, 900, gold);
         // the other hammer waits at the lower left, in sight and in reach of a tap
         if (heavyLeft > 0 || heavy) {
             heldPose(-0.5f, -0.96f, 1.65f, 0.5f, 0.8f, 0.2f, 0.94f, -0.2f, 0.28f);
-            drawParts(!heavy, 0.62f, 920);
+            drawParts(!heavy, 0.62f, 920, false);
         }
     }
 
-    private void drawParts(boolean heavy, float scale, int id) {
+    private static final int[] GOLD_COL = {0xFF8A5A32, 0xFF5A3418, 0xFFF2C64A, 0xFFFFF0B0, 0xFFFFF0B0};
+    private static final int[] GOLD_PAT = {Raster.PAT_GRAIN, Raster.PAT_FLAT, Raster.PAT_FLAT, Raster.PAT_FLAT, Raster.PAT_FLAT};
+
+    private void drawParts(boolean heavy, float scale, int id, boolean gold) {
         float[][] parts = heavy ? HEAVY_PARTS : PARTS;
-        int[] cols = heavy ? HEAVY_COL : PART_COL, pats = heavy ? HEAVY_PAT : PART_PAT;
+        int[] cols = gold ? GOLD_COL : heavy ? HEAVY_COL : PART_COL, pats = gold ? GOLD_PAT : heavy ? HEAVY_PAT : PART_PAT;
         float px = pose[0], py = pose[1], pz = pose[2];
         float r00 = pose[3], r01 = pose[4], r02 = pose[5], r10 = pose[6], r11 = pose[7], r12 = pose[8];
         float r20 = pose[9], r21 = pose[10], r22 = pose[11];
@@ -1714,7 +1753,8 @@ final class World implements Physics.Listener {
                 float u = (x * ca + y * sa) / s, v = (-x * sa + y * ca) / s;
                 int c = 0;
                 if (u > 0.2f && u < 0.62f && Math.abs(v) < 0.34f) {
-                    c = (u > 0.27f && u < 0.32f) || (u > 0.5f && u < 0.55f) ? 0xFFC08A3C : 0xFF4A484E;
+                    c = (u > 0.27f && u < 0.32f) || (u > 0.5f && u < 0.55f) ? (goldGift ? 0xFFFFF0B0 : 0xFFC08A3C)
+                            : goldGift ? 0xFFE8B83A : 0xFF4A484E;
                     if (v < -0.2f) c = Backdrop.scale(c, 1.35f);
                 } else if (u > -0.75f && u <= 0.2f && Math.abs(v) < 0.08f) {
                     c = v < 0f ? 0xFF8A5A32 : 0xFF6A4226;

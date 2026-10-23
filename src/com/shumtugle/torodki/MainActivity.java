@@ -90,6 +90,16 @@ public final class MainActivity extends Activity implements World.Host {
     }
 
     @Override
+    public void saveFails(int fails) {
+        getSharedPreferences("game", MODE_PRIVATE).edit().putInt("fails", fails).apply();
+    }
+
+    @Override
+    public int loadFails() {
+        return getSharedPreferences("game", MODE_PRIVATE).getInt("fails", 0);
+    }
+
+    @Override
     public void saveGifts(int heavy) {
         getSharedPreferences("game", MODE_PRIVATE).edit().putInt("heavy", heavy).apply();
     }

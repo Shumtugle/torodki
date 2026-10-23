@@ -19,6 +19,8 @@ public final class Bot implements World.Host {
     public byte[] asset(String name) { return null; }
     public void saveGifts(int heavy) { }
     public int loadGifts() { return 0; }
+    public void saveFails(int fails) { }
+    public int loadFails() { return 0; }
 
     static final float DT = 1f / 60f;
     /** A casual player throws at a random piece instead of the best one. */

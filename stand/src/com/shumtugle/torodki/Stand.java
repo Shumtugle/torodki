@@ -77,7 +77,17 @@ public final class Stand implements World.Host {
         savedLevel = level;
     }
 
-    private int savedGifts;
+    private int savedGifts, savedFails;
+
+    @Override
+    public void saveFails(int fails) {
+        savedFails = fails;
+    }
+
+    @Override
+    public int loadFails() {
+        return savedFails;
+    }
 
     @Override
     public void saveGifts(int heavy) {
@@ -191,7 +201,7 @@ public final class Stand implements World.Host {
         } else if (c.equals("state")) {
             System.out.println(String.format("%7.2fs  state %d, hammer %d, stars %d, on plinth %.2f, level %d, heavy %d%s, car damage %d",
                     time, world.state, world.hs, world.stars, world.onPlinth(), world.level + 1, world.heavyLeft,
-                    world.heavyOn ? " in hand" : "", world.carDamage()));
+                    world.heavyOn ? " in hand" : "", world.carDamage()) + ", fails " + world.fails + (world.goldOn ? " GOLD" : ""));
         } else if (c.equals("throwat")) {
             float[] o = world.screenOf(f(p[1]), f(p[2]), f(p[3]));
             world.throwAt(o[0], o[1], f(p[4]));

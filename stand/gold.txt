@@ -1,0 +1,36 @@
+# Lose the same building ten times: the gods drop the golden hammer, one throw scatters it.
+screen 1096 2560
+level 38
+wait 1.0
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+state
+lose
+wait 3.9
+shot o1_gold_gift
+wait 5.5
+shot o2_gold_in_hand
+state
+down 140 430
+wait 1.0
+up 140 430
+wait 1.1
+shot o3_scatter
+wait 1.5
+state

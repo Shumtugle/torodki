@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.23
+- The golden hammer: lose the same building ten times running and, while the gods
+  yawn, a golden hammer tumbles down from the sky. It is in hand when the building comes
+  back, and whatever part of the building it touches, the whole of it flies to pieces.
+  A miss does not waste it. The count is kept between games and starts again with every
+  building cleared.
+
 ## 0.22
 - Buildings are grown now, not only drawn from recipes. From the 9th level two buildings
   of three are grown storey by storey: posts under a slab, a brick wall, a palisade of
