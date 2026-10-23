@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.11";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.12";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -79,6 +79,10 @@ final class World implements Physics.Listener {
     // the hammer
     Body hammer;
     private float aimX, aimY;
+    // the aim moves with the finger but starts away from it, so the finger never hides the target:
+    // the ring starts on the building (or where the last throw went) and follows the finger's moves
+    private float downX, downY, baseX, baseY;
+    private boolean aimedBefore;
     private final float[] dragT = new float[16], dragX = new float[16], dragY = new float[16];
     private int dragN;
     private float flightTime;
@@ -166,6 +170,7 @@ final class World implements Physics.Listener {
         throwsMade = 0;
         thundered = false;
         aiming = false;
+        aimedBefore = false;
         cleared = false;
         hs = HAND;
         pN = 0;
@@ -223,6 +228,13 @@ final class World implements Physics.Listener {
             if (state != PLAY || hs != HAND || stars <= 0) return;
             aiming = true;
             dragN = 0;
+            downX = x;
+            downY = y;
+            if (!aimedBefore) buildingCenter();
+            else {
+                baseX = aimX;
+                baseY = aimY;
+            }
         }
         if (!aiming) return;
         if (dragN == dragT.length) {
@@ -235,11 +247,32 @@ final class World implements Physics.Listener {
         dragX[dragN] = x;
         dragY[dragN] = y;
         dragN++;
-        aimX = Math.max(2f, Math.min(W - 3f, x));
-        aimY = Math.max(2f, Math.min(h - 3f, y - 34f));
+        aimX = Math.max(2f, Math.min(W - 3f, baseX + x - downX));
+        aimY = Math.max(2f, Math.min(h - 3f, baseY + y - downY));
         if (type == UP) {
             aiming = false;
+            aimedBefore = true;
             throwHammer();
+        }
+    }
+
+    /** Where the ring starts on a level's first throw: the middle of what still stands on the plinth. */
+    private void buildingCenter() {
+        float sx = 0f, sy = 0f, m = 0f;
+        for (Body b : pieces) {
+            if (b.gone) continue;
+            ras.project(b.px, b.py, b.pz, scr);
+            sx += scr[0] * b.mass;
+            sy += scr[1] * b.mass;
+            m += b.mass;
+        }
+        if (m > 0f) {
+            baseX = sx / m;
+            baseY = sy / m;
+        } else {
+            ras.project(0f, Builder.TOP + 1f, Builder.CZ, scr);
+            baseX = scr[0];
+            baseY = scr[1];
         }
     }
 
@@ -275,6 +308,11 @@ final class World implements Physics.Listener {
         throwHammer();
         forcedSpeed = -1f;
         return true;
+    }
+
+    /** Where the ring is now, for the desktop stand. */
+    float[] aimPoint() {
+        return new float[]{aimX, aimY};
     }
 
     /** Screen point of a world point, for the bot. */

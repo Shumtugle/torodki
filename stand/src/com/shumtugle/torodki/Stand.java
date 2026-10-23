@@ -20,6 +20,7 @@ import javax.imageio.ImageIO;
  *   back
  *   level n                 start level n at once (counted from 0), without the rise
  *   state                   print the game state
+ *   aim                     print where the aim ring is
  *   win n                   count the building as cleared after n throws
  *   lose                    put out every star
  *   shot name               save the current frame as name.png, scaled to the screen width
@@ -176,6 +177,9 @@ public final class Stand implements World.Host {
         } else if (c.equals("state")) {
             System.out.println(String.format("%7.2fs  state %d, hammer %d, stars %d, on plinth %.2f, level %d",
                     time, world.state, world.hs, world.stars, world.onPlinth(), world.level + 1));
+        } else if (c.equals("aim")) {
+            float[] a = world.aimPoint();
+            System.out.println(String.format("%7.2fs  aim at %.1f, %.1f", time, a[0], a[1]));
         } else if (c.equals("back")) {
             world.back();
             step();

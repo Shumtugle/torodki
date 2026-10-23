@@ -4,11 +4,16 @@ level 2
 wait 0.5
 shot w1_rack
 state
-down 150 600
-move 145 500
-move 140 420
-move 139 373
-up 139 373
+# the ring starts on the building and follows the finger; pull back, then flick
+down 140 430
+move 140 480
+move 140 530
+move 140 560
+wait 0.15
+move 141 530
+move 141 500
+move 142 472
+up 142 472
 wait 0.62
 shot w2_splash
 wait 0.25

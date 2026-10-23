@@ -5,13 +5,17 @@ shot 01_rising
 wait 2.0
 shot 02_standing
 state
-down 150 600
-move 145 520
-move 140 470
-wait 0.05
+# the ring starts on the building and follows the finger; pull back, then flick
+down 140 430
+move 140 480
+move 140 530
+move 140 560
+wait 0.15
 shot 03_aiming
-move 106 371
-up 106 371
+move 130 520
+move 118 490
+move 109 470
+up 109 470
 wait 0.3
 shot 04_flight
 wait 0.3

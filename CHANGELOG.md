@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12
+- Aiming no longer happens under the finger. The ring starts on the building (or where
+  the last throw went) and follows the finger's moves, so the finger can rest anywhere
+  on the screen, well away from what it aims at.
+- The gods come in more than one likeness now: five new ones seen from below, leaning
+  over the edge of their clouds to look down at the street. Each visit to the sky picks
+  one likeness for each god.
+- The elder takes his place among them.
+
 ## 0.11
 - The gods are painted now, each in a cloud of his own, with three faces apiece. When
   the view tips up they sail in from the sides, the nearer ones faster, and their faces

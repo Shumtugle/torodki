@@ -20,6 +20,7 @@ final class Sky {
 
     static final int THUNDERER = 0, GODDESS = 1, THINKER = 2, ELDER = 3, IDLER = 4;
     private static final int GODS = 5;
+    private static final int MAX_PICTURES = 24;
 
     private int w, sh;
     private int[] strip;
@@ -46,12 +47,17 @@ final class Sky {
             {2, 2, 2, 2, 2},          // yawn: anger, sleep, scepticism, yawns
     };
 
-    // the gods as read from the asset: premultiplied ARGB, one array per expression
-    private final int[][][] face = new int[GODS][][];
-    private final int[][] veil = new int[GODS][];       // the rest face blurred to plain cloud
-    private final int[][] wisp = new int[GODS][];       // the haze that hides a change
-    private final int[] gw = new int[GODS], gh = new int[GODS], gfx = new int[GODS], gfy = new int[GODS];
-    private final int[] wispW = new int[GODS], wispH = new int[GODS];
+    // the pictures as read from the asset: premultiplied ARGB, one array per expression. A god
+    // may have several pictures; each visit to the sky picks one of his at random
+    private int pictures;
+    private final int[] role = new int[MAX_PICTURES];
+    private final int[][][] face = new int[MAX_PICTURES][][];
+    private final int[][] veil = new int[MAX_PICTURES][];       // the rest face blurred to plain cloud
+    private final int[][] wisp = new int[MAX_PICTURES][];       // the haze that hides a change
+    private final int[] gw = new int[MAX_PICTURES], gh = new int[MAX_PICTURES];
+    private final int[] gfx = new int[MAX_PICTURES], gfy = new int[MAX_PICTURES];
+    private final int[] wispW = new int[MAX_PICTURES], wispH = new int[MAX_PICTURES];
+    private final int[] pick = {-1, -1, -1, -1, -1};             // the picture of each god this visit
 
     // ---- noise ----
 
@@ -221,7 +227,7 @@ final class Sky {
         if (b == null || b.length < 2) return;
         int n = u16(b, 0), p = 2;
         for (int i = 0; i < n && p + 10 <= b.length; i++) {
-            int role = b[p] & 0xFF;
+            int who = b[p] & 0xFF;
             int ww = u16(b, p + 1), hh = u16(b, p + 3), fx = u16(b, p + 5), fy = u16(b, p + 7);
             int m = b[p + 9] & 0xFF;
             p += 10;
@@ -233,14 +239,17 @@ final class Sky {
                     img[k] = ((b[p + 3] & 0xFF) << 24) | ((b[p] & 0xFF) << 16) | ((b[p + 1] & 0xFF) << 8) | (b[p + 2] & 0xFF);
                 frames[e] = img;
             }
-            if (role >= GODS || m == 0) continue;
-            face[role] = frames;
-            gw[role] = ww;
-            gh[role] = hh;
-            gfx[role] = fx;
-            gfy[role] = fy;
-            veil[role] = blurred(frames[0], ww, hh);
-            makeWisp(role);
+            if (who >= GODS || m == 0 || pictures == MAX_PICTURES) continue;
+            int e = pictures++;
+            role[e] = who;
+            face[e] = frames;
+            gw[e] = ww;
+            gh[e] = hh;
+            gfx[e] = fx;
+            gfy[e] = fy;
+            veil[e] = blurred(frames[0], ww, hh);
+            makeWisp(e);
+            if (pick[who] < 0) pick[who] = e;
         }
     }
 
@@ -316,6 +325,15 @@ final class Sky {
 
     void begin(int verdict) {
         this.verdict = verdict;
+        // each god comes in one of his pictures
+        for (int g = 0; g < GODS; g++) {
+            int n = 0;
+            for (int e = 0; e < pictures; e++) if (role[e] == g) n++;
+            if (n == 0) continue;
+            int k = rnd.nextInt(n);
+            for (int e = 0; e < pictures; e++)
+                if (role[e] == g && k-- == 0) pick[g] = e;
+        }
         time = 0f;
         boltIdx = -1;
     }
@@ -341,7 +359,8 @@ final class Sky {
         float t = time;
         // lightning on a great fall: three strokes from behind the thunderer once he laughs,
         // drawn first so the clouds of the gods stand in front of it
-        if (verdict == OVATION && face[THUNDERER] != null) {
+        int th = pick[THUNDERER];
+        if (verdict == OVATION && th >= 0) {
             float bt = t - CHANGE[THUNDERER] - 0.15f;
             if (bt > 0f) {
                 int idx = (int) (bt / 0.85f);
@@ -350,8 +369,8 @@ final class Sky {
                     if (idx != boltIdx) {
                         boltIdx = idx;
                         bolts++;
-                        makeBolt(AT[THUNDERER][0] * w - gw[THUNDERER] * 0.38f,
-                                AT[THUNDERER][1] * sh + gh[THUNDERER] * 0.2f);
+                        makeBolt(AT[THUNDERER][0] * w - gw[th] * 0.38f,
+                                AT[THUNDERER][1] * sh + gh[th] * 0.2f);
                     }
                     if (since < 0.2f || (since > 0.3f && since < 0.4f)) drawBolt(f, shift * NEAR[THUNDERER]);
                 }
@@ -359,7 +378,8 @@ final class Sky {
         }
         for (int o = 0; o < ORDER.length; o++) {
             int g = ORDER[o];
-            if (face[g] == null) continue;
+            int e = pick[g];
+            if (e < 0) continue;
             float since = t - DELAY[g];
             if (since <= 0f) continue;
             // sailing in: fast at first, settling softly
@@ -372,30 +392,30 @@ final class Sky {
             // the face comes out of the vapour, growing to its size
             float emerge = smooth(0f, 1f, (since - 0.45f) / 0.85f);
             float scale = 0.94f + 0.06f * emerge;
-            int[] rest = face[g][0];
+            int[] rest = face[e][0];
             int to = FACE_FOR[verdict][g];
-            if (to >= face[g].length) to = 0;
+            if (to >= face[e].length) to = 0;
             float tc = CHANGE[g];
             float swap = to == 0 ? 0f : smooth(tc - 0.12f, tc + 0.12f, t);
             int[] a, b;
             float mix;
             if (emerge < 1f) {
-                a = veil[g];
+                a = veil[e];
                 b = rest;
                 mix = emerge;
             } else {
                 a = rest;
-                b = face[g][to];
+                b = face[e][to];
                 mix = swap;
             }
-            drawGod(f, g, a, b, mix, cx, cy, scale, alpha);
+            drawGod(f, e, a, b, mix, cx, cy, scale, alpha);
             // the haze passes over the face while it changes
             if (to != 0 && t > tc - 0.5f && t < tc + 0.5f) {
                 float u = (t - (tc - 0.5f)) / 1f;
                 float wa = (float) Math.sin(u * Math.PI);
-                float wx = cx + (gfx[g] - gw[g] * 0.5f) * scale + (u - 0.5f) * gw[g] * 0.7f * -SIDE[g];
-                float wy = cy + (gfy[g] - gh[g] * 0.5f) * scale + 2f;
-                drawWisp(f, g, wx, wy, Math.min(1f, wa * 1.15f));
+                float wx = cx + (gfx[e] - gw[e] * 0.5f) * scale + (u - 0.5f) * gw[e] * 0.7f * -SIDE[g];
+                float wy = cy + (gfy[e] - gh[e] * 0.5f) * scale + 2f;
+                drawWisp(f, e, wx, wy, Math.min(1f, wa * 1.15f));
             }
         }
     }
