@@ -1,0 +1,27 @@
+# The phone the game is checked on, portrait. Level 1 rises, one throw, the next rises.
+screen 1096 2560
+wait 0.9
+shot 01_rising
+wait 2.0
+shot 02_standing
+state
+down 150 600
+move 145 520
+move 140 470
+wait 0.05
+shot 03_aiming
+move 137 372
+up 137 372
+wait 0.3
+shot 04_flight
+wait 0.3
+shot 05_impact
+wait 1.0
+shot 06_after
+state
+wait 3.5
+state
+shot 07_next
+wait 2.5
+shot 08_next_standing
+state

@@ -1,0 +1,23 @@
+# One snapshot of every kind of building, standing.
+screen 1096 2560
+level 0
+wait 0.3
+shot k1
+level 1
+wait 0.3
+shot k2
+level 2
+wait 0.3
+shot k3
+level 3
+wait 0.3
+shot k4
+level 4
+wait 0.3
+shot k5
+level 5
+wait 0.3
+shot k6
+level 6
+wait 0.3
+shot k7
