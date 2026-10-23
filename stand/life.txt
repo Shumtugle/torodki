@@ -4,16 +4,23 @@ wait 3
 shot l1_calm
 wait 9
 shot l2_car_looks
-# the ring starts on the building and follows the finger; pull back, then flick
+# the ring starts on the building and follows the finger; resting the finger winds up the throw
 down 140 430
-move 140 480
-move 140 530
-move 140 560
-wait 0.15
-move 130 520
-move 118 490
-move 109 470
-up 109 470
+move 138 433
+move 136 436
+move 134 439
+move 132 442
+move 130 445
+move 128 448
+move 126 451
+move 124 454
+move 122 457
+move 120 460
+move 118 463
+move 116 466
+move 114 469
+wait 1.0
+up 114 469
 wait 0.3
 shot l3_flight
 wait 0.35

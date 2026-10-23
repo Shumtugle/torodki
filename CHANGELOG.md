@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14
+- Strength is a wind-up now, not a flick. Aim, then rest the finger: the hammer draws
+  back, a golden band fills round the ring, the arc flattens; let go to throw. A quick
+  release lobs, a full wind-up flies hard and flat. The phone gives a short tick when
+  the wind-up is full.
+- Held past the peak, the arm tires and the ring starts to shake: strength costs
+  precision.
+- The ring follows every move of the finger again; there is no flick to dodge.
+
 ## 0.13
 - Aim and strength come apart: a slow drag moves the ring, a quick flick only throws and
   leaves the ring where it was. In 0.12 the flick dragged the ring off the target, so a

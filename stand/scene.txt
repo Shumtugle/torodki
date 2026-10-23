@@ -5,7 +5,7 @@ shot 01_rising
 wait 2.0
 shot 02_standing
 state
-# the ring starts on the building; a slow drag moves it, a quick flick only throws
+# the ring starts on the building and follows the finger; resting the finger winds up the throw
 down 140 430
 move 138 433
 move 136 436
@@ -20,13 +20,14 @@ move 120 460
 move 118 463
 move 116 466
 move 114 469
-wait 0.1
+wait 0.45
+shot 03_winding
+wait 0.6
 shot 03_aiming
+wait 1.2
+shot 03b_tired
 aim
-move 114 429
-move 114 379
-move 114 329
-up 114 329
+up 114 469
 aim
 wait 0.3
 shot 04_flight

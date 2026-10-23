@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.13";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.14";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -80,13 +80,15 @@ final class World implements Physics.Listener {
     Body hammer;
     private float aimX, aimY;
     // the aim moves with the finger but starts away from it, so the finger never hides the target:
-    // the ring starts on the building (or where the last throw went) and follows the finger's
-    // slow moves; a quick flick only gives the throw its strength and leaves the ring where it is
+    // the ring starts on the building (or where the last throw went) and follows the finger
     private float lastX, lastY, baseX, baseY;
-    private static final float FOLLOW = 260f;   // finger speed, game pixels a second, above which the ring holds
+    // the strength is a wind-up: while the finger rests, the hammer draws back and the throw
+    // gathers strength; held past the peak, the arm tires and the ring begins to shake
+    static final float CHARGE = 0.9f;        // seconds of stillness to full strength
+    private float power, fatigue, tremX, tremY;
+    private float anchorX, anchorY, movedAt;
+    private boolean fullFelt;
     private boolean aimedBefore;
-    private final float[] dragT = new float[16], dragX = new float[16], dragY = new float[16];
-    private int dragN;
     private float flightTime;
     private float retX, retY, retZ;
     private float offAtThrow;
@@ -229,7 +231,6 @@ final class World implements Physics.Listener {
         if (type == DOWN) {
             if (state != PLAY || hs != HAND || stars <= 0) return;
             aiming = true;
-            dragN = 0;
             lastX = x;
             lastY = y;
             if (!aimedBefore) buildingCenter();
@@ -239,24 +240,27 @@ final class World implements Physics.Listener {
             }
             aimX = baseX;
             aimY = baseY;
+            anchorX = x;
+            anchorY = y;
+            movedAt = clock;
+            power = 0f;
+            fatigue = 0f;
+            fullFelt = false;
         }
         if (!aiming) return;
-        if (dragN == dragT.length) {
-            System.arraycopy(dragT, 1, dragT, 0, dragN - 1);
-            System.arraycopy(dragX, 1, dragX, 0, dragN - 1);
-            System.arraycopy(dragY, 1, dragY, 0, dragN - 1);
-            dragN--;
-        }
-        dragT[dragN] = clock;
-        dragX[dragN] = x;
-        dragY[dragN] = y;
-        dragN++;
-        if (type != DOWN && fingerSpeed() < FOLLOW) {
+        if (type != DOWN) {
             aimX = Math.max(2f, Math.min(W - 3f, aimX + x - lastX));
             aimY = Math.max(2f, Math.min(h - 3f, aimY + y - lastY));
         }
         lastX = x;
         lastY = y;
+        // a finger never lies quite still: only a real move breaks the wind-up
+        float mx = x - anchorX, my = y - anchorY;
+        if (mx * mx + my * my > 2.5f * 2.5f) {
+            anchorX = x;
+            anchorY = y;
+            movedAt = clock;
+        }
         if (type == UP) {
             aiming = false;
             aimedBefore = true;
@@ -288,32 +292,34 @@ final class World implements Physics.Listener {
         host.quit();
     }
 
-    /** How fast the finger is moving now, in game pixels per second, over the last few hundredths. */
-    private float fingerSpeed() {
-        if (dragN < 2) return 0f;
-        int i = dragN - 1, j = i;
-        while (j > 0 && dragT[i] - dragT[j - 1] < 0.05f) j--;
-        if (j == i) j = i - 1;
-        float dt = Math.max(1f / 120f, dragT[i] - dragT[j]);
-        float dx = dragX[i] - dragX[j], dy = dragY[i] - dragY[j];
-        return (float) Math.sqrt(dx * dx + dy * dy) / dt;
-    }
-
-    /** Flick speed at release, in game pixels per second. */
-    private float flick() {
-        if (dragN < 2) return 0f;
-        int i = dragN - 1, j = i;
-        while (j > 0 && dragT[i] - dragT[j - 1] < 0.09f) j--;
-        if (j == i) j = i - 1;
-        float dt = Math.max(1f / 120f, dragT[i] - dragT[j]);
-        float dx = dragX[i] - dragX[j], dy = dragY[i] - dragY[j];
-        return (float) Math.sqrt(dx * dx + dy * dy) / dt;
-    }
-
-    /** Throw speed in m/s from the flick: a lazy release lobs, a sharp one flies flat. */
+    /** Throw speed in m/s from the wind-up: a quick release lobs, a full one flies flat. */
     private float throwSpeed() {
         if (forcedSpeed > 0f) return forcedSpeed;
-        return 8f + Math.min(1f, flick() / 650f) * 5.5f;
+        return 8f + power * 5.5f;
+    }
+
+    /** The wind-up, frame by frame: strength while the finger rests, then a tiring arm. */
+    private void windUp(float dt) {
+        if (!aiming) {
+            tremX = tremY = 0f;
+            return;
+        }
+        boolean still = clock - movedAt > 0.1f;
+        if (still) power = Math.min(1f, power + dt / CHARGE);
+        else power = Math.max(0f, power - dt * 2f);
+        if (power >= 1f) {
+            fatigue += dt;
+            if (!fullFelt) {
+                fullFelt = true;
+                host.buzz(12);
+            }
+        } else {
+            fatigue = Math.max(0f, fatigue - dt * 2f);
+            if (power < 0.9f) fullFelt = false;
+        }
+        float amp = Math.max(0f, Math.min(8f, (fatigue - 0.35f) * 5f));
+        tremX = amp * ((float) Math.sin(clock * 13f) * 0.6f + (float) Math.sin(clock * 7.3f + 1f) * 0.4f);
+        tremY = amp * ((float) Math.sin(clock * 11f + 2f) * 0.6f + (float) Math.sin(clock * 5.9f) * 0.4f);
     }
 
     private float forcedSpeed = -1f;
@@ -323,6 +329,7 @@ final class World implements Physics.Listener {
         if (state != PLAY || hs != HAND || stars <= 0) return false;
         aimX = sx;
         aimY = sy;
+        tremX = tremY = 0f;
         forcedSpeed = speed;
         throwHammer();
         forcedSpeed = -1f;
@@ -343,7 +350,7 @@ final class World implements Physics.Listener {
 
     private void throwHammer() {
         float speed = throwSpeed();
-        target(aimX, aimY, tmp);
+        target(aimX + tremX, aimY + tremY, tmp);
         float tx = tmp[0], ty = tmp[1], tz = tmp[2];
         handPoint(tmp);
         float sx = tmp[0], sy = tmp[1], sz = tmp[2];
@@ -455,6 +462,7 @@ final class World implements Physics.Listener {
         life.update(dt);
         trail();
 
+        windUp(dt);
         hammerMoves(dt);
         if (state == SKY_UP || state == SKY_HOLD || fromSky) {
             sky.update(dt);
@@ -1112,6 +1120,14 @@ final class World implements Physics.Listener {
             px -= ax * 0.05f;
             py -= ay * 0.05f;
             pz -= az * 0.05f;
+            if (aiming) {
+                // the wind-up draws it back and down toward the shoulder; a tired arm shakes it
+                float k = power * power * (3f - 2f * power);
+                ras.viewToWorld(0.06f * k + tremX * 0.002f, -0.06f * k + tremY * 0.002f, -0.07f * k, dirA);
+                px += dirA[0];
+                py += dirA[1];
+                pz += dirA[2];
+            }
         } else {
             Body b = hammer;
             px = b.px;
@@ -1156,7 +1172,7 @@ final class World implements Physics.Listener {
     /** The aim: a ring where the hammer will land and the arc it will take. */
     private void drawAim() {
         float speed = throwSpeed();
-        target(aimX, aimY, tmp);
+        target(aimX + tremX, aimY + tremY, tmp);
         float tx = tmp[0], ty = tmp[1], tz = tmp[2];
         handPoint(tmp);
         float sx = tmp[0], sy = tmp[1], sz = tmp[2];
@@ -1171,9 +1187,18 @@ final class World implements Physics.Listener {
             if (vz < 0.2f) continue;
             dot(Math.round(scr[0]), Math.round(scr[1]), (i & 1) == 0 ? 0xFFFFF6D8 : 0xFFF2C14E);
         }
-        int cx = Math.round(aimX), cy = Math.round(aimY);
+        int cx = Math.round(aimX + tremX), cy = Math.round(aimY + tremY);
         ring(cx, cy, 6, 0xFFFFF6D8);
         ring(cx, cy, 5, 0xFFF2B33A);
+        // the wind-up: a band round the ring fills clockwise from the top, and glows when full
+        boolean full = power >= 1f;
+        int band = full ? (((int) (clock * 8f) & 1) == 0 ? 0xFFFFFFFF : 0xFFFFE27A) : 0xFFFFC93A;
+        int steps = Math.round(power * 64f);
+        for (int a = 0; a < steps; a++) {
+            double ang = -Math.PI / 2 + a * Math.PI * 2 / 64;
+            for (int r = 8; r <= 9; r++)
+                put(cx + (int) Math.round(Math.cos(ang) * r), cy + (int) Math.round(Math.sin(ang) * r), band);
+        }
     }
 
     private void dot(int x, int y, int c) {
