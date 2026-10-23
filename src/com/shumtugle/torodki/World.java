@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.23";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.24";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -36,6 +36,9 @@ final class World implements Physics.Listener {
         /** Heavy throws the gods have given and the player has not used yet. */
         void saveGifts(int heavy);
         int loadGifts();
+        /** Whether the player has ever been given the golden hammer. */
+        void saveGoldSeen(boolean seen);
+        boolean loadGoldSeen();
         /** How many times running the building of the saved level has been lost. */
         void saveFails(int fails);
         int loadFails();
@@ -122,6 +125,11 @@ final class World implements Physics.Listener {
     int fails;
     boolean goldOn;
     private boolean goldGift, goldThrow;
+    // once the golden hammer has been given, now and then a golden cube crowns a building.
+    // It never falls to the street: whatever happens, it comes to rest on the plinth
+    boolean goldSeen;
+    Body goldCube;
+    static final float CUBE_CHANCE = 0.25f;
     private boolean aimedBefore;
     private float flightTime;
     private float retX, retY, retZ;
@@ -155,6 +163,7 @@ final class World implements Physics.Listener {
         level = Math.max(0, host.loadLevel());
         heavyLeft = Math.max(0, Math.min(HEAVY_MAX, host.loadGifts()));
         fails = Math.max(0, host.loadFails());
+        goldSeen = host.loadGoldSeen();
         phys.listener = this;
     }
 
@@ -256,6 +265,8 @@ final class World implements Physics.Listener {
             pieces.add(b);
             totalMass += b.mass;
         }
+        goldCube = null;
+        if (goldSeen && lv > 0 && new java.util.Random(seed ^ 0x601DL).nextFloat() < CUBE_CHANCE) crown(made);
         hammer = new Body(0.42f, 0.08f, 0.17f, Body.HAMMER, 0xFFD9A066);
         hammer.ghost = true;
         hammer.asleep = false;
@@ -398,11 +409,61 @@ final class World implements Physics.Listener {
         stateTime = 0f;
     }
 
+    /** Sets the golden cube on the highest flat top of the building; it does not count as weight. */
+    private void crown(ArrayList<Body> made) {
+        Body top = null;
+        for (Body b : made)
+            if (b.radius == 0f && b.material != Body.WATER && b.hx > 0.16f && b.hz > 0.12f
+                    && (top == null || b.maxY > top.maxY)) top = b;
+        if (top == null) return;
+        float c = 0.19f;
+        // nothing may already stand on it
+        for (Body b : made)
+            if (b != top && b.minY > top.maxY - 0.02f && Math.abs(b.px - top.px) < top.hx + b.hx) return;
+        Body g = new Body(c, c, c, Body.GOLD, 0xFFF2C230);
+        g.setPose(top.px, top.maxY + c + 0.002f, top.pz, 1, 0, 0, 0);
+        g.homeX = g.px;
+        g.homeY = g.py;
+        g.homeZ = g.pz;
+        g.asleep = true;
+        phys.add(g);
+        pieces.add(g);
+        goldCube = g;
+    }
+
+    /** The golden cube's one law: it stays over the plinth, so it can only come down onto it. */
+    private void keepGold() {
+        Body g = goldCube;
+        if (g == null) return;
+        float mx = Builder.PHX - g.hx * 0.9f, z0 = Builder.CZ - Builder.PHZ + g.hz * 0.9f, z1 = Builder.CZ + Builder.PHZ - g.hz * 0.9f;
+        boolean moved = false;
+        if (g.px < -mx || g.px > mx) {
+            g.px = Math.max(-mx, Math.min(mx, g.px));
+            g.vx = -g.vx * 0.2f;
+            moved = true;
+        }
+        if (g.pz < z0 || g.pz > z1) {
+            g.pz = Math.max(z0, Math.min(z1, g.pz));
+            g.vz = -g.vz * 0.2f;
+            moved = true;
+        }
+        if (g.py < Builder.TOP + g.hy * 0.5f) {
+            g.py = Builder.TOP + g.hy;
+            g.vy = Math.max(0f, g.vy);
+            moved = true;
+        }
+        if (moved) {
+            g.asleep = false;
+            g.updateR();
+            g.savePrev();
+        }
+    }
+
     /** Weight still on the plinth, as a share of the building. */
     float onPlinth() {
         float m = 0f;
         for (Body b : pieces)
-            if (!b.gone && Math.abs(b.px) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.CZ) < Builder.PHZ + 0.05f
+            if (!b.gone && b != goldCube && Math.abs(b.px) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.CZ) < Builder.PHZ + 0.05f
                     && b.py > Builder.TOP - 0.05f) m += b.mass;
         return totalMass > 0f ? m / totalMass : 0f;
     }
@@ -744,6 +805,7 @@ final class World implements Physics.Listener {
             steps++;
             if (state != BUILD && state != VANISH) phys.step(1f / 60f);
             bursts();
+            keepGold();
             pops();
             blast();
         }
@@ -938,6 +1000,10 @@ final class World implements Physics.Listener {
             host.saveFails(fails);
             if (fails == GOLD_AFTER) {
                 goldGift = true;
+                if (!goldSeen) {
+                    goldSeen = true;
+                    host.saveGoldSeen(true);
+                }
                 giftShown = 0f;
             }
         } else if (fails > 0) {
@@ -1393,6 +1459,16 @@ final class World implements Physics.Listener {
     }
 
     private void drawBody(Body b, float scale, float drop, int id) {
+        if (b.material == Body.GOLD) {
+            ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                    b.hx * scale, b.hy * scale, b.hz * scale, b.tint, Raster.PAT_FLAT, id << 3);
+            // a glint that wanders over it
+            if (((int) (clock * 3f) % 5) == 0) {
+                float vz = ras.project(b.px, b.maxY + drop, b.pz, scr);
+                if (vz > 0.3f) ras.disc(scr[0], scr[1], 1.2f, 1f / (vz - 0.3f), 0xFFFFFFF0, id << 3);
+            }
+            return;
+        }
         if (b.radius > 0f) {
             // the swirl in a ball is its own color, lit up
             ras.ball(b.px, b.py + drop, b.pz, b.radius * scale, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12,

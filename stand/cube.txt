@@ -1,0 +1,23 @@
+# The golden cube, once the golden hammer has been given: it crowns a building now and
+# then, and whatever is knocked from under it, it comes down onto the plinth.
+screen 1096 2560
+goldseen
+level 8
+wait 2.0
+shot u0_crowned
+state
+heavy
+down 140 430
+wait 1.6
+up 140 430
+wait 0.6
+shot u1_falling
+wait 2.5
+shot u2_after
+state
+down 100 330
+wait 1.6
+up 100 330
+wait 3.0
+shot u3_again
+state

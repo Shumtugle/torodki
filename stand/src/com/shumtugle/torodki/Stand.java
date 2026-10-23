@@ -78,6 +78,17 @@ public final class Stand implements World.Host {
     }
 
     private int savedGifts, savedFails;
+    private boolean savedGold;
+
+    @Override
+    public void saveGoldSeen(boolean seen) {
+        savedGold = seen;
+    }
+
+    @Override
+    public boolean loadGoldSeen() {
+        return savedGold;
+    }
 
     @Override
     public void saveFails(int fails) {
@@ -201,11 +212,13 @@ public final class Stand implements World.Host {
         } else if (c.equals("state")) {
             System.out.println(String.format("%7.2fs  state %d, hammer %d, stars %d, on plinth %.2f, level %d, heavy %d%s, car damage %d",
                     time, world.state, world.hs, world.stars, world.onPlinth(), world.level + 1, world.heavyLeft,
-                    world.heavyOn ? " in hand" : "", world.carDamage()) + ", fails " + world.fails + (world.goldOn ? " GOLD" : ""));
+                    world.heavyOn ? " in hand" : "", world.carDamage()) + ", fails " + world.fails + (world.goldOn ? " GOLD" : "") + (world.goldCube != null ? String.format(" cube at %.2f %.2f %.2f", world.goldCube.px, world.goldCube.py, world.goldCube.pz) : ""));
         } else if (c.equals("throwat")) {
             float[] o = world.screenOf(f(p[1]), f(p[2]), f(p[3]));
             world.throwAt(o[0], o[1], f(p[4]));
             step();
+        } else if (c.equals("goldseen")) {
+            world.goldSeen = true;
         } else if (c.equals("heavy")) {
             world.heavyLeft = World.HEAVY_GIFT;
             world.heavyOn = true;

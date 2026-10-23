@@ -44,7 +44,7 @@ final class Sky {
             {1, 1, 1, 1, 1},          // ovation: laughter and smiles
             {0, 1, 1, 1, 1},          // cheer: the thunderer stays stern
             {0, 0, 2, 0, 0},          // polite: only the thinker raises a brow
-            {2, 2, 2, 2, 2},          // yawn: anger, sleep, scepticism, yawns
+            {2, 2, 2, 0, 2},          // yawn: anger, sleep, scepticism, a yawn; a bearded god never yawns
     };
     // which of those faces open the mouth wide: laughter and yawns. Many open mouths at once
     // read as wailing, so a verdict lets only one god open his; the others keep their rest face

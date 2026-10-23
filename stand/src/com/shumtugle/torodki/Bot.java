@@ -21,6 +21,8 @@ public final class Bot implements World.Host {
     public int loadGifts() { return 0; }
     public void saveFails(int fails) { }
     public int loadFails() { return 0; }
+    public void saveGoldSeen(boolean seen) { }
+    public boolean loadGoldSeen() { return false; }
 
     static final float DT = 1f / 60f;
     /** A casual player throws at a random piece instead of the best one. */

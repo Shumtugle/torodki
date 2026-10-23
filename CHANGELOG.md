@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.24
+- The bearded gods never yawn: when the stars run out the elder keeps his calm face.
+- The golden cube: once the golden hammer has been given, now and then (one building in
+  four) a golden cube crowns the building. It never falls to the street. Knock the
+  building from under it and it comes down onto the plinth and stays there. It does not
+  count as weight.
+
 ## 0.23
 - The golden hammer: lose the same building ten times running and, while the gods
   yawn, a golden hammer tumbles down from the sky. It is in hand when the building comes
