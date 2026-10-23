@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16
+- From the 21st level the plinth stands farther down the street: half a meter more
+  every five levels, up to four meters by the 56th. The cones go with it.
+
 ## 0.15
 - The gift of the gods: fell a building at one throw and they give the heavy hammer,
   three throws of it, and put it in your hand for the next building. A dark wrought head

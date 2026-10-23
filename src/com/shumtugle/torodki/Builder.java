@@ -13,7 +13,18 @@ import java.util.Random;
 final class Builder {
     static final float S = 1.5f;             // recipe units to meters
     static final float TOP = 1.0f;           // plinth top
-    static final float CZ = 11.5f;           // plinth center along the street
+    static final float BASE_CZ = 11.5f;      // plinth center along the street, early levels
+    static float CZ = BASE_CZ;               // where it stands for the level being played
+
+    /**
+     * How much farther down the street the plinth stands for a level (counted from 0):
+     * from the 21st level on, half a meter more every five levels, four meters at most.
+     */
+    static float farther(int level) {
+        int n = level + 1;
+        if (n < 21) return 0f;
+        return Math.min(4f, 0.5f * ((n - 21) / 5 + 1));
+    }
     static final float PHX = 1.42f * S, PHZ = 0.78f * S;
 
     // in the order they first appear: the first ones fall easily, the pyramid is the stubborn one

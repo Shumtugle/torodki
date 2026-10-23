@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.15";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.16";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -58,7 +58,7 @@ final class World implements Physics.Listener {
     // camera
     static final float CAM_X = -2.3f, CAM_Y = 1.8f, PITCH = 0.0f;
     // the camera stands in the left lane and looks across at the plinth: the street runs at a slant
-    static final float YAW = (float) Math.atan2(-CAM_X, Builder.CZ);
+    static final float YAW = (float) Math.atan2(-CAM_X, Builder.BASE_CZ);
     private float focal;
 
     // the game
@@ -165,6 +165,7 @@ final class World implements Physics.Listener {
         level = lv;
         host.saveLevel(level);
         seed = seedOf(lv);
+        Builder.CZ = Builder.BASE_CZ + Builder.farther(lv);
         phys.clear();
         pieces.clear();
         plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0xFFF2E3C6);

@@ -1,0 +1,19 @@
+# From the 21st level the plinth stands farther down the street: 20th, 21st, 36th, 61st.
+screen 1096 2560
+level 19
+wait 1.0
+shot f20
+level 20
+wait 1.0
+shot f21
+level 35
+wait 1.0
+shot f36
+level 60
+wait 1.0
+shot f61
+down 140 430
+wait 1.0
+up 140 430
+wait 2.5
+state

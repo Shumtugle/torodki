@@ -195,11 +195,13 @@ final class Life {
         for (int i = 0; i < PARK_X.length; i++) carShadow(PARK_X[i], PARK_Z[i]);
         for (int c = 0; c < CARS; c++) if (cState[c] != OFF) carShadow(cx[c], cz[c]);
         for (int i = 0; i < PEOPLE; i++) personShadow(i);
+        // the cones stand at the foot of the plinth, wherever it is
+        float dz = Builder.CZ - Builder.BASE_CZ;
         for (int i = 0; i < CONE_X.length; i++)
-            r.softShadow(CONE_X[i], CONE_Z[i], CONE_X[i] + SHX * 0.7f * SH_LEN, CONE_Z[i] + SHZ * 0.7f * SH_LEN, 0.2f, 0.06f, 0.75f);
+            r.softShadow(CONE_X[i], CONE_Z[i] + dz, CONE_X[i] + SHX * 0.7f * SH_LEN, CONE_Z[i] + dz + SHZ * 0.7f * SH_LEN, 0.2f, 0.06f, 0.75f);
         for (int i = 0; i < PARK_X.length; i++) car(PARK_X[i], PARK_Z[i], parkYaw[i], parkColor[i], (5000 + i) << 3);
         for (int c = 0; c < CARS; c++) if (cState[c] != OFF) car(cx[c], cz[c], cYaw[c], cColor[c], (4000 + c) << 3);
-        for (int i = 0; i < CONE_X.length; i++) cone(CONE_X[i], CONE_Z[i]);
+        for (int i = 0; i < CONE_X.length; i++) cone(CONE_X[i], CONE_Z[i] + dz);
         for (int i = 0; i < PEOPLE; i++) drawPerson(i);
     }
 
