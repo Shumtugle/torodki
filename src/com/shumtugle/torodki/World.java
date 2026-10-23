@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.12";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.13";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -80,8 +80,10 @@ final class World implements Physics.Listener {
     Body hammer;
     private float aimX, aimY;
     // the aim moves with the finger but starts away from it, so the finger never hides the target:
-    // the ring starts on the building (or where the last throw went) and follows the finger's moves
-    private float downX, downY, baseX, baseY;
+    // the ring starts on the building (or where the last throw went) and follows the finger's
+    // slow moves; a quick flick only gives the throw its strength and leaves the ring where it is
+    private float lastX, lastY, baseX, baseY;
+    private static final float FOLLOW = 260f;   // finger speed, game pixels a second, above which the ring holds
     private boolean aimedBefore;
     private final float[] dragT = new float[16], dragX = new float[16], dragY = new float[16];
     private int dragN;
@@ -128,7 +130,7 @@ final class World implements Physics.Listener {
         bgCol = ras.col.clone();
         bgZ = ras.zb.clone();
         bgLit = ras.lit.clone();
-        sky.build(ras, host.asset("gods.bin"));
+        sky.build(ras, host.asset("gods.bin"), host.asset("clouds.bin"));
         if (firstBuild) {
             firstBuild = false;
             startLevel(level, true);
@@ -228,13 +230,15 @@ final class World implements Physics.Listener {
             if (state != PLAY || hs != HAND || stars <= 0) return;
             aiming = true;
             dragN = 0;
-            downX = x;
-            downY = y;
+            lastX = x;
+            lastY = y;
             if (!aimedBefore) buildingCenter();
             else {
                 baseX = aimX;
                 baseY = aimY;
             }
+            aimX = baseX;
+            aimY = baseY;
         }
         if (!aiming) return;
         if (dragN == dragT.length) {
@@ -247,8 +251,12 @@ final class World implements Physics.Listener {
         dragX[dragN] = x;
         dragY[dragN] = y;
         dragN++;
-        aimX = Math.max(2f, Math.min(W - 3f, baseX + x - downX));
-        aimY = Math.max(2f, Math.min(h - 3f, baseY + y - downY));
+        if (type != DOWN && fingerSpeed() < FOLLOW) {
+            aimX = Math.max(2f, Math.min(W - 3f, aimX + x - lastX));
+            aimY = Math.max(2f, Math.min(h - 3f, aimY + y - lastY));
+        }
+        lastX = x;
+        lastY = y;
         if (type == UP) {
             aiming = false;
             aimedBefore = true;
@@ -278,6 +286,17 @@ final class World implements Physics.Listener {
 
     void back() {
         host.quit();
+    }
+
+    /** How fast the finger is moving now, in game pixels per second, over the last few hundredths. */
+    private float fingerSpeed() {
+        if (dragN < 2) return 0f;
+        int i = dragN - 1, j = i;
+        while (j > 0 && dragT[i] - dragT[j - 1] < 0.05f) j--;
+        if (j == i) j = i - 1;
+        float dt = Math.max(1f / 120f, dragT[i] - dragT[j]);
+        float dx = dragX[i] - dragX[j], dy = dragY[i] - dragY[j];
+        return (float) Math.sqrt(dx * dx + dy * dy) / dt;
     }
 
     /** Flick speed at release, in game pixels per second. */

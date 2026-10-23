@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13
+- Aim and strength come apart: a slow drag moves the ring, a quick flick only throws and
+  leaves the ring where it was. In 0.12 the flick dragged the ring off the target, so a
+  hit came only from a gentle release, and a gentle release is a weak throw.
+- Painted clouds hang behind the gods, paler with the distance, fading low down into
+  the sky over the street.
+
 ## 0.12
 - Aiming no longer happens under the finger. The ring starts on the building (or where
   the last throw went) and follows the finger's moves, so the finger can rest anywhere

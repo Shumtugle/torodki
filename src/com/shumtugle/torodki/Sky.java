@@ -2,7 +2,7 @@ package com.shumtugle.torodki;
 
 /**
  * Between buildings the view tips up into the evening sky. Rays of the low sun fan up
- * from the left, light clouds drift behind, and the old gods of the place gather, each
+ * from the left, far clouds hang behind, and the old gods of the place gather, each
  * in a cloud of his own: they sail in from the sides, nearer ones faster, and their faces
  * come out of the vapour as they settle. Then they judge the fall. A wisp of haze passes
  * over each face and, as it clears, the face has changed: laughter, and lightning from
@@ -98,10 +98,8 @@ final class Sky {
 
     // ---- the strip ----
 
-    private float[] towerX, towerY, towerRx, towerRy;
-
     /** Paints the sky above the frame with its rays and far clouds, and reads the gods. */
-    void build(Raster r, byte[] gods) {
+    void build(Raster r, byte[] gods, byte[] far) {
         w = r.w;
         sh = r.h;
         strip = new int[w * sh];
@@ -117,8 +115,7 @@ final class Sky {
                 strip[j * w + x] = Backdrop.sky(d[0] / l, d[1] / l, d[2] / l, shx, shz);
             }
         rays();
-        planTowers();
-        clouds();
+        farClouds(far);
         readGods(gods);
     }
 
@@ -141,79 +138,40 @@ final class Sky {
             }
     }
 
-    /** The far clouds: light heaps scattered over the strip, smaller and paler than the gods'. */
-    private void planTowers() {
-        java.util.Random tr = new java.util.Random(31);
-        int towers = 8, per = 4, n = towers * per;
-        towerX = new float[n];
-        towerY = new float[n];
-        towerRx = new float[n];
-        towerRy = new float[n];
-        int k = 0;
-        for (int t = 0; t < towers; t++) {
-            float cx = (t % 2 == 0 ? 0.1f + tr.nextFloat() * 0.35f : 0.55f + tr.nextFloat() * 0.4f) * w;
-            float cy = sh * (0.05f + t * 0.09f + tr.nextFloat() * 0.04f);
-            float size = w * (0.1f + tr.nextFloat() * 0.1f);
-            for (int b = 0; b < per; b++) {
-                float up = b / (per - 1f);
-                towerX[k] = cx + (tr.nextFloat() - 0.5f) * size * 2.2f;
-                towerY[k] = cy + size * 0.15f - up * size * 0.35f;
-                towerRx[k] = size * (1.5f - up * 0.5f) * (0.85f + tr.nextFloat() * 0.3f);
-                towerRy[k] = size * (0.24f - up * 0.06f) * (0.85f + tr.nextFloat() * 0.3f);
-                k++;
-            }
-        }
-    }
+    // the far clouds, painted pieces laid out over the strip: center (share of the strip)
+    private static final float[][] FAR = {
+            {0.2f, 0.06f}, {0.86f, 0.15f}, {0.47f, 0.3f}, {0.08f, 0.32f}, {0.98f, 0.37f},
+            {0.56f, 0.47f}, {0.95f, 0.6f}, {0.08f, 0.72f}, {0.45f, 0.82f}, {0.32f, 0.57f},
+            {0.8f, 0.86f}, {0.2f, 0.92f}, {0.62f, 0.94f}};
 
-    /** Cloud density at a point of the strip: heaps, broken up by warped noise. */
-    private float density(float x, float y) {
-        float wx = x + (fbm(x * 0.02f, y * 0.02f, 7) - 0.5f) * 40f;
-        float wy = y + (fbm(x * 0.02f + 9f, y * 0.02f, 8) - 0.5f) * 30f;
-        float base = 0f;
-        for (int i = 0; i < towerX.length; i++) {
-            float u = (wx - towerX[i]) / towerRx[i], v = (wy - towerY[i]) / towerRy[i];
-            // flatter undersides, billowing tops
-            if (v > 0f) v *= 1.5f;
-            float g = 1f - (u * u + v * v);
-            if (g > base) base = g;
+    /**
+     * Lays the far clouds into the strip, a little veiled by the air between: tinted toward
+     * the sky behind them and thinned, more so low down where the strip meets the street's sky.
+     */
+    private void farClouds(byte[] b) {
+        if (b == null || b.length < 2) return;
+        int n = Math.min(FAR.length, u16(b, 0)), p = 2;
+        for (int i = 0; i < n && p + 4 <= b.length; i++) {
+            int ww = u16(b, p), hh = u16(b, p + 2);
+            p += 4;
+            if (p + ww * hh * 4 > b.length) return;
+            int ox = Math.round(FAR[i][0] * w - ww * 0.5f), oy = Math.round(FAR[i][1] * sh - hh * 0.5f);
+            for (int y = 0; y < hh; y++)
+                for (int x = 0; x < ww; x++, p += 4) {
+                    int a = b[p + 3] & 0xFF;
+                    int sx = ox + x, sy = oy + y;
+                    if (a == 0 || sx < 0 || sy < 0 || sx >= w || sy >= sh) continue;
+                    float fade = 0.88f * (1f - smooth(0.78f, 0.97f, sy / (float) sh));
+                    if (fade <= 0f) continue;
+                    int k = sy * w + sx;
+                    float al = a / 255f;
+                    // unpremultiply, then let the sky show through a little
+                    int c = 0xFF000000 | (Math.min(255, (b[p] & 0xFF) * 255 / a) << 16)
+                            | (Math.min(255, (b[p + 1] & 0xFF) * 255 / a) << 8) | Math.min(255, (b[p + 2] & 0xFF) * 255 / a);
+                    c = Backdrop.mix(c, strip[k], 0.18f);
+                    strip[k] = Backdrop.mix(strip[k], c, al * fade);
+                }
         }
-        float detail = fbm(wx * 0.05f, wy * 0.05f, 3);
-        float fine = fbm(wx * 0.14f, wy * 0.14f, 5);
-        float dd = base * 0.95f + (detail - 0.5f) * 0.6f + (fine - 0.5f) * 0.1f;
-        // no clouds where the strip meets the street's own sky
-        float low = (y - sh * 0.84f) / (sh * 0.12f);
-        if (low > 0f) dd -= low * 0.6f;
-        return dd;
-    }
-
-    private void clouds() {
-        // the light comes from low on the left: look a few pixels that way
-        final float lx = -5f, ly = 4f;
-        float[] dens = new float[w * sh];
-        for (int y = 0; y < sh; y++)
-            for (int x = 0; x < w; x++) dens[y * w + x] = density(x + 0.5f, y + 0.5f);
-        for (int y = 0; y < sh; y++)
-            for (int x = 0; x < w; x++) {
-                int k = y * w + x;
-                float dv = dens[k];
-                // far and thin: never quite opaque, so the sky shows through
-                float a = smooth(0.1f, 0.5f, dv) * 0.9f;
-                if (a <= 0f) continue;
-                int sx = Math.min(w - 1, Math.max(0, Math.round(x + lx))), sy = Math.min(sh - 1, Math.max(0, Math.round(y + ly)));
-                int sx2 = Math.min(w - 1, Math.max(0, Math.round(x + lx * 3f))), sy2 = Math.min(sh - 1, Math.max(0, Math.round(y + ly * 3f)));
-                // thinner toward the sun means this side faces it
-                float lit = 0.74f + (dv - dens[sy * w + sx]) * 1.7f + (dv - dens[sy2 * w + sx2]) * 0.8f;
-                lit -= smooth(0.6f, 1.15f, dv) * 0.2f;
-                lit = clamp01(lit);
-                // dusky rose in the folds, peach where the sun reaches, like the streaks over the street
-                int c = lit < 0.5f ? Backdrop.mix(0xFFB8909E, 0xFFF4C2B2, lit * 2f)
-                        : Backdrop.mix(0xFFF4C2B2, 0xFFFFE2BE, (lit - 0.5f) * 2f);
-                float rim = (1f - smooth(0.15f, 0.4f, dv)) * Math.max(0f, lit - 0.4f) * 2f;
-                c = Backdrop.mix(c, 0xFFFFC27A, Math.min(1f, rim));
-                int g = hash(x, y, 77) & 0xFF;
-                c = Backdrop.scale(c, 0.97f + g / 4250f);
-                strip[k] = Backdrop.mix(strip[k], c, a);
-            }
     }
 
     // ---- the gods ----
