@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.10";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.11";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -124,7 +124,7 @@ final class World implements Physics.Listener {
         bgCol = ras.col.clone();
         bgZ = ras.zb.clone();
         bgLit = ras.lit.clone();
-        sky.build(ras, host.asset("faces.bin"));
+        sky.build(ras, host.asset("gods.bin"));
         if (firstBuild) {
             firstBuild = false;
             startLevel(level, true);
@@ -566,7 +566,7 @@ final class World implements Physics.Listener {
 
     private void lookUp(int verdict) {
         sky.begin(verdict);
-        holdFor = verdict == Sky.YAWN ? 2.2f : verdict == Sky.OVATION ? 3.0f : 2.4f;
+        holdFor = verdict == Sky.YAWN ? 2.2f : verdict == Sky.OVATION ? 3.2f : 2.4f;
         boltsHeard = sky.bolts;
         setState(SKY_UP);
     }

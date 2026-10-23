@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11
+- The gods are painted now, each in a cloud of his own, with three faces apiece. When
+  the view tips up they sail in from the sides, the nearer ones faster, and their faces
+  come out of the vapour as they settle.
+- They judge with their faces: a wisp of haze drifts over each, and as it clears the
+  thunderer laughs or glowers, the goddess smiles or dozes off, the thinker smirks or
+  raises a brow, the idler grins or yawns.
+- The lightning strikes from behind the thunderer's cloud.
+- Behind them: shafts of the low sun and thin rosy streaks of cloud.
+
 ## 0.10
 - A new sky: towering clouds made of noise, heaped in billows, gold where the low sun
   reaches, soft lavender in the folds, with a fine grain.
