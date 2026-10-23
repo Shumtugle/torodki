@@ -1,0 +1,9 @@
+# The same building as the second one in the gift scene, one full light throw at its middle.
+screen 1096 2560
+level 1
+wait 2.5
+down 140 430
+wait 1.0
+up 140 430
+wait 2.3
+state

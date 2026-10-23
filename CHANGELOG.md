@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.15
+- The gift of the gods: fell a building at one throw and they give the heavy hammer,
+  three throws of it, and put it in your hand for the next building. A dark wrought head
+  bound in bronze: it winds up slower, leaves the hand slower and tumbles lazily, but
+  weighs two and a half times as much.
+- Small dark hammers under the stars count the heavy throws left (never more than
+  three); they are ringed in gold while the heavy hammer is in hand.
+- A short tap on the hammer in hand, or on those marks, puts the heavy hammer down or
+  takes it up again. Unused heavy throws are kept between games.
+
 ## 0.14
 - Strength is a wind-up now, not a flick. Aim, then rest the finger: the hammer draws
   back, a golden band fills round the ring, the arc flattens; let go to throw. A quick

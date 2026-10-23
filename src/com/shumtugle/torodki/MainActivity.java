@@ -90,6 +90,16 @@ public final class MainActivity extends Activity implements World.Host {
     }
 
     @Override
+    public void saveGifts(int heavy) {
+        getSharedPreferences("game", MODE_PRIVATE).edit().putInt("heavy", heavy).apply();
+    }
+
+    @Override
+    public int loadGifts() {
+        return getSharedPreferences("game", MODE_PRIVATE).getInt("heavy", 0);
+    }
+
+    @Override
     public byte[] asset(String name) {
         try {
             java.io.InputStream in = getAssets().open(name);

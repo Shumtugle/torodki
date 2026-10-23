@@ -21,6 +21,7 @@ import javax.imageio.ImageIO;
  *   level n                 start level n at once (counted from 0), without the rise
  *   state                   print the game state
  *   aim                     print where the aim ring is
+ *   heavy                   give the heavy hammer, as the gods do
  *   win n                   count the building as cleared after n throws
  *   lose                    put out every star
  *   shot name               save the current frame as name.png, scaled to the screen width
@@ -73,6 +74,18 @@ public final class Stand implements World.Host {
     @Override
     public void saveLevel(int level) {
         savedLevel = level;
+    }
+
+    private int savedGifts;
+
+    @Override
+    public void saveGifts(int heavy) {
+        savedGifts = heavy;
+    }
+
+    @Override
+    public int loadGifts() {
+        return savedGifts;
     }
 
     @Override
@@ -177,6 +190,9 @@ public final class Stand implements World.Host {
         } else if (c.equals("state")) {
             System.out.println(String.format("%7.2fs  state %d, hammer %d, stars %d, on plinth %.2f, level %d",
                     time, world.state, world.hs, world.stars, world.onPlinth(), world.level + 1));
+        } else if (c.equals("heavy")) {
+            world.heavyLeft = World.HEAVY_GIFT;
+            world.heavyOn = true;
         } else if (c.equals("aim")) {
             float[] a = world.aimPoint();
             System.out.println(String.format("%7.2fs  aim at %.1f, %.1f", time, a[0], a[1]));

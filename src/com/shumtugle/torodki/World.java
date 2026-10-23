@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.14";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.15";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -33,6 +33,9 @@ final class World implements Physics.Listener {
         void sound(int id, float gain, float rate);
         void saveLevel(int level);
         int loadLevel();
+        /** Heavy throws the gods have given and the player has not used yet. */
+        void saveGifts(int heavy);
+        int loadGifts();
         /** A file shipped with the game, or null. */
         byte[] asset(String name);
     }
@@ -88,6 +91,17 @@ final class World implements Physics.Listener {
     private float power, fatigue, tremX, tremY;
     private float anchorX, anchorY, movedAt;
     private boolean fullFelt;
+
+    // the heavy hammer: the gods give a few heavy throws for a building felled at one throw.
+    // A tap on the hammer in hand (or on the marks under the stars) takes it up or puts it down
+    static final int HEAVY_GIFT = 3;
+    static final float HEAVY_MASS = 2.5f;     // times the light one
+    int heavyLeft;
+    boolean heavyOn;
+    private boolean heavyThrow;               // the throw in flight is a heavy one
+    private boolean tapOnHammer;
+    private float downAt;
+    private float giftShown = -1f;            // when the gift was announced in the sky
     private boolean aimedBefore;
     private float flightTime;
     private float retX, retY, retZ;
@@ -119,6 +133,7 @@ final class World implements Physics.Listener {
         this.host = host;
         life = new Life();
         level = Math.max(0, host.loadLevel());
+        heavyLeft = Math.max(0, Math.min(HEAVY_GIFT, host.loadGifts()));
         phys.listener = this;
     }
 
@@ -177,6 +192,8 @@ final class World implements Physics.Listener {
         aimedBefore = false;
         cleared = false;
         hs = HAND;
+        heavyThrow = false;
+        if (heavyLeft == 0) heavyOn = false;
         pN = 0;
         setState(animate ? BUILD : PLAY);
     }
@@ -240,6 +257,8 @@ final class World implements Physics.Listener {
             }
             aimX = baseX;
             aimY = baseY;
+            downAt = clock;
+            tapOnHammer = heavyLeft > 0 && onHammer(x, y);
             anchorX = x;
             anchorY = y;
             movedAt = clock;
@@ -263,6 +282,14 @@ final class World implements Physics.Listener {
         }
         if (type == UP) {
             aiming = false;
+            // a short tap on the hammer, without a move, swaps hammers instead of throwing
+            if (tapOnHammer && clock - downAt < 0.35f && movedAt == downAt) {
+                heavyOn = !heavyOn;
+                power = 0f;
+                host.sound(Synth.CATCH, 0.6f, heavyOn ? 0.7f : 1.2f);
+                host.buzz(heavyOn ? 30 : 10);
+                return;
+            }
             aimedBefore = true;
             throwHammer();
         }
@@ -292,10 +319,18 @@ final class World implements Physics.Listener {
         host.quit();
     }
 
-    /** Throw speed in m/s from the wind-up: a quick release lobs, a full one flies flat. */
+    /** Where the hammer in hand is on screen, and the gift marks under the stars. */
+    private boolean onHammer(float x, float y) {
+        return (x > W * 0.58f && y > h * 0.7f) || (x < 70f && y < 32f);
+    }
+
+    /**
+     * Throw speed in m/s from the wind-up: a quick release lobs, a full one flies flat.
+     * The heavy hammer leaves the hand slower and tops out lower, but carries far more weight.
+     */
     private float throwSpeed() {
         if (forcedSpeed > 0f) return forcedSpeed;
-        return 8f + power * 5.5f;
+        return heavyOn ? 7.5f + power * 4.5f : 8f + power * 5.5f;
     }
 
     /** The wind-up, frame by frame: strength while the finger rests, then a tiring arm. */
@@ -305,7 +340,7 @@ final class World implements Physics.Listener {
             return;
         }
         boolean still = clock - movedAt > 0.1f;
-        if (still) power = Math.min(1f, power + dt / CHARGE);
+        if (still) power = Math.min(1f, power + dt / (heavyOn ? CHARGE * 1.5f : CHARGE));
         else power = Math.max(0f, power - dt * 2f);
         if (power >= 1f) {
             fatigue += dt;
@@ -365,7 +400,13 @@ final class World implements Physics.Listener {
         hammer.vy = dy / t - 0.5f * Physics.G * t;
         hammer.vz = dz / t;
         spinSign = aimX < W * 0.5f ? 1f : -1f;
-        hammer.wy = spinSign * 15f;
+        heavyThrow = heavyOn && heavyLeft > 0;
+        if (heavyThrow) {
+            hammer.scaleMass(HEAVY_MASS);
+            heavyLeft--;
+            host.saveGifts(heavyLeft);
+        }
+        hammer.wy = spinSign * (heavyThrow ? 8f : 15f);
         hammer.wx = 0.6f;
         hammer.savePrev();
         flightTime = t;
@@ -535,11 +576,16 @@ final class World implements Physics.Listener {
             hammer.px = retX + (tmp[0] - retX) * e;
             hammer.py = retY + (tmp[1] - retY) * e + (float) Math.sin(Math.PI * k) * 1.2f;
             hammer.pz = retZ + (tmp[2] - retZ) * e;
-            hammer.rotateBy(0f, spinSign * 14f * dt, 0f);
+            hammer.rotateBy(0f, spinSign * (heavyThrow ? 8f : 14f) * dt, 0f);
             hammer.updateR();
             if (k >= 1f) {
-                host.sound(Synth.CATCH, 0.8f, 1f);
-                host.buzz(25);
+                host.sound(Synth.CATCH, 0.8f, heavyThrow ? 0.75f : 1f);
+                host.buzz(heavyThrow ? 45 : 25);
+                if (heavyThrow) {
+                    hammer.scaleMass(1f / HEAVY_MASS);
+                    heavyThrow = false;
+                    if (heavyLeft == 0) heavyOn = false;
+                }
                 hs = HAND;
                 hsTime = 0f;
                 if (state == PLAY) stateTime = 0f;
@@ -631,6 +677,14 @@ final class World implements Physics.Listener {
 
     private void lookUp(int verdict) {
         sky.begin(verdict);
+        giftShown = -1f;
+        if (verdict == Sky.OVATION) {
+            // the gods give the heavy hammer, and put it in the hand for the next building
+            heavyLeft = HEAVY_GIFT;
+            heavyOn = true;
+            host.saveGifts(heavyLeft);
+            giftShown = 0f;
+        }
         holdFor = verdict == Sky.YAWN ? 2.2f : verdict == Sky.OVATION ? 3.2f : 2.4f;
         boltsHeard = sky.bolts;
         setState(SKY_UP);
@@ -956,6 +1010,7 @@ final class World implements Physics.Listener {
         if (off > 0) {
             sky.compose(ras.col, f.a, h, off);
             sky.drawClouds(f, off - h);
+            if (giftShown >= 0f && state == SKY_HOLD && stateTime > 1.2f) drawGift(f, off - h, stateTime - 1.2f);
             if (off < h / 8) drawHud(f);
         } else {
             System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
@@ -1077,6 +1132,16 @@ final class World implements Physics.Listener {
     };
     private static final int[] PART_COL = {0xFF9A6638, 0xFF6E3F27, 0xFFDFA868, 0xFF55524F, 0xFF55524F};
     private static final int[] PART_PAT = {Raster.PAT_GRAIN, Raster.PAT_FLAT, Raster.PAT_GRAIN, Raster.PAT_FLAT, Raster.PAT_FLAT};
+    // the gift of the gods: a dark wrought head, broader and deeper, bound in bronze, on a stout handle
+    private static final float[][] HEAVY_PARTS = {
+            {-0.1f, 0f, 0f, 0.31f, 0.038f, 0.038f},
+            {-0.36f, 0f, 0f, 0.07f, 0.044f, 0.044f},
+            {0.31f, 0f, 0f, 0.13f, 0.1f, 0.2f},
+            {0.31f, 0f, 0.15f, 0.134f, 0.104f, 0.02f},
+            {0.31f, 0f, -0.15f, 0.134f, 0.104f, 0.02f},
+    };
+    private static final int[] HEAVY_COL = {0xFF6E4A2C, 0xFF3E2618, 0xFF3F3D44, 0xFFA8783A, 0xFFA8783A};
+    private static final int[] HEAVY_PAT = {Raster.PAT_GRAIN, Raster.PAT_FLAT, Raster.PAT_STONE, Raster.PAT_FLAT, Raster.PAT_FLAT};
 
     private void drawHammer() {
         float px, py, pz;
@@ -1144,12 +1209,15 @@ final class World implements Physics.Listener {
             r22 = b.r22;
             ras.shadowBox(px, py, pz, r00, r01, r02, r10, r11, r12, r20, r21, r22, b.hx, b.hy * 0.8f, b.hz);
         }
-        for (int i = 0; i < PARTS.length; i++) {
-            float[] p = PARTS[i];
+        boolean heavy = hs == HAND ? heavyOn : heavyThrow;
+        float[][] parts = heavy ? HEAVY_PARTS : PARTS;
+        int[] cols = heavy ? HEAVY_COL : PART_COL, pats = heavy ? HEAVY_PAT : PART_PAT;
+        for (int i = 0; i < parts.length; i++) {
+            float[] p = parts[i];
             float cx = px + r00 * p[0] + r01 * p[1] + r02 * p[2];
             float cy = py + r10 * p[0] + r11 * p[1] + r12 * p[2];
             float cz = pz + r20 * p[0] + r21 * p[1] + r22 * p[2];
-            ras.box(cx, cy, cz, r00, r01, r02, r10, r11, r12, r20, r21, r22, p[3], p[4], p[5], PART_COL[i], PART_PAT[i],
+            ras.box(cx, cy, cz, r00, r01, r02, r10, r11, r12, r20, r21, r22, p[3], p[4], p[5], cols[i], pats[i],
                     (900 + (i == 2 ? 1 : i > 2 ? 2 + i : 0)) << 3);
         }
     }
@@ -1227,6 +1295,8 @@ final class World implements Physics.Listener {
             boolean flash = state == WON && on && ((int) (stateTime * 6) & 1) == 0;
             star(f, x + i * 15 + 6, y + 6, 6.6f, on ? (flash ? 0xFFFFFFFF : 0xFFFFC93A) : 0x00000000, 0xFF8A5A12, on);
         }
+        // the heavy throws left: small dark hammers under the stars, ringed in gold when in hand
+        for (int i = 0; i < heavyLeft; i++) heavyMark(f, x + i * 13 + 1, y + 16, heavyOn);
         // weight still on the plinth, with the line it has to fall below
         float on = onPlinth();
         int bw = 58, bx = W - bw - 7, by = 9;
@@ -1240,6 +1310,32 @@ final class World implements Physics.Listener {
         PixelFont.draw(f, lv, bx + bw - PixelFont.width(lv, 1), by + 12, 1, 0xFF6A4A1A);
         String v = "V" + VERSION;
         PixelFont.draw(f, v, W - PixelFont.width(v, 1) - 3, h - 10, 1, 0xFF8A8478);
+    }
+
+    /** A tiny heavy hammer for the HUD, 11 by 8 pixels, from its top left corner. */
+    private void heavyMark(Px f, int x, int y, boolean lit) {
+        if (lit) f.rect(x - 1, y - 1, x + 12, y + 9, 0xFFFFC93A);
+        f.rect(x, y, x + 11, y + 8, 0xFF2E2A28);
+        f.rect(x + 1, y + 1, x + 7, y + 5, 0xFF6A676A);   // the head
+        f.rect(x + 1, y + 1, x + 7, y + 2, 0xFF8E8A8C);
+        f.rect(x + 2, y + 1, x + 3, y + 5, 0xFFC08A3C);   // its bronze bands
+        f.rect(x + 5, y + 1, x + 6, y + 5, 0xFFC08A3C);
+        f.rect(x + 7, y + 2, x + 10, y + 4, 0xFF8A5A32);  // the handle
+    }
+
+    /** The gift announced in the sky, under the gods, with the hammer itself turning slowly. */
+    private void drawGift(Px f, float shift, float t) {
+        float a = Math.min(1f, t / 0.4f);
+        int y0 = Math.round(h * 0.86f);
+        String l1 = "A GIFT FROM THE GODS", l2 = "THE HEAVY HAMMER  X" + HEAVY_GIFT;
+        int c = Backdrop.mix(0xFF3C73C0, 0xFFFFF2C8, a);
+        int sh2 = Backdrop.mix(0xFF3C73C0, 0xFF5A3A1A, a);
+        PixelFont.draw(f, l1, (W - PixelFont.width(l1, 1)) / 2 + 1, y0 + 1, 1, sh2);
+        PixelFont.draw(f, l1, (W - PixelFont.width(l1, 1)) / 2, y0, 1, c);
+        PixelFont.draw(f, l2, (W - PixelFont.width(l2, 1)) / 2 + 1, y0 + 13, 1, sh2);
+        PixelFont.draw(f, l2, (W - PixelFont.width(l2, 1)) / 2, y0 + 12, 1, Backdrop.mix(0xFF3C73C0, 0xFFFFC93A, a));
+        if (a > 0.5f)
+            for (int i = 0; i < HEAVY_GIFT; i++) heavyMark(f, W / 2 - 20 + i * 14, y0 - 14, true);
     }
 
     /** A five-pointed star; hollow when spent. */

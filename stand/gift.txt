@@ -1,0 +1,30 @@
+# The gift: a building felled at one throw, the gods give the heavy hammer; it comes to
+# hand for the next building, winds up slower, hits harder; a tap on it puts it down.
+screen 1096 2560
+level 0
+wait 0.5
+win 1
+wait 5.0
+shot g1_gift
+wait 4.0
+shot g2_heavy_in_hand
+state
+# a tap on the hammer puts it down, another takes it up again
+down 230 600
+wait 0.1
+up 230 600
+wait 0.3
+shot g2b_light_in_hand
+down 230 600
+wait 0.1
+up 230 600
+wait 0.3
+state
+down 140 430
+wait 1.5
+shot g3_windup
+up 140 430
+wait 0.3
+shot g4_flight
+wait 2.0
+state

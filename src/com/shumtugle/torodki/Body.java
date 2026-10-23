@@ -151,6 +151,16 @@ final class Body {
         maxZ = pz + ez;
     }
 
+    /** Makes the body heavier or lighter, keeping its shape: mass and inertia scale together. */
+    void scaleMass(float k) {
+        if (invMass == 0f) return;
+        mass *= k;
+        invMass /= k;
+        iix /= k;
+        iiy /= k;
+        iiz /= k;
+    }
+
     void savePrev() {
         ppx = px;
         ppy = py;
