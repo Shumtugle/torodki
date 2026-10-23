@@ -154,10 +154,10 @@ final class Sky {
 
     // ---- the gods ----
 
-    private static final int ZEUS = 0, GODDESS = 1, THINKER = 2, ELDER = 3, BORED = 4;
+    private static final int THUNDERER = 0, GODDESS = 1, THINKER = 2, ELDER = 3, BORED = 4;
     private static final int GODS = 5;
     private final float[] gx = new float[GODS], gy = new float[GODS], gR = new float[GODS];
-    private final int[] gType = {ZEUS, GODDESS, THINKER, ELDER, BORED};
+    private final int[] gType = {THUNDERER, GODDESS, THINKER, ELDER, BORED};
 
     // the sculpture of one god, rebuilt every frame: sphere centers, radii, shade, tint
     private static final int MAXS = 520;
@@ -208,7 +208,7 @@ final class Sky {
         // throws: the elder and the thunderer send blocks down to the street
         nextThrow -= dt;
         if (nextThrow <= 0f && time > 0.5f && kn < BLOCKS) {
-            int g = rnd.nextBoolean() ? ELDER : ZEUS;
+            int g = rnd.nextBoolean() ? ELDER : THUNDERER;
             float hx = gx[g] + gR[g] * (g == ELDER ? 1.25f : -1.3f), hy = gy[g] - gR[g] * 0.9f;
             kx[kn] = hx;
             ky[kn] = hy;
@@ -294,7 +294,7 @@ final class Sky {
                     if (idx != boltIdx) {
                         boltIdx = idx;
                         bolts++;
-                        makeBolt(gx[ZEUS] - gR[ZEUS] * 1.3f, gy[ZEUS] - gR[ZEUS] * 0.9f);
+                        makeBolt(gx[THUNDERER] - gR[THUNDERER] * 1.3f, gy[THUNDERER] - gR[THUNDERER] * 0.9f);
                     }
                     if (since < 0.2f || (since > 0.3f && since < 0.4f)) drawBolt(f, shift);
                 }
@@ -326,7 +326,7 @@ final class Sky {
                 if (type == BORED) {
                     mouth = Math.min(1f, Math.max(0f, (t - 0.3f) / 0.5f));
                     eyesShut = 1f;
-                } else if (type == ZEUS) {
+                } else if (type == THUNDERER) {
                     frown = 1f;
                     smile = -0.5f;
                 } else {
@@ -407,7 +407,7 @@ final class Sky {
             for (int i = -3; i <= 3; i++)
                 s(i * 0.1f, 0.47f + Math.abs(i) * 0.03f + (Math.abs(i) == 3 ? 0.06f : 0f), 0.84f, 0.1f, 1f, 0);
             // beard: curls from cheek to chest, longer on the elder and the thunderer
-            float len = type == ELDER || type == ZEUS ? 1.25f : type == THINKER ? 0.75f : 0.9f;
+            float len = type == ELDER || type == THUNDERER ? 1.25f : type == THINKER ? 0.75f : 0.9f;
             int n = 0;
             for (float y = 0.45f; y < 0.45f + len; y += 0.11f)
                 for (float x = -0.8f; x <= 0.8f; x += 0.12f) {
@@ -449,7 +449,7 @@ final class Sky {
             for (int i = 0; i < 4; i++) s(hx - 0.18f + i * 0.12f, hy, 0.85f, 0.12f, 1f, 0);
             s(hx, hy + 0.15f, 0.8f, 0.2f, 1f, 0);
             for (int i = 1; i <= 14; i++) s(hx + i * 0.05f, hy + 0.15f + i * 0.085f, 0.7f - i * 0.02f, 0.21f, 1f, 0);
-        } else if (type == ELDER || type == ZEUS) {
+        } else if (type == ELDER || type == THUNDERER) {
             // an arm raised to throw, swinging
             float side = type == ELDER ? 1f : -1f;
             float sw = (float) Math.sin(t * 6f + type) * 0.25f;
