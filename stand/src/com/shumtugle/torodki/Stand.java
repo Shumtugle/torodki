@@ -20,6 +20,8 @@ import javax.imageio.ImageIO;
  *   back
  *   level n                 start level n at once (counted from 0), without the rise
  *   state                   print the game state
+ *   win n                   count the building as cleared after n throws
+ *   lose                    put out every star
  *   shot name               save the current frame as name.png, scaled to the screen width
  *   # comment
  */
@@ -155,6 +157,10 @@ public final class Stand implements World.Host {
             }
             world.touch(World.UP, x1, y1);
             step();
+        } else if (c.equals("win")) {
+            world.standWin(Integer.parseInt(p[1]));
+        } else if (c.equals("lose")) {
+            world.stars = 0;
         } else if (c.equals("level")) {
             savedLevel = Integer.parseInt(p[1]);
             world.startLevel(savedLevel, false);

@@ -1,0 +1,22 @@
+# Between buildings: the view tips up, the clouds react, the next building is standing.
+screen 1096 2560
+level 0
+wait 0.5
+win 1
+wait 2.4
+shot s1_tilting
+wait 0.5
+shot s2_sky
+wait 0.8
+shot s3_ovation
+wait 1.6
+shot s4_down
+wait 1.0
+shot s5_next
+state
+lose
+wait 3.0
+shot s6_yawn_start
+wait 0.9
+shot s7_yawn
+state

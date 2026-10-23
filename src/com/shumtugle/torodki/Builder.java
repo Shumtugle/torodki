@@ -26,6 +26,7 @@ final class Builder {
     private final ArrayList<Body> out = new ArrayList<Body>();
     private Random rnd;
     private float paintChance;
+    private boolean water;           // this building has water bottles in it
 
     /** The pieces of one building. */
     ArrayList<Body> build(int level, long seed) {
@@ -35,6 +36,8 @@ final class Builder {
         int size = Math.min(4, level / KINDS.length);
         paintChance = 0.15f + 0.1f * rnd.nextFloat();
         String k = KINDS[kind];
+        // bottles are a treat, not a rule: the rack always, the rest now and then
+        water = k.equals("RACK") || rnd.nextFloat() < 0.3f;
         if (k.equals("WALL")) wall(size);
         else if (k.equals("TOWER")) tower(size);
         else if (k.equals("SEESAW")) seesaw(size);
@@ -123,12 +126,12 @@ final class Builder {
             float o = w / 2 - post / 2;
             for (int i = 0; i < 4; i++)
                 put((i & 1) == 0 ? -o : o, y, (i & 2) == 0 ? -o : o, post, ph, post, false);
-            if (ph > BOTTLE_H + 0.03f && rnd.nextInt(3) != 0) bottle(0, y, 0);
+            if (water && ph > BOTTLE_H + 0.03f && rnd.nextInt(3) != 0) bottle(0, y, 0);
             y += ph;
             y = put(0, y, 0, w + 0.1f, 0.1f, w + 0.1f, rnd.nextFloat() < 0.5f);
             w *= 0.84f;
         }
-        if (rnd.nextBoolean()) bottle(0, y, 0);
+        if (water && rnd.nextBoolean()) bottle(0, y, 0);
         else put(0, y, 0, 0.3f, 0.3f, 0.3f, false);
     }
 
@@ -143,7 +146,7 @@ final class Builder {
         for (int side = -1; side <= 1; side += 2) {
             float yy = y;
             for (int i = 0; i < load; i++) yy = put(side * (len / 2 - 0.2f), yy, 0, 0.3f, 0.3f, 0.3f, i == 0 && rnd.nextBoolean());
-            if (rnd.nextInt(3) != 0) bottle(side * (len / 2 - 0.2f), yy, 0);
+            if (water && rnd.nextInt(3) != 0) bottle(side * (len / 2 - 0.2f), yy, 0);
         }
         put(0, y, 0, 0.3f, 0.3f, 0.3f, false);
     }
@@ -162,7 +165,7 @@ final class Builder {
                     put((i - 1) * c, y, (j - 1) * c, c, c, c, false);
             y += c;
         }
-        bottle(0, y, 0);
+        if (water) bottle(0, y, 0);
     }
 
     /** A well: crossed logs, layer on layer. */
@@ -195,7 +198,7 @@ final class Builder {
             }
             y += bh;
         }
-        bottle(0, y, 0);
+        if (water) bottle(0, y, 0);
     }
 
     /** Shelves on posts, tier on tier, every shelf lined with water bottles. */
@@ -225,7 +228,7 @@ final class Builder {
             put(gap / 2 + c / 2, y, 0, c, c, c, i == 0);
             y += c;
         }
-        if (h * c > BOTTLE_H + 0.05f) bottle(0, 0f, 0);
+        if (water && h * c > BOTTLE_H + 0.05f) bottle(0, 0f, 0);
         float span = gap + 2 * c + 0.2f;
         y = put(0, y, 0, span, 0.14f, 0.4f, rnd.nextBoolean());
         int n = 4;

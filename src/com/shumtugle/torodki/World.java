@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.7";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.8";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -57,7 +57,8 @@ final class World implements Physics.Listener {
     private float focal;
 
     // the game
-    static final int BUILD = 0, PLAY = 1, WON = 2, LOST = 3, VANISH = 4;
+    static final int BUILD = 0, PLAY = 1, WON = 2, LOST = 3, VANISH = 4, SKY_UP = 5, SKY_HOLD = 6, SKY_DOWN = 7;
+    static final float TILT = 1.0f;          // seconds to tip up into the sky, and back
     static final int HAND = 0, FLY = 1, BACK = 2;
     int state = VANISH;
     int hs = HAND;                         // where the hammer is
@@ -97,6 +98,8 @@ final class World implements Physics.Listener {
     private final float[] tmp = new float[3], scr = new float[2], dirA = new float[3];
 
     private final Life life;
+    private final Sky sky = new Sky();
+    private float holdFor;
 
     World(Host host) {
         this.host = host;
@@ -115,6 +118,7 @@ final class World implements Physics.Listener {
         bgCol = ras.col.clone();
         bgZ = ras.zb.clone();
         bgLit = ras.lit.clone();
+        sky.build(ras);
         if (firstBuild) {
             firstBuild = false;
             startLevel(level, true);
@@ -397,16 +401,32 @@ final class World implements Physics.Listener {
                     setState(LOST);
                 break;
             case WON:
-                if (stateTime > 2.4f && hs == HAND && (phys.settled() || stateTime > 4.5f)) {
+                if (stateTime > 2.2f && hs == HAND && (phys.settled() || stateTime > 4.5f)) {
                     nextAfterVanish = 1;
-                    vanish();
+                    lookUp(throwsMade <= 1 ? Sky.OVATION : throwsMade <= 3 ? Sky.CHEER : Sky.POLITE);
                 }
                 break;
             case LOST:
                 if (stateTime > 0.7f) {
                     nextAfterVanish = 0;
-                    vanish();
+                    lookUp(Sky.YAWN);
                 }
+                break;
+            case SKY_UP:
+                sky.update(dt);
+                if (stateTime >= TILT) {
+                    // while everyone looks up, the next building rises below
+                    startLevel(level + nextAfterVanish, false);
+                    setState(SKY_HOLD);
+                }
+                break;
+            case SKY_HOLD:
+                sky.update(dt);
+                if (stateTime >= holdFor) setState(SKY_DOWN);
+                break;
+            case SKY_DOWN:
+                sky.update(dt);
+                if (stateTime >= TILT) setState(PLAY);
                 break;
             case VANISH:
                 if (stateTime > 0.5f) startLevel(level + nextAfterVanish, true);
@@ -515,6 +535,30 @@ final class World implements Physics.Listener {
             for (int i = 0; i < 3; i++) spawn(b.px, b.py, b.pz, true, 0xFFF4EFE4, 0.6f);
         }
         setState(VANISH);
+    }
+
+    /** For the desktop stand: the building counts as cleared after this many throws. */
+    void standWin(int throwsCount) {
+        throwsMade = throwsCount;
+        cleared = true;
+        setState(WON);
+    }
+
+    private void lookUp(int verdict) {
+        sky.begin(verdict);
+        holdFor = verdict == Sky.YAWN ? 1.5f : verdict == Sky.OVATION ? 2.6f : 2.0f;
+        setState(SKY_UP);
+    }
+
+    /** How far the view is tipped up into the sky, in rows (0 = looking at the street). */
+    private int tilt() {
+        float k;
+        if (state == SKY_UP) k = Math.min(1f, stateTime / TILT);
+        else if (state == SKY_HOLD) k = 1f;
+        else if (state == SKY_DOWN) k = 1f - Math.min(1f, stateTime / TILT);
+        else return 0;
+        k = k * k * (3f - 2f * k);
+        return Math.round(k * h);
     }
 
     private float buildDuration() {
@@ -781,8 +825,15 @@ final class World implements Physics.Listener {
         ras.shadowApply((int) minX, (int) minY, (int) maxX + 1, (int) maxY + 1);
         ras.outlines(0, (int) Math.max(0, minY - 40), W - 1, h - 1, 1);
         if (aiming) drawAim();
-        System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
-        drawHud(f);
+        int off = tilt();
+        if (off > 0) {
+            sky.compose(ras.col, f.a, h, off);
+            sky.drawClouds(f, off - h);
+            if (off < h / 8) drawHud(f);
+        } else {
+            System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
+            drawHud(f);
+        }
     }
 
     private void drawBody(Body b, float scale, float drop, int id) {

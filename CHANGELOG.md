@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8
+- Between buildings the view tips up into the evening sky, where the clouds are the
+  audience, with faces you can just make out. One throw: they bounce and burst into puffs
+  of applause. Two or three: they cheer. More: they sway politely. Stars run out: one of
+  them yawns and drifts away. Meanwhile the next building rises below, and the view comes
+  back down to it standing.
+- Water bottles turn up in about a third of the buildings (and always on the rack), not in
+  every one.
+
 ## 0.7
 - Big water bottles: see-through blue plastic with ribs and a blue cap, glossy in the sun.
   They stand in towers, crown the seesaw's loads, sit under arches and on the summits.
