@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.17";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.18";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -192,6 +192,8 @@ final class World implements Physics.Listener {
         thundered = false;
         aiming = false;
         aimedBefore = false;
+        blasted = false;
+        blastNow = false;
         cleared = false;
         hs = HAND;
         heavyThrow = false;
@@ -498,6 +500,7 @@ final class World implements Physics.Listener {
             steps++;
             if (state != BUILD && state != VANISH) phys.step(1f / 60f);
             bursts();
+            blast();
         }
         if (acc > 1f / 30f) acc = 0f;
         particles(dt);
@@ -678,7 +681,8 @@ final class World implements Physics.Listener {
     }
 
     private void lookUp(int verdict) {
-        sky.begin(verdict);
+        // the first building is the gods' welcome: they all laugh aloud
+        sky.begin(verdict, level == 0 && verdict == Sky.OVATION);
         giftShown = -1f;
         if (verdict == Sky.OVATION) {
             // the gods give the heavy hammer, and put it in the hand for the next building
@@ -763,6 +767,14 @@ final class World implements Physics.Listener {
     public void knock(Body a, Body b, float speed, float x, float y, float z) {
         boolean hammerHit = a == hammer || b == hammer;
         Body other = a == hammer ? b : a;
+        // the first building flies to pieces at the first touch of the hammer
+        if (level == 0 && hammerHit && other != null && other != plinth && !blasted) {
+            blasted = true;
+            blastX = x;
+            blastY = y;
+            blastZ = z;
+            blastNow = true;
+        }
         // water bottles burst at a hard blow, or a hard landing
         if (a.material == Body.WATER && (speed > 4.2f || hammerHit && speed > 2.4f)) burst(a);
         if (b != null && b.material == Body.WATER && (speed > 4.2f || hammerHit && speed > 2.4f)) burst(b);
@@ -801,6 +813,35 @@ final class World implements Physics.Listener {
     private void burst(Body b) {
         if (b.gone || toBurst.contains(b)) return;
         toBurst.add(b);
+    }
+
+    // the first building's welcome: one blow and it scatters
+    private boolean blasted, blastNow;
+    private float blastX, blastY, blastZ;
+
+    /** Throws every piece of the building away from the blow, after the step, never inside it. */
+    private void blast() {
+        if (!blastNow) return;
+        blastNow = false;
+        for (Body b : pieces) {
+            if (b.gone) continue;
+            float dx = b.px - blastX, dy = b.py - blastY + 0.6f, dz = b.pz - blastZ + 0.5f;
+            float l = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.2f;
+            float v = 6f + fx.nextFloat() * 3.5f;
+            b.vx = dx / l * v + (fx.nextFloat() - 0.5f) * 1.5f;
+            b.vy = Math.abs(dy / l) * v * 0.8f + 2.5f + fx.nextFloat() * 2f;
+            b.vz = dz / l * v + 1.5f;
+            b.wx = (fx.nextFloat() - 0.5f) * 14f;
+            b.wy = (fx.nextFloat() - 0.5f) * 14f;
+            b.wz = (fx.nextFloat() - 0.5f) * 14f;
+            b.asleep = false;
+            b.savePrev();
+            if (b.material == Body.WATER) burst(b);
+        }
+        for (int i = 0; i < 40; i++)
+            spawn(blastX, blastY, blastZ, (i & 1) == 0, (i & 1) == 0 ? 0xFFE6DCC8 : 0xFFD39E62, 5f);
+        host.sound(Synth.THUNDER, 0.8f, 1.3f);
+        host.buzz(80);
     }
 
     /** Bottles hit hard enough this step: gone in a splash, leaving a puddle. */

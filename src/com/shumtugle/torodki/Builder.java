@@ -18,10 +18,12 @@ final class Builder {
 
     /**
      * How much farther down the street the plinth stands for a level (counted from 0):
-     * from the 21st level on, a meter more every five levels, four meters at most.
+     * the very first stands close, as the first plinth of the game did; from the 21st on,
+     * a meter more every five levels, four meters at most.
      */
     static float farther(int level) {
         int n = level + 1;
+        if (n == 1) return -1.9f;
         if (n < 21) return 0f;
         return Math.min(4f, (n - 21) / 5 + 1f);
     }

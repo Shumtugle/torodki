@@ -1,0 +1,24 @@
+# The first building: close, as in the first version; one blow scatters it, all the gods
+# laugh aloud, and give the heavy hammer. The real game starts at the second.
+screen 1096 2560
+wait 2.6
+shot w1_close
+state
+down 140 430
+wait 0.4
+up 140 430
+wait 0.25
+shot w2_blow
+wait 0.25
+shot w3_scatter
+wait 2.0
+state
+wait 4.4
+shot w4_jubilee
+wait 0.8
+shot w5_jubilee
+wait 0.9
+shot w5b_jubilee
+wait 5.1
+shot w6_second
+state

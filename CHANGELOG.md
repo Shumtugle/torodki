@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18
+- The first building is a welcome. It stands close, where the first plinth of the game
+  stood, and flies to pieces at the first touch of the hammer. Every god who can laugh
+  laughs aloud, and the heavy hammer comes down as the first gift. The real game starts
+  with the second building.
+
 ## 0.17
 - Only one god opens his mouth wide at a verdict; a sky full of open mouths read as
   wailing. On an ovation it is the thunderer, otherwise one of those who would laugh or

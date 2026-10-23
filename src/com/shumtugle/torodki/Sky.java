@@ -292,6 +292,11 @@ final class Sky {
     // ---- the verdict ----
 
     void begin(int verdict) {
+        begin(verdict, false);
+    }
+
+    /** A verdict; on a jubilee every god who can laugh laughs aloud, open mouths and all. */
+    void begin(int verdict, boolean jubilee) {
         this.verdict = verdict;
         // each god comes in one of his pictures
         for (int g = 0; g < GODS; g++) {
@@ -311,7 +316,7 @@ final class Sky {
         int keep = verdict == OVATION && OPEN[THUNDERER][faceTo[THUNDERER]] ? 0 : open > 0 ? rnd.nextInt(open) : -1;
         for (int g = 0, k = 0; g < GODS; g++) {
             if (!OPEN[g][faceTo[g]]) continue;
-            boolean mine = verdict == OVATION ? g == THUNDERER : k == keep;
+            boolean mine = jubilee || (verdict == OVATION ? g == THUNDERER : k == keep);
             k++;
             if (!mine) faceTo[g] = 0;
         }
