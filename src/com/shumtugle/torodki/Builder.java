@@ -29,8 +29,14 @@ final class Builder {
     }
     static final float PHX = 1.42f * S, PHZ = 0.78f * S;
 
-    // in the order they first appear: the first ones fall easily, the pyramid is the stubborn one
-    static final String[] KINDS = {"TOWER", "SEESAW", "RACK", "WALL", "WELL", "GATE", "PRESS", "STEPS"};
+    // in the order they first appear: the first ones fall easily, the pyramid is the stubborn one;
+    // the last three carry heavy polished balls and come in from the 15th level
+    static final String[] KINDS = {"TOWER", "SEESAW", "RACK", "WALL", "WELL", "GATE", "PRESS", "STEPS",
+            "PILE", "CRADLE", "CROWN"};
+    static final int FIRST_KINDS = 8;
+    static final int BALLS_FROM = 14;        // level, counted from 0
+    // from then on: every other building is one of the new ones, the old ones go round between
+    private static final int[] LATE = {8, 0, 9, 1, 10, 2, 8, 3, 9, 4, 10, 5, 8, 6, 9, 7, 10};
 
     static final int[] WOODS = {0xFFE3B47C, 0xFFD39E62, 0xFFC4864F, 0xFFE8C08C};
     static final int[] PAINT = {0xFF8FCBB2, 0xFFEE9272, 0xFFF2D06A, 0xFF8EBDE3, 0xFFF0A9B9};
@@ -46,7 +52,7 @@ final class Builder {
         out.clear();
         rnd = new Random(seed);
         int kind = kindOf(level);
-        int size = Math.min(4, level / KINDS.length);
+        int size = Math.min(4, level / FIRST_KINDS);
         paintChance = 0.15f + 0.1f * rnd.nextFloat();
         String k = KINDS[kind];
         // bottles are a treat, not a rule: the rack always, the rest now and then
@@ -58,12 +64,16 @@ final class Builder {
         else if (k.equals("WELL")) well(size);
         else if (k.equals("STEPS")) steps(size);
         else if (k.equals("RACK")) rack(size);
+        else if (k.equals("PILE")) pile(size);
+        else if (k.equals("CRADLE")) cradle(size);
+        else if (k.equals("CROWN")) crown(size);
         else gate(size);
         return new ArrayList<Body>(out);
     }
 
     static int kindOf(int level) {
-        return level % KINDS.length;
+        if (level < BALLS_FROM) return level % FIRST_KINDS;
+        return LATE[(level - BALLS_FROM) % LATE.length];
     }
 
     // ---- pieces ----
@@ -105,7 +115,81 @@ final class Builder {
         return bottom + sy;
     }
 
+    // a bowling ball, in recipe units, and the deep glossy colors such balls come in
+    static final float BALL_R = 0.17f;
+    static final int[] BALL_COLORS = {0xFF22357E, 0xFF6E1A2A, 0xFF34204A, 0xFF17604A, 0xFFB24A18, 0xFF1E1E26};
+
+    /** A ball with its center at a point in recipe units above the plinth top. */
+    private void ballAt(float x, float cy, float z) {
+        float wx = x * S, wy = TOP + cy * S, wz = CZ + z * S;
+        Body b = Body.ball(BALL_R * S, BALL_COLORS[rnd.nextInt(BALL_COLORS.length)]);
+        b.setPose(wx, wy, wz, 1, 0, 0, 0);
+        b.homeX = wx;
+        b.homeY = wy;
+        b.homeZ = wz;
+        out.add(b);
+    }
+
+    /**
+     * A ball on a little stone pad, with two low stops at its sides that it does not quite
+     * touch: it stays where it is put and rolls the moment anything tips it. Returns its top.
+     */
+    private float nested(float x, float bottom, float z) {
+        float pad = 0.05f, stop = 0.06f, sw = 0.07f;
+        float top = put(x, bottom, z, 0.22f, pad, 0.22f, true);
+        float reach = (float) Math.sqrt(BALL_R * BALL_R - (BALL_R - stop) * (BALL_R - stop)) + 0.012f;
+        put(x - reach - sw / 2, bottom, z, sw, pad + stop, 0.2f, false);
+        put(x + reach + sw / 2, bottom, z, sw, pad + stop, 0.2f, false);
+        ballAt(x, top + BALL_R, z);
+        return top + 2f * BALL_R;
+    }
+
     // ---- recipes ----
+
+    /** Balls piled like cannonballs, nine, four and one, in a low wooden frame. */
+    private void pile(int size) {
+        float d = BALL_R * 2f + 0.004f, inner = 3f * d, t = 0.1f, fh = 0.14f;
+        put(0, 0, -(inner / 2 + t / 2), inner + 2 * t, fh, t, true);
+        put(0, 0, inner / 2 + t / 2, inner + 2 * t, fh, t, true);
+        put(-(inner / 2 + t / 2), 0, 0, t, fh, inner, true);
+        put(inner / 2 + t / 2, 0, 0, t, fh, inner, true);
+        float up = d / (float) Math.sqrt(2.0);
+        for (int i = 0; i < 3; i++)
+            for (int j = 0; j < 3; j++) ballAt((i - 1) * d, BALL_R, (j - 1) * d);
+        for (int i = 0; i < 2; i++)
+            for (int j = 0; j < 2; j++) ballAt((i - 0.5f) * d, BALL_R + up, (j - 0.5f) * d);
+        ballAt(0, BALL_R + 2 * up, 0);
+    }
+
+    /** A beam on two stone pillars, a row of balls along it, each in its little cradle. */
+    private void cradle(int size) {
+        float y = 0f;
+        int blocks = 1 + rnd.nextInt(2) + (size > 2 ? 1 : 0);
+        for (int i = 0; i < blocks; i++) {
+            put(-0.75f, y, 0, 0.3f, 0.4f, 0.3f, true);
+            y = put(0.75f, y, 0, 0.3f, 0.4f, 0.3f, true);
+        }
+        y = put(0, y, 0, 2.3f, 0.12f, 0.42f, false);
+        int n = 3 + (size >= 2 ? 1 : 0);
+        for (int i = 0; i < n; i++) nested(-0.85f + 1.7f * i / (n - 1), y, 0);
+    }
+
+    /** Storeys of four posts and a slab, a ball in a cradle on every floor, one on the top. */
+    private void crown(int size) {
+        int storeys = 2 + Math.min(1, size) + rnd.nextInt(2);
+        float w = 1.3f, y = 0f, post = 0.22f;
+        for (int s = 0; s < storeys; s++) {
+            float ph = 0.46f;
+            float o = w / 2 - post / 2;
+            for (int i = 0; i < 4; i++)
+                put((i & 1) == 0 ? -o : o, y, (i & 2) == 0 ? -o : o, post, ph, post, false);
+            if (s > 0) nested(0, y, 0);
+            y += ph;
+            y = put(0, y, 0, w + 0.1f, 0.1f, w + 0.1f, rnd.nextFloat() < 0.4f);
+            w *= 0.86f;
+        }
+        nested(0, y, 0);
+    }
 
     /** Bricks in running bond. */
     private void wall(int size) {

@@ -1,14 +1,14 @@
 package com.shumtugle.torodki;
 
 /**
- * One rigid box: position, orientation, velocities, mass properties and the points
- * on its surface that are tested against other boxes. Plain fields, no allocation in
+ * One rigid box, or a ball: position, orientation, velocities, mass properties and the
+ * points on its surface that are tested against other boxes. Plain fields, no allocation in
  * the hot loops; the rotation matrix is kept in step with the quaternion.
  */
 final class Body {
-    static final int WOOD = 0, STONE = 1, HAMMER = 2, PLINTH = 3, GLASS = 4, WATER = 5;
-    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f, 760f};
-    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f, 0.55f};
+    static final int WOOD = 0, STONE = 1, HAMMER = 2, PLINTH = 3, GLASS = 4, WATER = 5, BALL = 6;
+    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f, 760f, 1500f};
+    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f, 0.55f, 0.45f};
 
     static final float INERTIA = 3f;
 
@@ -16,6 +16,7 @@ final class Body {
     int material;
     int tint;                       // base color
     float hx, hy, hz;               // half extents
+    float radius;                   // above zero for a ball: a sphere of this radius
     float mass, invMass;
     float iix, iiy, iiz;            // inverse inertia, body frame
 
@@ -60,6 +61,21 @@ final class Body {
         }
         buildSamples();
         updateR();
+    }
+
+    /** A heavy polished ball, the kind rolled down a lane at pins. */
+    static Body ball(float r, int tint) {
+        Body b = new Body(r, r, r, BALL, tint);
+        b.radius = r;
+        b.mass = DENSITY[BALL] * 4.18879f * r * r * r;
+        b.invMass = 1f / b.mass;
+        // a solid sphere, its inertia raised a little like the boxes', so it rolls but not wildly
+        float ii = 1f / (0.4f * b.mass * r * r * 1.6f);
+        b.iix = ii;
+        b.iiy = ii;
+        b.iiz = ii;
+        b.updateR();
+        return b;
     }
 
     boolean dynamic() {
@@ -143,6 +159,7 @@ final class Body {
         float ex = Math.abs(r00) * hx + Math.abs(r01) * hy + Math.abs(r02) * hz;
         float ey = Math.abs(r10) * hx + Math.abs(r11) * hy + Math.abs(r12) * hz;
         float ez = Math.abs(r20) * hx + Math.abs(r21) * hy + Math.abs(r22) * hz;
+        if (radius > 0f) ex = ey = ez = radius;
         minX = px - ex;
         maxX = px + ex;
         minY = py - ey;

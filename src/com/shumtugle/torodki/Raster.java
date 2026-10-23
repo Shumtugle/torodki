@@ -348,6 +348,84 @@ final class Raster {
     }
 
     /** A screen disc at a given depth, for sprites and particles. */
+    private final float[] ballK = new float[3], ballN = new float[3], ballP = new float[2];
+
+    // the three finger holes, as directions in the ball's own frame
+    private static final float[][] HOLES = {{0f, 0.96f, 0.28f}, {-0.24f, 0.95f, -0.2f}, {0.24f, 0.95f, -0.2f}};
+
+    /**
+     * A polished ball: shaded per pixel as a true sphere, with a marbled swirl and three
+     * finger holes that turn with it, and a highlight of the low sun on its gloss.
+     */
+    void ball(float x, float y, float z, float r, float r00, float r01, float r02, float r10, float r11, float r12,
+              float r20, float r21, float r22, int color, int color2, int id) {
+        float vz = project(x, y, z, ballP);
+        if (vz < 0.3f) return;
+        float sx = ballP[0], sy = ballP[1], sr = r * f / vz;
+        int x0 = Math.max(0, (int) Math.floor(sx - sr)), x1 = Math.min(w - 1, (int) Math.ceil(sx + sr));
+        int y0 = Math.max(0, (int) Math.floor(sy - sr)), y1 = Math.min(h - 1, (int) Math.ceil(sy + sr));
+        float slx = sunX(), sly = sunY(), slz = sunZ();
+        // toward the viewer, for the gloss: the half way between it and the sun
+        viewToWorld(0f, 0f, -1f, ballN);
+        float hx = slx + ballN[0], hy = sly + ballN[1], hz = slz + ballN[2];
+        float hl = (float) Math.sqrt(hx * hx + hy * hy + hz * hz);
+        hx /= hl;
+        hy /= hl;
+        hz /= hl;
+        for (int py = y0; py <= y1; py++) {
+            float v = (py + 0.5f - sy) / sr;
+            for (int px = x0; px <= x1; px++) {
+                float u = (px + 0.5f - sx) / sr;
+                float d2 = u * u + v * v;
+                if (d2 > 1f) continue;
+                float n3 = (float) Math.sqrt(1f - d2);
+                float q = 1f / (vz - n3 * r);
+                int k = py * w + px;
+                if (q <= zb[k]) continue;
+                viewToWorld(u, -v, -n3, ballN);
+                float nx = ballN[0], ny = ballN[1], nz = ballN[2];
+                // the same direction in the ball's own frame: holes and swirl turn with it
+                float lx = r00 * nx + r10 * ny + r20 * nz;
+                float ly = r01 * nx + r11 * ny + r21 * nz;
+                float lz = r02 * nx + r12 * ny + r22 * nz;
+                boolean hole = false;
+                for (int i = 0; i < HOLES.length; i++) {
+                    float[] hd = HOLES[i];
+                    if (lx * hd[0] + ly * hd[1] + lz * hd[2] > 0.988f) hole = true;
+                }
+                float swirl = (float) Math.sin(lx * 7f + (float) Math.sin(ly * 5f + lz * 3f) * 2.2f);
+                int base = hole ? 0xFF14121A : swirl > 0.25f ? color2 : color;
+                float ndl = nx * slx + ny * sly + nz * slz;
+                lightK(-n3, ny, ndl, ballK);
+                int cr = (int) (((base >> 16) & 0xFF) * ballK[0]);
+                int cg = (int) (((base >> 8) & 0xFF) * ballK[1]);
+                int cb = (int) ((base & 0xFF) * ballK[2]);
+                if (!hole) {
+                    float sp = Math.max(0f, nx * hx + ny * hy + nz * hz);
+                    sp = sp * sp;
+                    sp = sp * sp;
+                    sp = sp * sp;
+                    sp = sp * sp;
+                    int g = (int) (sp * 230f);
+                    cr += g;
+                    cg += g * 0.92f;
+                    cb += g * 0.8f;
+                }
+                col[k] = 0xFF000000 | (Math.min(255, cr) << 16) | (Math.min(255, cg) << 8) | Math.min(255, cb);
+                zb[k] = q;
+                idb[k] = id;
+                lit[k] = (byte) (ndl > 0.02f ? 1 : 0);
+            }
+        }
+    }
+
+    /** A ball in the shadow map: two boxes turned against each other make a round enough shade. */
+    void shadowBall(float x, float y, float z, float r) {
+        float k = r * 0.8f, c = 0.70710677f;
+        shadowBox(x, y, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, k, k, k);
+        shadowBox(x, y, z, c, 0, c, 0, 1, 0, -c, 0, c, k, k * 0.9f, k);
+    }
+
     void disc(float px, float py, float r, float invz, int color, int id) {
         int x0 = Math.max(0, (int) Math.floor(px - r)), x1 = Math.min(w - 1, (int) Math.ceil(px + r));
         int y0 = Math.max(0, (int) Math.floor(py - r)), y1 = Math.min(h - 1, (int) Math.ceil(py + r));

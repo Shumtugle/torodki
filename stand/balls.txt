@@ -1,0 +1,34 @@
+# The buildings with bowling balls, from the 15th level: a pile, a cradle, a crown.
+screen 1096 2560
+level 14
+wait 1.5
+shot b1_pile
+state
+down 140 430
+wait 1.0
+up 140 430
+wait 0.5
+shot b1b_pile_hit
+wait 1.0
+shot b1c_pile_after
+state
+level 16
+wait 1.5
+shot b2_cradle
+state
+down 140 430
+wait 1.0
+up 140 430
+wait 1.5
+shot b2b_cradle_after
+state
+level 18
+wait 1.5
+shot b3_crown
+state
+down 140 430
+wait 1.0
+up 140 430
+wait 1.5
+shot b3b_crown_after
+state

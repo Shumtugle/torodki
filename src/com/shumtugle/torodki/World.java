@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.19";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.20";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -226,8 +226,16 @@ final class World implements Physics.Listener {
         boolean ok = true;
         for (Body b : made) {
             float dx = b.px - b.homeX, dy = b.py - b.homeY, dz = b.pz - b.homeZ;
-            if (dx * dx + dy * dy + dz * dz > 0.045f * 0.045f || Math.abs(b.qw) < 0.995f) ok = false;
+            // settling by a few centimeters is not falling: nothing may tip, nothing may wander far
+            if (dx * dx + dy * dy + dz * dz > 0.09f * 0.09f || (b.radius == 0f && Math.abs(b.qw) < 0.995f)) ok = false;
         }
+        // the building starts as it settled, so it does not sag once the game begins
+        if (ok)
+            for (Body b : made) {
+                b.homeX = b.px;
+                b.homeY = b.py;
+                b.homeZ = b.pz;
+            }
         for (Body b : made) b.id = 0;
         return ok;
     }
@@ -784,7 +792,8 @@ final class World implements Physics.Listener {
         if (b == null || other == null) {
             if (speed > 1.6f) host.sound(Synth.GROUND, gain * 0.9f, 0.9f + fx.nextFloat() * 0.2f);
         } else {
-            boolean stone = a.material == Body.STONE || b.material == Body.STONE || other.material == Body.PLINTH;
+            boolean stone = a.material == Body.STONE || b.material == Body.STONE || other.material == Body.PLINTH
+                    || a.material == Body.BALL || b.material == Body.BALL;
             float size = Math.max(other.hx, Math.max(other.hy, other.hz));
             float rate = Math.max(0.6f, Math.min(1.5f, 0.32f / size)) * (0.92f + fx.nextFloat() * 0.16f);
             host.sound(plastic ? Synth.PLASTIC : stone ? Synth.STONE : Synth.WOOD, gain, plastic ? 0.9f + fx.nextFloat() * 0.2f : rate);
@@ -1028,7 +1037,8 @@ final class World implements Physics.Listener {
             if (b.gone) continue;
             if (b.material == Body.WATER) drawBottle(b, scale, drop, i + 2);
             else drawBody(b, scale, drop, i + 2);
-            ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+            if (b.radius > 0f) ras.shadowBall(b.px, b.py + drop, b.pz, b.radius * scale);
+            else ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
                     b.hx * scale, b.hy * scale, b.hz * scale);
         }
         drawPuddles();
@@ -1062,6 +1072,12 @@ final class World implements Physics.Listener {
     }
 
     private void drawBody(Body b, float scale, float drop, int id) {
+        if (b.radius > 0f) {
+            // the swirl in a ball is its own color, lit up
+            ras.ball(b.px, b.py + drop, b.pz, b.radius * scale, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12,
+                    b.r20, b.r21, b.r22, b.tint, Backdrop.mix(b.tint, 0xFFFFFFFF, 0.28f), id << 3);
+            return;
+        }
         int pat = b.material == Body.STONE ? Raster.PAT_STONE : b.material == Body.PLINTH ? Raster.PAT_STONE : Raster.PAT_GRAIN;
         int tint = b.tint;
         for (int k = 0; k < 1; k++)

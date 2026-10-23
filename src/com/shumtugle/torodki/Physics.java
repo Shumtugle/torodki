@@ -101,7 +101,10 @@ final class Physics {
         for (int i = 0; i < n; i++) {
             Body a = bodies.get(i);
             if (!moving(a)) continue;
-            if (a.minY < 0f) groundContacts(a);
+            if (a.minY < 0f) {
+                if (a.radius > 0f) ballGround(a);
+                else groundContacts(a);
+            }
             for (int j = 0; j < n; j++) {
                 if (j == i) continue;
                 Body b = bodies.get(j);
@@ -110,10 +113,102 @@ final class Physics {
                 if (moving(b) && j < i) continue;
                 if (a.maxX < b.minX || b.maxX < a.minX || a.maxY < b.minY || b.maxY < a.minY
                         || a.maxZ < b.minZ || b.maxZ < a.minZ) continue;
-                pointsInto(a, b);
-                pointsInto(b, a);
+                if (a.radius > 0f || b.radius > 0f) ballPair(a, b);
+                else {
+                    pointsInto(a, b);
+                    pointsInto(b, a);
+                }
             }
         }
+    }
+
+    // ---- balls ----
+
+    /** One contact: a point fixed in a (local), one in b (local, or a world point for the ground), normal out of b. */
+    private void contact(Body a, Body b, float lx, float ly, float lz, float mx, float my, float mz,
+                         float nx, float ny, float nz, float wx, float wy, float wz) {
+        int c = alloc();
+        if (c < 0) return;
+        ca[c] = a.id;
+        cb[c] = b == null ? -1 : b.id;
+        cra[3 * c] = lx;
+        cra[3 * c + 1] = ly;
+        cra[3 * c + 2] = lz;
+        crb[3 * c] = mx;
+        crb[3 * c + 1] = my;
+        crb[3 * c + 2] = mz;
+        cnr[3 * c] = nx;
+        cnr[3 * c + 1] = ny;
+        cnr[3 * c + 2] = nz;
+        cln[c] = 0f;
+        cvn[c] = closing(a, b, wx, wy, wz, nx, ny, nz);
+    }
+
+    /** A world direction into a body's own frame. */
+    private static void toLocal(Body b, float x, float y, float z, float[] out) {
+        out[0] = b.r00 * x + b.r10 * y + b.r20 * z;
+        out[1] = b.r01 * x + b.r11 * y + b.r21 * z;
+        out[2] = b.r02 * x + b.r12 * y + b.r22 * z;
+    }
+
+    private final float[] la = new float[3];
+
+    private void ballGround(Body a) {
+        float r = a.radius;
+        if (a.py - r >= 0f) return;
+        toLocal(a, 0f, -r, 0f, la);
+        contact(a, null, la[0], la[1], la[2], a.px, 0f, a.pz, 0f, 1f, 0f, a.px, a.py - r, a.pz);
+    }
+
+    /** A ball against a box or another ball; the ball is always the first of the contact. */
+    private void ballPair(Body a, Body b) {
+        if (a.radius > 0f && b.radius > 0f) {
+            float dx = a.px - b.px, dy = a.py - b.py, dz = a.pz - b.pz;
+            float rr = a.radius + b.radius, d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 >= rr * rr || d2 < 1e-10f) return;
+            float d = (float) Math.sqrt(d2), nx = dx / d, ny = dy / d, nz = dz / d;
+            toLocal(a, -nx * a.radius, -ny * a.radius, -nz * a.radius, la);
+            toLocal(b, nx * b.radius, ny * b.radius, nz * b.radius, tmp);
+            contact(a, b, la[0], la[1], la[2], tmp[0], tmp[1], tmp[2], nx, ny, nz,
+                    a.px - nx * a.radius, a.py - ny * a.radius, a.pz - nz * a.radius);
+            return;
+        }
+        Body s = a.radius > 0f ? a : b, x = s == a ? b : a;
+        float r = s.radius;
+        // the ball's center in the box's frame, and the nearest point of the box to it
+        toLocal(x, s.px - x.px, s.py - x.py, s.pz - x.pz, la);
+        float qx = Math.max(-x.hx, Math.min(x.hx, la[0]));
+        float qy = Math.max(-x.hy, Math.min(x.hy, la[1]));
+        float qz = Math.max(-x.hz, Math.min(x.hz, la[2]));
+        float ex = la[0] - qx, ey = la[1] - qy, ez = la[2] - qz;
+        float d2 = ex * ex + ey * ey + ez * ez;
+        if (d2 >= r * r) return;
+        float lnx, lny, lnz;
+        if (d2 > 1e-10f) {
+            float d = (float) Math.sqrt(d2);
+            lnx = ex / d;
+            lny = ey / d;
+            lnz = ez / d;
+        } else {
+            // the center is inside the box: out through the nearest face
+            float fx = x.hx - Math.abs(la[0]), fy = x.hy - Math.abs(la[1]), fz = x.hz - Math.abs(la[2]);
+            lnx = lny = lnz = 0f;
+            if (fx <= fy && fx <= fz) {
+                lnx = la[0] < 0 ? -1f : 1f;
+                qx = x.hx * lnx;
+            } else if (fy <= fz) {
+                lny = la[1] < 0 ? -1f : 1f;
+                qy = x.hy * lny;
+            } else {
+                lnz = la[2] < 0 ? -1f : 1f;
+                qz = x.hz * lnz;
+            }
+        }
+        float nx = x.r00 * lnx + x.r01 * lny + x.r02 * lnz;
+        float ny = x.r10 * lnx + x.r11 * lny + x.r12 * lnz;
+        float nz = x.r20 * lnx + x.r21 * lny + x.r22 * lnz;
+        toLocal(s, -nx * r, -ny * r, -nz * r, tmp);
+        contact(s, x, tmp[0], tmp[1], tmp[2], qx, qy, qz, nx, ny, nz, s.px - nx * r, s.py - ny * r, s.pz - nz * r);
     }
 
     private void groundContacts(Body a) {

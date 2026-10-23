@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20
+- Bowling balls: heavy, polished, marbled, with three finger holes that turn as they
+  roll. The physics knows spheres now, against boxes and against each other.
+- Three new buildings from the 15th level, every other building one of them: a pile
+  of balls stacked like cannonballs in a stone frame; a beam on stone pillars with a row
+  of balls along it; a tower of storeys with a ball on every floor. Each ball sits on a
+  small pad between two stops it does not touch, so it stays put until something tips it.
+- Fewer stand-ins: a building that only settles by a few centimeters now counts as
+  standing, and starts the level already settled. Before, many towers and racks failed
+  that test and the first tower stood in for them.
+
 ## 0.19
 - The plinth's move down the street is now plain to see: three meters at the 21st
   level, two more every five levels after, ten meters at most by the 51st.
