@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.36
+- No god ever yawns now. When the stars run out the thunderer glowers, the goddess dozes,
+  the thinker doubts, and the elder and the idler simply look on.
+
 ## 0.35
 - The level number in the corner sits on a framed plate of its own, in the street and
   in the fight, so the sky behind it never swallows it.

@@ -7,7 +7,8 @@ package com.shumtugle.torodki;
  * come out of the vapour as they settle. Then they judge the fall. A wisp of haze passes
  * over each face and, as it clears, the face has changed: laughter, and lightning from
  * the thunderer, for a building felled at one throw; smiles for a few throws; a sceptic
- * look for many; anger, sleep and yawns when the stars run out. The next building then
+ * look for many; anger, sleep and scepticism when the stars run out. No god ever yawns.
+ * The next building then
  * falls out of the sky as the view comes back down.
  *
  * The sky, its rays and the far clouds are painted once into a strip above the frame;
@@ -16,7 +17,7 @@ package com.shumtugle.torodki;
  * frame over the strip.
  */
 final class Sky {
-    static final int OVATION = 0, CHEER = 1, POLITE = 2, YAWN = 3;
+    static final int OVATION = 0, CHEER = 1, POLITE = 2, GLOOM = 3;
 
     static final int THUNDERER = 0, GODDESS = 1, THINKER = 2, ELDER = 3, IDLER = 4;
     private static final int GODS = 5;
@@ -44,7 +45,15 @@ final class Sky {
             {1, 1, 1, 1, 1},          // ovation: laughter and smiles
             {0, 1, 1, 1, 1},          // cheer: the thunderer stays stern
             {0, 0, 2, 0, 0},          // polite: only the thinker raises a brow
-            {2, 2, 2, 0, 2},          // yawn: anger, sleep, scepticism, a yawn; a bearded god never yawns
+            {2, 2, 2, 0, 0},          // stars run out: anger, sleep, scepticism; the others look on
+    };
+    // the faces that yawn: painted, but never shown
+    private static final boolean[][] YAWNS = {
+            {false, false, false},
+            {false, false, false},
+            {false, false, false},
+            {false, false, true},     // elder
+            {false, false, true},     // idler
     };
     // which of those faces open the mouth wide: laughter and yawns. Many open mouths at once
     // read as wailing, so a verdict lets only one god open his; the others keep their rest face
@@ -306,6 +315,7 @@ final class Sky {
         int open = 0;
         for (int g = 0; g < GODS; g++) {
             faceTo[g] = FACE_FOR[verdict][g];
+            if (YAWNS[g][faceTo[g]]) faceTo[g] = 0;
             if (OPEN[g][faceTo[g]]) open++;
         }
         int keep = verdict == OVATION && OPEN[THUNDERER][faceTo[THUNDERER]] ? 0 : open > 0 ? rnd.nextInt(open) : -1;

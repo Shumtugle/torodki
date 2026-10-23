@@ -1,0 +1,23 @@
+# Stars run out, five times over: the gods frown, doze and doubt, but none of them yawns.
+screen 1096 2560
+level 14
+wait 1.0
+lose
+wait 2.9
+shot g1
+wait 4.5
+lose
+wait 2.9
+shot g2
+wait 4.5
+lose
+wait 2.9
+shot g3
+wait 4.5
+lose
+wait 2.9
+shot g4
+wait 4.5
+lose
+wait 2.9
+shot g5

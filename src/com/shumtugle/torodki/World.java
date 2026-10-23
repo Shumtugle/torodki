@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.35";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.36";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -1816,7 +1816,7 @@ final class World implements Physics.Listener {
             case LOST:
                 if (stateTime > 0.7f) {
                     nextAfterVanish = 0;
-                    lookUp(Sky.YAWN);
+                    lookUp(Sky.GLOOM);
                 }
                 break;
             case SKY_UP:
@@ -1979,7 +1979,7 @@ final class World implements Physics.Listener {
         fromBoss = false;
         if (afterFight) {
             // the fight is over: no counting, no golem again at once
-        } else if (verdict == Sky.YAWN) {
+        } else if (verdict == Sky.GLOOM) {
             fails++;
             host.saveFails(fails);
             if (fails == GOLD_AFTER) {
@@ -2011,7 +2011,7 @@ final class World implements Physics.Listener {
             diamondGift = true;
             giftShown = 0f;
         }
-        holdFor = verdict == Sky.YAWN ? 2.2f : verdict == Sky.OVATION ? 3.2f : 2.4f;
+        holdFor = verdict == Sky.GLOOM ? 2.2f : verdict == Sky.OVATION ? 3.2f : 2.4f;
         boltsHeard = sky.bolts;
         setState(SKY_UP);
     }
