@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.20";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.21";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -44,13 +44,24 @@ final class World implements Physics.Listener {
     int h = 1;                             // current height in game pixels
 
     // scene
-    private Raster ras;
+    private Raster ras;                    // the camera being drawn with: the usual one, or the zoomed one
+    private Raster normRas, zoomRas;
+    // the zoom for far plinths: while the throw is aimed and flies, the view closes in on the
+    // building. The zoomed view has its own camera and its own painted street behind
+    private int[] zCol;
+    private float[] zZ;
+    private byte[] zLit;
+    private float zoomFor = -1f, zoomZ = 1f, zoomK, zPX, zPY;
+    private boolean zoomed;
+    static final float ZOOM_T = 0.3f;        // seconds to close in, and back
     private int[] bgCol;
     private float[] bgZ;
     private byte[] bgLit;
     private final Backdrop backdrop = new Backdrop();
     final Physics phys = new Physics();
     private Body plinth;
+    private final Body[] cars = new Body[Life.parked()];
+    private final float[] carHitAt = new float[Life.parked()];
     final ArrayList<Body> pieces = new ArrayList<Body>();
     private final Builder builder = new Builder();
     float totalMass;
@@ -141,7 +152,11 @@ final class World implements Physics.Listener {
     void resize(int height) {
         if (height == h && ras != null) return;
         h = height;
-        ras = new Raster(W, h);
+        ras = normRas = new Raster(W, h);
+        zoomRas = null;
+        zoomFor = -1f;
+        zoomed = false;
+        zoomK = 0f;
         focal = W * 1.9f;
         ras.camera(CAM_X, CAM_Y, 0f, YAW, PITCH, focal, h * 0.5f);
         backdrop.paint(ras, 11L);
@@ -152,7 +167,7 @@ final class World implements Physics.Listener {
         if (firstBuild) {
             firstBuild = false;
             startLevel(level, true);
-        }
+        } else prepareZoom();
     }
 
     // ---- levels ----
@@ -166,12 +181,21 @@ final class World implements Physics.Listener {
         level = lv;
         host.saveLevel(level);
         seed = seedOf(lv);
+        if (zoomed) setZoomed(false);
+        zoomK = 0f;
         Builder.CZ = Builder.BASE_CZ + Builder.farther(lv);
+        prepareZoom();
         phys.clear();
         pieces.clear();
         plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0xFFF2E3C6);
         plinth.setPose(0f, Builder.TOP * 0.5f, Builder.CZ, 1, 0, 0, 0);
         phys.add(plinth);
+        // the parked cars, as solid as the plinth: the hammer and the blocks bounce off them, and dent them
+        for (int i = 0; i < cars.length; i++) {
+            cars[i] = new Body(0.95f, 0.65f, 2.3f, Body.CAR, 0);
+            cars[i].setPose(Life.parkX(i), 0.65f, Life.parkZ(i), 1, 0, 0, 0);
+            phys.add(cars[i]);
+        }
         ArrayList<Body> made = standingBuilding(lv, seed);
         totalMass = 0f;
         for (Body b : made) {
@@ -345,6 +369,81 @@ final class World implements Physics.Listener {
         return heavyOn ? 7.5f + power * 4.5f : 8f + power * 5.5f;
     }
 
+    /**
+     * The zoomed camera for this plinth, if it is far enough to need one: it looks straight
+     * at the building, narrower by the ratio of distances, and the street behind is painted
+     * for it once (again only when the plinth moves).
+     */
+    private void prepareZoom() {
+        if (normRas == null) return;
+        if (Builder.CZ - Builder.BASE_CZ < 2.5f) {
+            zoomZ = 1f;
+            return;
+        }
+        if (Builder.CZ == zoomFor) return;
+        zoomFor = Builder.CZ;
+        float lookY = Builder.TOP + 1.4f, dx = -CAM_X, dz = Builder.CZ;
+        float dist = (float) Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) Math.atan2(dx, dz), pitch = (float) Math.atan2(lookY - CAM_Y, dist);
+        zoomZ = Math.max(1.25f, Math.min(2.8f, Builder.CZ / Builder.BASE_CZ * 0.92f));
+        if (zoomRas == null) zoomRas = new Raster(W, h);
+        zoomRas.camera(CAM_X, CAM_Y, 0f, yaw, pitch, focal * zoomZ, h * 0.5f);
+        backdrop.paint(zoomRas, 11L);
+        zCol = zoomRas.col.clone();
+        zZ = zoomRas.zb.clone();
+        zLit = zoomRas.lit.clone();
+        // where the zoomed view's middle sits in the usual view: the closing-in heads there
+        normRas.project(0f, lookY, Builder.CZ, scr);
+        zPX = scr[0];
+        zPY = scr[1];
+    }
+
+    /** Swaps cameras, carrying the aim over so the ring stays on the same spot of the world. */
+    private void setZoomed(boolean on) {
+        if (on == zoomed) return;
+        zoomed = on;
+        ras = on ? zoomRas : normRas;
+        if (on) {
+            aimX = (aimX - zPX) * zoomZ + W * 0.5f;
+            aimY = (aimY - zPY) * zoomZ + h * 0.5f;
+            baseX = (baseX - zPX) * zoomZ + W * 0.5f;
+            baseY = (baseY - zPY) * zoomZ + h * 0.5f;
+        } else {
+            aimX = (aimX - W * 0.5f) / zoomZ + zPX;
+            aimY = (aimY - h * 0.5f) / zoomZ + zPY;
+            baseX = (baseX - W * 0.5f) / zoomZ + zPX;
+            baseY = (baseY - h * 0.5f) / zoomZ + zPY;
+        }
+    }
+
+    /** Closes in while a throw is aimed and in flight, opens out once the hammer is back. */
+    private void zoomStep(float dt) {
+        boolean want = zoomZ > 1f && zoomRas != null && state == PLAY && (aiming || hs != HAND);
+        zoomK = Math.max(0f, Math.min(1f, zoomK + (want ? dt : -dt) / ZOOM_T));
+        if (zoomK >= 1f) setZoomed(true);
+        else setZoomed(false);
+    }
+
+    /** The usual view, enlarged toward the zoomed one: the way in and out between the two cameras. */
+    private void closingIn(Px f) {
+        float e = zoomK * zoomK * (3f - 2f * zoomK);
+        float zk = 1f + (zoomZ - 1f) * e;
+        float cx = W * 0.5f + (zPX - W * 0.5f) * e, cy = h * 0.5f + (zPY - h * 0.5f) * e;
+        int[] src = ras.col;
+        for (int y = 0; y < h; y++) {
+            int sy = (int) (cy + (y + 0.5f - h * 0.5f) / zk);
+            if (sy < 0) sy = 0;
+            if (sy >= h) sy = h - 1;
+            int row = sy * W, out = y * W;
+            for (int x = 0; x < W; x++) {
+                int sx = (int) (cx + (x + 0.5f - W * 0.5f) / zk);
+                if (sx < 0) sx = 0;
+                if (sx >= W) sx = W - 1;
+                f.a[out + x] = src[row + sx];
+            }
+        }
+    }
+
     /** The wind-up, frame by frame: strength while the finger rests, then a tiring arm. */
     private void windUp(float dt) {
         if (!aiming) {
@@ -381,6 +480,13 @@ final class World implements Physics.Listener {
         throwHammer();
         forcedSpeed = -1f;
         return true;
+    }
+
+    /** How badly the parked cars are damaged, all told, for the desktop stand. */
+    int carDamage() {
+        int n = 0;
+        for (int i = 0; i < life.damage.length; i++) n += life.damage[i];
+        return n;
     }
 
     /** Where the ring is now, for the desktop stand. */
@@ -517,6 +623,7 @@ final class World implements Physics.Listener {
         trail();
 
         windUp(dt);
+        zoomStep(dt);
         hammerMoves(dt);
         if (state == SKY_UP || state == SKY_HOLD || fromSky) {
             sky.update(dt);
@@ -775,6 +882,10 @@ final class World implements Physics.Listener {
     public void knock(Body a, Body b, float speed, float x, float y, float z) {
         boolean hammerHit = a == hammer || b == hammer;
         Body other = a == hammer ? b : a;
+        if ((a.material == Body.CAR || (b != null && b.material == Body.CAR))) {
+            carKnock(a.material == Body.CAR ? a : b, speed, x, y, z);
+            return;
+        }
         // the first building flies to pieces at the first touch of the hammer
         if (level == 0 && hammerHit && other != null && other != plinth && !blasted) {
             blasted = true;
@@ -808,6 +919,31 @@ final class World implements Physics.Listener {
             for (int i = 0; i < 4; i++) spawn(x, 0.02f, z, true, 0xFFD8CFC0, 1f);
         }
     }
+
+    /** Something hard against a parked car: crumpled metal, a spray of glass, the alarm. */
+    private void carKnock(Body car, float speed, float x, float y, float z) {
+        int i = 0;
+        while (i < cars.length && cars[i] != car) i++;
+        if (i == cars.length) return;
+        if (speed < 2.2f) {
+            host.sound(Synth.CRASH, 0.25f, 1.3f);
+            return;
+        }
+        if (clock - carHitAt[i] < 0.5f) return;
+        carHitAt[i] = clock;
+        boolean wasQuiet = life.damage[i] == 0 || clock - carAlarmAt > 1.8f;
+        life.hit(i);
+        host.sound(Synth.CRASH, Math.min(1f, 0.4f + speed * 0.08f), 0.85f + fx.nextFloat() * 0.3f);
+        host.sound(Synth.GLASS, 0.5f, 1.1f + fx.nextFloat() * 0.3f);
+        if (wasQuiet) {
+            host.sound(Synth.ALARM, 0.45f, 1f);
+            carAlarmAt = clock;
+        }
+        host.buzz(50);
+        for (int k = 0; k < 12; k++) spawn(x, y, z, false, (k & 1) == 0 ? 0xFFCFE2EC : 0xFF9FB6C4, speed * 0.4f);
+    }
+
+    private float carAlarmAt = -9f;
 
     // ---- water ----
 
@@ -1001,9 +1137,9 @@ final class World implements Physics.Listener {
 
     void draw(Px f) {
         if (ras == null) return;
-        System.arraycopy(bgCol, 0, ras.col, 0, bgCol.length);
-        System.arraycopy(bgZ, 0, ras.zb, 0, bgZ.length);
-        System.arraycopy(bgLit, 0, ras.lit, 0, bgLit.length);
+        System.arraycopy(zoomed ? zCol : bgCol, 0, ras.col, 0, bgCol.length);
+        System.arraycopy(zoomed ? zZ : bgZ, 0, ras.zb, 0, bgZ.length);
+        System.arraycopy(zoomed ? zLit : bgLit, 0, ras.lit, 0, bgLit.length);
         java.util.Arrays.fill(ras.idb, 0);
 
         drawBody(plinth, 1f, 0f, 1);
@@ -1066,7 +1202,8 @@ final class World implements Physics.Listener {
             if (giftShown >= 0f && state == SKY_HOLD && stateTime > 0.9f) drawGift(f, stateTime - 0.9f);
             if (off < h / 8) drawHud(f);
         } else {
-            System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
+            if (!zoomed && zoomK > 0f) closingIn(f);
+            else System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
             drawHud(f);
         }
     }

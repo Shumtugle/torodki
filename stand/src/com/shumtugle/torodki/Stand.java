@@ -22,6 +22,7 @@ import javax.imageio.ImageIO;
  *   state                   print the game state
  *   aim                     print where the aim ring is
  *   heavy                   give the heavy hammer, as the gods do
+ *   throwat x y z speed     throw at a world point, as the bot does
  *   win n                   count the building as cleared after n throws
  *   lose                    put out every star
  *   shot name               save the current frame as name.png, scaled to the screen width
@@ -188,9 +189,13 @@ public final class Stand implements World.Host {
             savedLevel = Integer.parseInt(p[1]);
             world.startLevel(savedLevel, false);
         } else if (c.equals("state")) {
-            System.out.println(String.format("%7.2fs  state %d, hammer %d, stars %d, on plinth %.2f, level %d, heavy %d%s",
+            System.out.println(String.format("%7.2fs  state %d, hammer %d, stars %d, on plinth %.2f, level %d, heavy %d%s, car damage %d",
                     time, world.state, world.hs, world.stars, world.onPlinth(), world.level + 1, world.heavyLeft,
-                    world.heavyOn ? " in hand" : ""));
+                    world.heavyOn ? " in hand" : "", world.carDamage()));
+        } else if (c.equals("throwat")) {
+            float[] o = world.screenOf(f(p[1]), f(p[2]), f(p[3]));
+            world.throwAt(o[0], o[1], f(p[4]));
+            step();
         } else if (c.equals("heavy")) {
             world.heavyLeft = World.HEAVY_GIFT;
             world.heavyOn = true;

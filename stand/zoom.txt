@@ -1,0 +1,25 @@
+# Far plinths: the view closes in on the building while a throw is aimed and in flight,
+# and opens out once the hammer is back in hand.
+screen 1096 2560
+level 39
+wait 2.5
+shot z0_far
+down 140 430
+wait 0.15
+shot z1_closing
+wait 0.35
+shot z2_aiming
+move 136 436
+move 132 442
+move 128 448
+wait 1.0
+shot z3_wound
+aim
+up 128 448
+wait 0.35
+shot z4_flight
+wait 0.6
+shot z5_impact
+wait 2.4
+shot z6_back
+state

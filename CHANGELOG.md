@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.21
+- From the 40th level the plinth goes farther still: twelve meters, then two more every
+  five levels, twenty at most.
+- When the plinth is far, the view closes in on the building while a throw is aimed and
+  in flight, and opens out again once the hammer is back in hand. The zoomed view is a
+  camera of its own with the street painted for it, not an enlarged picture; the aim
+  moves finer in it.
+- Parked cars are solid now. The hammer and flying blocks bounce off them and dent
+  them: crazed windscreen, dents, broken side glass, a lost headlamp, the roof pressed
+  lower, step by step. Each hit crunches, scatters glass and sets off a short alarm with
+  blinking lights.
+
 ## 0.20
 - Bowling balls: heavy, polished, marbled, with three finger holes that turn as they
   roll. The physics knows spheres now, against boxes and against each other.

@@ -1,0 +1,17 @@
+# The parked cars take the blows. Far down the street at the 40th level the yellow car
+# stands in front of the plinth: low throws at it, until it is wrecked.
+screen 1096 2560
+level 39
+wait 2.5
+shot c0_whole
+throwat 2.2 0.3 16.5 13
+wait 0.35
+shot c1_hit
+wait 3.5
+state
+throwat 2.2 0.3 16.5 13
+wait 4.0
+throwat 2.2 0.4 17.0 13
+wait 4.0
+shot c2_wrecked
+state

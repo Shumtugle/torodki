@@ -12,9 +12,9 @@ import java.util.Random;
 final class Synth {
     static final int RATE = 22050;
     static final int WOOD = 0, STONE = 1, GROUND = 2, WHOOSH = 3, THUNDER = 4, CATCH = 5, TOCK = 6, GLASS = 7;
-    static final int SPLASH = 8, PLASTIC = 9;
+    static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11;
 
-    final float[][] bank = new float[10][];
+    final float[][] bank = new float[12][];
 
     Synth() {
         Random r = new Random(7);
@@ -30,6 +30,10 @@ final class Synth {
         bank[SPLASH] = splash(r);
         bank[PLASTIC] = knock(r, 0.18f, new float[]{190f, 455f, 780f}, new float[]{1f, 0.45f, 0.2f},
                 new float[]{30f, 42f, 60f}, 0.25f, 0.2f);
+        // sheet metal crumpling: low panels ringing under a burst of grit
+        bank[CRASH] = knock(r, 0.55f, new float[]{170f, 410f, 1120f, 2390f, 3310f}, new float[]{0.8f, 0.7f, 0.5f, 0.35f, 0.25f},
+                new float[]{8f, 10f, 15f, 19f, 24f}, 1.1f, 0.6f);
+        bank[ALARM] = alarm();
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
     }
@@ -59,6 +63,23 @@ final class Synth {
                 v += 0.35f * (float) Math.sin(2 * Math.PI * f * u) * (float) Math.exp(-50f * u);
             }
             s[i] = v * 0.8f;
+        }
+        return s;
+    }
+
+    /** A car alarm, briefly: two hoarse tones taking turns, then it gives up. */
+    private static float[] alarm() {
+        int n = (int) (1.8f * RATE);
+        float[] s = new float[n];
+        float ph = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float f = ((int) (t / 0.16f) & 1) == 0 ? 720f : 960f;
+            ph += f / RATE;
+            float sq = (ph % 1f) < 0.5f ? 1f : -1f;
+            float tri = 4f * Math.abs((ph % 1f) - 0.5f) - 1f;
+            float env = Math.min(1f, t * 40f) * Math.min(1f, (1.8f - t) * 6f);
+            s[i] = (sq * 0.25f + tri * 0.45f) * env * 0.35f;
         }
         return s;
     }

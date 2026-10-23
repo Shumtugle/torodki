@@ -33,6 +33,27 @@ final class Life {
     private static final float[] PARK_X = {-3.05f, -3.05f, -3.05f, -3.05f, -3.05f, -3.05f, 3.05f, 3.05f, 3.05f, 3.05f, 3.05f};
     private static final float[] PARK_Z = {15.0f, 20.6f, 29.0f, 34.6f, 47.5f, 61.0f, 17.5f, 23.2f, 31.0f, 41.5f, 55.0f};
     private final int[] parkColor = new int[PARK_X.length];
+    // what the hammer and the falling blocks have done to the parked cars: 0 whole, 3 wrecked
+    final int[] damage = new int[PARK_X.length];
+    private final float[] alarm = new float[PARK_X.length];
+
+    static int parked() {
+        return PARK_X.length;
+    }
+
+    static float parkX(int i) {
+        return PARK_X[i];
+    }
+
+    static float parkZ(int i) {
+        return PARK_Z[i];
+    }
+
+    /** A blow to a parked car: one step worse, and its alarm goes off. */
+    void hit(int i) {
+        if (damage[i] < 3) damage[i]++;
+        alarm[i] = 1.8f;
+    }
     private final float[] parkYaw = new float[PARK_X.length];
     private static final float[] CONE_X = {-2.75f, -2.45f, 2.6f};
     private static final float[] CONE_Z = {10.0f, 10.9f, 9.9f};
@@ -87,6 +108,7 @@ final class Life {
     // ---- simulation ----
 
     void update(float dt) {
+        for (int i = 0; i < PARK_X.length; i++) alarm[i] = Math.max(0f, alarm[i] - dt);
         for (int i = 0; i < PEOPLE; i++) {
             pz[i] += pDir[i] * pSpeed[i] * dt;
             pPhase[i] += dt * pSpeed[i] * 4.2f;
@@ -199,7 +221,9 @@ final class Life {
         float dz = Builder.CZ - Builder.BASE_CZ;
         for (int i = 0; i < CONE_X.length; i++)
             r.softShadow(CONE_X[i], CONE_Z[i] + dz, CONE_X[i] + SHX * 0.7f * SH_LEN, CONE_Z[i] + dz + SHZ * 0.7f * SH_LEN, 0.2f, 0.06f, 0.75f);
-        for (int i = 0; i < PARK_X.length; i++) car(PARK_X[i], PARK_Z[i], parkYaw[i], parkColor[i], (5000 + i) << 3);
+        for (int i = 0; i < PARK_X.length; i++)
+            car(PARK_X[i], PARK_Z[i], parkYaw[i], parkColor[i], (5000 + i) << 3, damage[i],
+                    alarm[i] > 0f && ((int) (alarm[i] * 6f) & 1) == 0);
         for (int c = 0; c < CARS; c++) if (cState[c] != OFF) car(cx[c], cz[c], cYaw[c], cColor[c], (4000 + c) << 3);
         for (int i = 0; i < CONE_X.length; i++) cone(CONE_X[i], CONE_Z[i] + dz);
         for (int i = 0; i < PEOPLE; i++) drawPerson(i);
@@ -356,21 +380,33 @@ final class Life {
     }
 
     private void car(float x, float z, float yaw, int paint, int id) {
+        car(x, z, yaw, paint, id, 0, false);
+    }
+
+    /** A sedan; a damaged one has crazed glass, dents and a roof pressed lower, step by step. */
+    private void car(float x, float z, float yaw, int paint, int id, int dmg, boolean blink) {
         float depth = ras.depth(x, 1f, z);
         if (depth < 1.5f || depth > 175f) return;
         frame(x, z, yaw);
         fogAt(x, z);
         int glass = 0xFF33414E, chrome = 0xFFD2CEC6;
+        int screen = dmg >= 1 ? 0xFFA3B0B9 : glass, broken = dmg >= 2 ? 0xFF15181C : glass;
+        int dent = Backdrop.scale(paint, 0.62f);
         // body, with a darker sill
         part(0f, 0.6f, 0f, 0.9f, 0.25f, 2.2f, paint, id);
         part(0f, 0.36f, 0f, 0.86f, 0.05f, 1.75f, 0xFF2A2829, id);
         // cabin: roof, windscreen, rear window and side glass
-        float yb = 0.85f, yt = 1.3f, zb0 = -1.25f, zb1 = 1.0f, zt0 = -0.95f, zt1 = 0.4f, xb = 0.84f, xt = 0.74f;
-        face(-xt, yt, zt0, xt, yt, zt0, xt, yt, zt1, -xt, yt, zt1, paint, id, 0f, 1f, 0f);
-        face(-xb, yb, zb1, xb, yb, zb1, xt, yt, zt1, -xt, yt, zt1, glass, id, 0f, 1f, 0f);
-        face(-xb, yb, zb0, xb, yb, zb0, xt, yt, zt0, -xt, yt, zt0, glass, id, 0f, 1f, 0f);
+        float yb = 0.85f, yt = dmg >= 3 ? 1.06f : dmg >= 2 ? 1.18f : 1.3f;
+        float zb0 = -1.25f, zb1 = 1.0f, zt0 = -0.95f, zt1 = 0.4f, xb = 0.84f, xt = 0.74f;
+        face(-xt, yt, zt0, xt, yt, zt0, xt, yt, zt1, -xt, yt, zt1, dmg >= 2 ? dent : paint, id, 0f, 1f, 0f);
+        face(-xb, yb, zb1, xb, yb, zb1, xt, yt, zt1, -xt, yt, zt1, screen, id, 0f, 1f, 0f);
+        face(-xb, yb, zb0, xb, yb, zb0, xt, yt, zt0, -xt, yt, zt0, dmg >= 3 ? broken : glass, id, 0f, 1f, 0f);
+        // dents in the hood and the doors
+        if (dmg >= 1) part(0.22f, 0.86f, 1.45f, 0.32f, 0.01f, 0.38f, dent, id);
+        if (dmg >= 2) part(0.905f, 0.62f, -0.5f, 0.01f, 0.13f, 0.5f, dent, id);
+        if (dmg >= 3) part(-0.905f, 0.6f, 0.4f, 0.01f, 0.15f, 0.6f, dent, id);
         for (int side = -1; side <= 1; side += 2) {
-            face(side * xb, yb, zb0, side * xb, yb, zb1, side * xt, yt, zt1, side * xt, yt, zt0, glass, id, 0f, 1f, 0f);
+            face(side * xb, yb, zb0, side * xb, yb, zb1, side * xt, yt, zt1, side * xt, yt, zt0, side > 0 ? broken : glass, id, 0f, 1f, 0f);
             // the pillar between the doors
             float m = 0.004f * side;
             face(side * xb + m, yb, -0.32f, side * xb + m, yb, -0.18f, side * xt + m, yt, -0.2f, side * xt + m, yt, -0.32f,
@@ -381,8 +417,10 @@ final class Life {
                 part(side * 0.975f, 0.32f, end * 1.38f, 0.01f, 0.15f, 0.15f, 0xFFB8B4AC, id);
             }
             // lights
-            part(side * 0.6f, 0.68f, 2.205f, 0.17f, 0.07f, 0.01f, 0xFFFFF0C2, id);
-            part(side * 0.64f, 0.7f, -2.205f, 0.17f, 0.07f, 0.01f, 0xFFD43A2E, id);
+            // the alarm blinks the indicators; a wrecked car has lost a headlamp
+            int head = blink ? 0xFFFFB13A : dmg >= 2 && side > 0 ? 0xFF2A2829 : 0xFFFFF0C2;
+            part(side * 0.6f, 0.68f, 2.205f, 0.17f, 0.07f, 0.01f, head, id);
+            part(side * 0.64f, 0.7f, -2.205f, 0.17f, 0.07f, 0.01f, blink ? 0xFFFFB13A : 0xFFD43A2E, id);
         }
         // bumpers, grille, plates
         part(0f, 0.42f, 2.24f, 0.93f, 0.07f, 0.05f, chrome, id);
