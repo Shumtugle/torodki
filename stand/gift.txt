@@ -4,9 +4,11 @@ screen 1096 2560
 level 0
 wait 0.5
 win 1
-wait 5.0
+wait 4.5
 shot g1_gift
-wait 4.0
+wait 0.4
+shot g1b_gift
+wait 4.1
 shot g2_heavy_in_hand
 state
 # a tap on the hammer puts it down, another takes it up again
@@ -27,4 +29,10 @@ up 140 430
 wait 0.3
 shot g4_flight
 wait 2.0
+state
+# that throw felled the building at once: three more on top of what is left
+wait 6.0
+state
+wait 4.0
+shot g6_more
 state

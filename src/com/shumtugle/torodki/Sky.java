@@ -41,11 +41,21 @@ final class Sky {
     private static final int[] ORDER = {ELDER, IDLER, THINKER, GODDESS, THUNDERER};
     // which expression each god turns to, by verdict: 0 at rest, then the two the painter gave him
     private static final int[][] FACE_FOR = {
-            {1, 1, 1, 1, 1},          // ovation: all laugh
+            {1, 1, 1, 1, 1},          // ovation: laughter and smiles
             {0, 1, 1, 1, 1},          // cheer: the thunderer stays stern
             {0, 0, 2, 0, 0},          // polite: only the thinker raises a brow
             {2, 2, 2, 2, 2},          // yawn: anger, sleep, scepticism, yawns
     };
+    // which of those faces open the mouth wide: laughter and yawns. Many open mouths at once
+    // read as wailing, so a verdict lets only one god open his; the others keep their rest face
+    private static final boolean[][] OPEN = {
+            {false, true, false},     // thunderer: laughs
+            {false, false, false},    // goddess
+            {false, false, false},    // thinker
+            {false, true, true},      // elder: laughs, yawns
+            {false, false, true},     // idler: yawns
+    };
+    private final int[] faceTo = new int[GODS];
 
     // the pictures as read from the asset: premultiplied ARGB, one array per expression. A god
     // may have several pictures; each visit to the sky picks one of his at random
@@ -292,6 +302,19 @@ final class Sky {
             for (int e = 0; e < pictures; e++)
                 if (role[e] == g && k-- == 0) pick[g] = e;
         }
+        // one open mouth at most: the thunderer's on an ovation (he brings the lightning), else anyone's
+        int open = 0;
+        for (int g = 0; g < GODS; g++) {
+            faceTo[g] = FACE_FOR[verdict][g];
+            if (OPEN[g][faceTo[g]]) open++;
+        }
+        int keep = verdict == OVATION && OPEN[THUNDERER][faceTo[THUNDERER]] ? 0 : open > 0 ? rnd.nextInt(open) : -1;
+        for (int g = 0, k = 0; g < GODS; g++) {
+            if (!OPEN[g][faceTo[g]]) continue;
+            boolean mine = verdict == OVATION ? g == THUNDERER : k == keep;
+            k++;
+            if (!mine) faceTo[g] = 0;
+        }
         time = 0f;
         boltIdx = -1;
     }
@@ -351,7 +374,7 @@ final class Sky {
             float emerge = smooth(0f, 1f, (since - 0.45f) / 0.85f);
             float scale = 0.94f + 0.06f * emerge;
             int[] rest = face[e][0];
-            int to = FACE_FOR[verdict][g];
+            int to = faceTo[g];
             if (to >= face[e].length) to = 0;
             float tc = CHANGE[g];
             float swap = to == 0 ? 0f : smooth(tc - 0.12f, tc + 0.12f, t);

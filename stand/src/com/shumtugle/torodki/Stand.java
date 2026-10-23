@@ -188,8 +188,9 @@ public final class Stand implements World.Host {
             savedLevel = Integer.parseInt(p[1]);
             world.startLevel(savedLevel, false);
         } else if (c.equals("state")) {
-            System.out.println(String.format("%7.2fs  state %d, hammer %d, stars %d, on plinth %.2f, level %d",
-                    time, world.state, world.hs, world.stars, world.onPlinth(), world.level + 1));
+            System.out.println(String.format("%7.2fs  state %d, hammer %d, stars %d, on plinth %.2f, level %d, heavy %d%s",
+                    time, world.state, world.hs, world.stars, world.onPlinth(), world.level + 1, world.heavyLeft,
+                    world.heavyOn ? " in hand" : ""));
         } else if (c.equals("heavy")) {
             world.heavyLeft = World.HEAVY_GIFT;
             world.heavyOn = true;

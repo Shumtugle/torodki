@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.16";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.17";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -95,6 +95,7 @@ final class World implements Physics.Listener {
     // the heavy hammer: the gods give a few heavy throws for a building felled at one throw.
     // A tap on the hammer in hand (or on the marks under the stars) takes it up or puts it down
     static final int HEAVY_GIFT = 3;
+    static final int HEAVY_MAX = 9;           // gifts add up, as far as the marks fit
     static final float HEAVY_MASS = 2.5f;     // times the light one
     int heavyLeft;
     boolean heavyOn;
@@ -133,7 +134,7 @@ final class World implements Physics.Listener {
         this.host = host;
         life = new Life();
         level = Math.max(0, host.loadLevel());
-        heavyLeft = Math.max(0, Math.min(HEAVY_GIFT, host.loadGifts()));
+        heavyLeft = Math.max(0, Math.min(HEAVY_MAX, host.loadGifts()));
         phys.listener = this;
     }
 
@@ -320,9 +321,9 @@ final class World implements Physics.Listener {
         host.quit();
     }
 
-    /** Where the hammer in hand is on screen, and the gift marks under the stars. */
+    /** Where the hammer in hand is on screen, the other one at the lower left, and the gift marks. */
     private boolean onHammer(float x, float y) {
-        return (x > W * 0.58f && y > h * 0.7f) || (x < 70f && y < 32f);
+        return (x > W * 0.58f && y > h * 0.7f) || (x < W * 0.34f && y > h * 0.8f) || (x < 130f && y < 32f);
     }
 
     /**
@@ -681,7 +682,7 @@ final class World implements Physics.Listener {
         giftShown = -1f;
         if (verdict == Sky.OVATION) {
             // the gods give the heavy hammer, and put it in the hand for the next building
-            heavyLeft = HEAVY_GIFT;
+            heavyLeft = Math.min(HEAVY_MAX, heavyLeft + HEAVY_GIFT);
             heavyOn = true;
             host.saveGifts(heavyLeft);
             giftShown = 0f;
@@ -1011,7 +1012,7 @@ final class World implements Physics.Listener {
         if (off > 0) {
             sky.compose(ras.col, f.a, h, off);
             sky.drawClouds(f, off - h);
-            if (giftShown >= 0f && state == SKY_HOLD && stateTime > 1.2f) drawGift(f, off - h, stateTime - 1.2f);
+            if (giftShown >= 0f && state == SKY_HOLD && stateTime > 0.9f) drawGift(f, stateTime - 0.9f);
             if (off < h / 8) drawHud(f);
         } else {
             System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
@@ -1144,82 +1145,103 @@ final class World implements Physics.Listener {
     private static final int[] HEAVY_COL = {0xFF6E4A2C, 0xFF3E2618, 0xFF3F3D44, 0xFFA8783A, 0xFFA8783A};
     private static final int[] HEAVY_PAT = {Raster.PAT_GRAIN, Raster.PAT_FLAT, Raster.PAT_STONE, Raster.PAT_FLAT, Raster.PAT_FLAT};
 
+    private final float[] pose = new float[12];
+
+    /**
+     * A hammer held near the camera: at a point given in view space, its handle along one
+     * view direction, the faces of its head across another. Fills pose: position, then axes.
+     */
+    private void heldPose(float vx, float vy, float vz, float ux, float uy, float uz, float wx, float wy, float wz) {
+        ras.viewToWorld(vx, vy, vz, tmp);
+        pose[0] = tmp[0] + CAM_X;
+        pose[1] = tmp[1] + CAM_Y;
+        pose[2] = tmp[2];
+        ras.viewToWorld(ux, uy, uz, dirA);
+        float ax = dirA[0], ay = dirA[1], az = dirA[2];
+        float l = (float) Math.sqrt(ax * ax + ay * ay + az * az);
+        ax /= l;
+        ay /= l;
+        az /= l;
+        ras.viewToWorld(wx, wy, wz, dirA);
+        float zx = dirA[0], zy = dirA[1], zz = dirA[2];
+        float d = zx * ax + zy * ay + zz * az;
+        zx -= d * ax;
+        zy -= d * ay;
+        zz -= d * az;
+        l = (float) Math.sqrt(zx * zx + zy * zy + zz * zz);
+        zx /= l;
+        zy /= l;
+        zz /= l;
+        pose[3] = ax;
+        pose[6] = ay;
+        pose[9] = az;
+        pose[4] = zy * az - zz * ay;
+        pose[7] = zz * ax - zx * az;
+        pose[10] = zx * ay - zy * ax;
+        pose[5] = zx;
+        pose[8] = zy;
+        pose[11] = zz;
+    }
+
     private void drawHammer() {
-        float px, py, pz;
-        float r00, r01, r02, r10, r11, r12, r20, r21, r22;
         if (hs == HAND) {
-            handPoint(tmp);
-            px = tmp[0];
-            py = tmp[1];
-            pz = tmp[2];
+            float bob = (float) Math.sin(clock * 1.7f) * 0.008f;
             // held upright, head up and to the left, tilted toward the street
-            float lift = aiming ? 0.06f : 0f;
-            py += lift;
-            ras.viewToWorld(-0.42f, 0.86f, 0.28f, dirA);
-            float ax = dirA[0], ay = dirA[1], az = dirA[2];
-            float l = (float) Math.sqrt(ax * ax + ay * ay + az * az);
-            ax /= l;
-            ay /= l;
-            az /= l;
-            // z axis of the head: across the view
-            ras.viewToWorld(0.94f, 0.2f, -0.28f, dirA);
-            float zx = dirA[0], zy = dirA[1], zz = dirA[2];
-            float d = zx * ax + zy * ay + zz * az;
-            zx -= d * ax;
-            zy -= d * ay;
-            zz -= d * az;
-            l = (float) Math.sqrt(zx * zx + zy * zy + zz * zz);
-            zx /= l;
-            zy /= l;
-            zz /= l;
-            float yx = zy * az - zz * ay, yy = zz * ax - zx * az, yz = zx * ay - zy * ax;
-            r00 = ax;
-            r10 = ay;
-            r20 = az;
-            r01 = yx;
-            r11 = yy;
-            r21 = yz;
-            r02 = zx;
-            r12 = zy;
-            r22 = zz;
+            heldPose(0.3f, -0.7f + bob, 1.35f, -0.42f, 0.86f, 0.28f, 0.94f, 0.2f, -0.28f);
+            float ax = pose[3], ay = pose[6], az = pose[9];
+            if (aiming) pose[1] += 0.06f;
             // the handle runs down off the screen: move the hammer along its own axis
-            px -= ax * 0.05f;
-            py -= ay * 0.05f;
-            pz -= az * 0.05f;
+            pose[0] -= ax * 0.05f;
+            pose[1] -= ay * 0.05f;
+            pose[2] -= az * 0.05f;
             if (aiming) {
                 // the wind-up draws it back and down toward the shoulder; a tired arm shakes it
                 float k = power * power * (3f - 2f * power);
                 ras.viewToWorld(0.06f * k + tremX * 0.002f, -0.06f * k + tremY * 0.002f, -0.07f * k, dirA);
-                px += dirA[0];
-                py += dirA[1];
-                pz += dirA[2];
+                pose[0] += dirA[0];
+                pose[1] += dirA[1];
+                pose[2] += dirA[2];
             }
         } else {
             Body b = hammer;
-            px = b.px;
-            py = b.py;
-            pz = b.pz;
-            r00 = b.r00;
-            r01 = b.r01;
-            r02 = b.r02;
-            r10 = b.r10;
-            r11 = b.r11;
-            r12 = b.r12;
-            r20 = b.r20;
-            r21 = b.r21;
-            r22 = b.r22;
-            ras.shadowBox(px, py, pz, r00, r01, r02, r10, r11, r12, r20, r21, r22, b.hx, b.hy * 0.8f, b.hz);
+            pose[0] = b.px;
+            pose[1] = b.py;
+            pose[2] = b.pz;
+            pose[3] = b.r00;
+            pose[4] = b.r01;
+            pose[5] = b.r02;
+            pose[6] = b.r10;
+            pose[7] = b.r11;
+            pose[8] = b.r12;
+            pose[9] = b.r20;
+            pose[10] = b.r21;
+            pose[11] = b.r22;
+            ras.shadowBox(b.px, b.py, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                    b.hx, b.hy * 0.8f, b.hz);
         }
         boolean heavy = hs == HAND ? heavyOn : heavyThrow;
+        drawParts(heavy, 1f, 900);
+        // the other hammer waits at the lower left, in sight and in reach of a tap
+        if (heavyLeft > 0 || heavy) {
+            heldPose(-0.5f, -0.96f, 1.65f, 0.5f, 0.8f, 0.2f, 0.94f, -0.2f, 0.28f);
+            drawParts(!heavy, 0.62f, 920);
+        }
+    }
+
+    private void drawParts(boolean heavy, float scale, int id) {
         float[][] parts = heavy ? HEAVY_PARTS : PARTS;
         int[] cols = heavy ? HEAVY_COL : PART_COL, pats = heavy ? HEAVY_PAT : PART_PAT;
+        float px = pose[0], py = pose[1], pz = pose[2];
+        float r00 = pose[3], r01 = pose[4], r02 = pose[5], r10 = pose[6], r11 = pose[7], r12 = pose[8];
+        float r20 = pose[9], r21 = pose[10], r22 = pose[11];
         for (int i = 0; i < parts.length; i++) {
             float[] p = parts[i];
-            float cx = px + r00 * p[0] + r01 * p[1] + r02 * p[2];
-            float cy = py + r10 * p[0] + r11 * p[1] + r12 * p[2];
-            float cz = pz + r20 * p[0] + r21 * p[1] + r22 * p[2];
-            ras.box(cx, cy, cz, r00, r01, r02, r10, r11, r12, r20, r21, r22, p[3], p[4], p[5], cols[i], pats[i],
-                    (900 + (i == 2 ? 1 : i > 2 ? 2 + i : 0)) << 3);
+            float ox = p[0] * scale, oy = p[1] * scale, oz = p[2] * scale;
+            float cx = px + r00 * ox + r01 * oy + r02 * oz;
+            float cy = py + r10 * ox + r11 * oy + r12 * oz;
+            float cz = pz + r20 * ox + r21 * oy + r22 * oz;
+            ras.box(cx, cy, cz, r00, r01, r02, r10, r11, r12, r20, r21, r22, p[3] * scale, p[4] * scale, p[5] * scale,
+                    cols[i], pats[i], (id + (i == 2 ? 1 : i > 2 ? 2 + i : 0)) << 3);
         }
     }
 
@@ -1324,19 +1346,39 @@ final class World implements Physics.Listener {
         f.rect(x + 7, y + 2, x + 10, y + 4, 0xFF8A5A32);  // the handle
     }
 
-    /** The gift announced in the sky, under the gods, with the hammer itself turning slowly. */
-    private void drawGift(Px f, float shift, float t) {
-        float a = Math.min(1f, t / 0.4f);
-        int y0 = Math.round(h * 0.86f);
-        String l1 = "A GIFT FROM THE GODS", l2 = "THE HEAVY HAMMER  X" + HEAVY_GIFT;
-        int c = Backdrop.mix(0xFF3C73C0, 0xFFFFF2C8, a);
-        int sh2 = Backdrop.mix(0xFF3C73C0, 0xFF5A3A1A, a);
-        PixelFont.draw(f, l1, (W - PixelFont.width(l1, 1)) / 2 + 1, y0 + 1, 1, sh2);
-        PixelFont.draw(f, l1, (W - PixelFont.width(l1, 1)) / 2, y0, 1, c);
-        PixelFont.draw(f, l2, (W - PixelFont.width(l2, 1)) / 2 + 1, y0 + 13, 1, sh2);
-        PixelFont.draw(f, l2, (W - PixelFont.width(l2, 1)) / 2, y0 + 12, 1, Backdrop.mix(0xFF3C73C0, 0xFFFFC93A, a));
-        if (a > 0.5f)
-            for (int i = 0; i < HEAVY_GIFT; i++) heavyMark(f, W / 2 - 20 + i * 14, y0 - 14, true);
+    /**
+     * The gift, without a word: the heavy hammer drops from the thunderer's cloud and tumbles
+     * down past the gods toward the street, a glint on its head.
+     */
+    private void drawGift(Px f, float t) {
+        float fall = Math.min(1.6f, t);
+        float cx = W * 0.5f - 30f * fall, cy = h * 0.24f + 40f * fall + 230f * fall * fall;
+        if (cy > h + 30) return;
+        float ang = 0.6f + t * 5.2f, s = 24f;
+        float ca = (float) Math.cos(ang), sa = (float) Math.sin(ang);
+        int r = (int) (s * 1.1f) + 2;
+        for (int y = -r; y <= r; y++)
+            for (int x = -r; x <= r; x++) {
+                // into the hammer's own frame: u along the handle, v across
+                float u = (x * ca + y * sa) / s, v = (-x * sa + y * ca) / s;
+                int c = 0;
+                if (u > 0.2f && u < 0.62f && Math.abs(v) < 0.34f) {
+                    c = (u > 0.27f && u < 0.32f) || (u > 0.5f && u < 0.55f) ? 0xFFC08A3C : 0xFF4A484E;
+                    if (v < -0.2f) c = Backdrop.scale(c, 1.35f);
+                } else if (u > -0.75f && u <= 0.2f && Math.abs(v) < 0.08f) {
+                    c = v < 0f ? 0xFF8A5A32 : 0xFF6A4226;
+                }
+                if (c != 0) f.set(Math.round(cx) + x, Math.round(cy) + y, c);
+            }
+        // the glint
+        if (((int) (t * 10f) & 3) == 0) {
+            int gx = Math.round(cx + ca * s * 0.45f), gy = Math.round(cy + sa * s * 0.45f);
+            f.set(gx, gy, 0xFFFFFFFF);
+            f.set(gx - 1, gy, 0xFFFFF0C0);
+            f.set(gx + 1, gy, 0xFFFFF0C0);
+            f.set(gx, gy - 1, 0xFFFFF0C0);
+            f.set(gx, gy + 1, 0xFFFFF0C0);
+        }
     }
 
     /** A five-pointed star; hollow when spent. */

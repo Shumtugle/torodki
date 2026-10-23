@@ -1,8 +1,20 @@
 # Changelog
 
+## 0.17
+- Only one god opens his mouth wide at a verdict; a sky full of open mouths read as
+  wailing. On an ovation it is the thunderer, otherwise one of those who would laugh or
+  yawn, at random; the rest keep their quiet face.
+- Heavy throws add up: three more come with every ovation, on top of what is left (nine
+  at most).
+- The gift comes without words: the heavy hammer drops from the thunderer's cloud and
+  tumbles down past the gods.
+- The other hammer is always in sight, its head at the lower left; a tap on it swaps.
+- The plinth moves a full meter farther every five levels from the 21st, so the change
+  is plain to see; four meters at most.
+
 ## 0.16
-- From the 21st level the plinth stands farther down the street: half a meter more
-  every five levels, up to four meters by the 56th. The cones go with it.
+- From the 21st level the plinth stands farther down the street, every five levels a
+  little more. The cones go with it.
 
 ## 0.15
 - The gift of the gods: fell a building at one throw and they give the heavy hammer,

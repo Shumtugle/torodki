@@ -18,12 +18,12 @@ final class Builder {
 
     /**
      * How much farther down the street the plinth stands for a level (counted from 0):
-     * from the 21st level on, half a meter more every five levels, four meters at most.
+     * from the 21st level on, a meter more every five levels, four meters at most.
      */
     static float farther(int level) {
         int n = level + 1;
         if (n < 21) return 0f;
-        return Math.min(4f, 0.5f * ((n - 21) / 5 + 1));
+        return Math.min(4f, (n - 21) / 5 + 1f);
     }
     static final float PHX = 1.42f * S, PHZ = 0.78f * S;
 
