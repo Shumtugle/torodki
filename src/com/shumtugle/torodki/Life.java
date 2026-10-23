@@ -41,12 +41,53 @@ final class Life {
         return PARK_X.length;
     }
 
-    static float parkX(int i) {
-        return PARK_X[i];
+    // where each parked car is now: a car thrown and fallen lies where it fell
+    private final float[] carX = PARK_X.clone(), carZ = PARK_Z.clone();
+    private final boolean[] carGone = new boolean[PARK_X.length];
+
+    float parkX(int i) {
+        return carX[i];
     }
 
-    static float parkZ(int i) {
-        return PARK_Z[i];
+    float parkZ(int i) {
+        return carZ[i];
+    }
+
+    float parkYaw(int i) {
+        return parkYaw[i];
+    }
+
+    int parkColor(int i) {
+        return parkColor[i];
+    }
+
+    boolean parkedHere(int i) {
+        return !carGone[i];
+    }
+
+    /** A car lifted off the street: not drawn until it is put down again. */
+    void lift(int i) {
+        carGone[i] = true;
+    }
+
+    /** A car put down where it fell, wrecked. */
+    void putDown(int i, float x, float z, float yaw) {
+        carX[i] = x;
+        carZ[i] = z;
+        parkYaw[i] = yaw;
+        damage[i] = 3;
+        carGone[i] = false;
+        alarm[i] = 1.8f;
+    }
+
+    /** Every car back in its place, as dented as it was. */
+    void park() {
+        for (int i = 0; i < PARK_X.length; i++) {
+            carX[i] = PARK_X[i];
+            carZ[i] = PARK_Z[i];
+            parkYaw[i] = PARK_X[i] < 0 ? 0f : (float) Math.PI;
+            carGone[i] = false;
+        }
     }
 
     /** A blow to a parked car: one step worse, and its alarm goes off. */
@@ -214,7 +255,7 @@ final class Life {
         Raster.lightK(0.3f, 0.9f, kl);
         sunSx = Raster.sunX() * r.cyw - Raster.sunZ() * r.syw < 0f ? -1f : 1f;
         // soft shadows first, then everything that casts them
-        for (int i = 0; i < PARK_X.length; i++) carShadow(PARK_X[i], PARK_Z[i]);
+        for (int i = 0; i < PARK_X.length; i++) if (!carGone[i]) carShadow(carX[i], carZ[i]);
         for (int c = 0; c < CARS; c++) if (cState[c] != OFF) carShadow(cx[c], cz[c]);
         for (int i = 0; i < PEOPLE; i++) personShadow(i);
         // the cones stand at the foot of the plinth, wherever it is
@@ -222,7 +263,7 @@ final class Life {
         for (int i = 0; i < CONE_X.length; i++)
             r.softShadow(CONE_X[i], CONE_Z[i] + dz, CONE_X[i] + SHX * 0.7f * SH_LEN, CONE_Z[i] + dz + SHZ * 0.7f * SH_LEN, 0.2f, 0.06f, 0.75f);
         for (int i = 0; i < PARK_X.length; i++)
-            car(PARK_X[i], PARK_Z[i], parkYaw[i], parkColor[i], (5000 + i) << 3, damage[i],
+            if (!carGone[i]) car(carX[i], carZ[i], parkYaw[i], parkColor[i], (5000 + i) << 3, damage[i],
                     alarm[i] > 0f && ((int) (alarm[i] * 6f) & 1) == 0);
         for (int c = 0; c < CARS; c++) if (cState[c] != OFF) car(cx[c], cz[c], cYaw[c], cColor[c], (4000 + c) << 3);
         for (int i = 0; i < CONE_X.length; i++) cone(CONE_X[i], CONE_Z[i] + dz);

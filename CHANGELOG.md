@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.29
+- The golem. A giant put together from what the buildings are made of: stone legs, a
+  body of bricks, arms of water bottles, a polished ball for a head. It comes up the
+  street from fifty meters off, tears the parked cars from their places and throws them
+  at the player, more often the nearer it gets.
+- For the fight the gods give a diamond hammer: it flies hard and flat and comes back
+  quickly. Knock the cars out of the air; one near the ring is led by the throw. Three
+  pieces of armor take a car each; the fourth car, or the golem reaching the player,
+  ends the fight.
+- Its weak points glow: two knees and the head. One knee broken and it limps; both, and
+  it drops to its knees and crawls, its head brought low; three blows to the head and it
+  falls apart into bricks, stones, bottles and a ball. A blow to its bulk knocks a brick
+  out and stops it for a moment.
+- It comes at every 25th level, once, and to a player stuck on one building ten times
+  after the golden hammer has already been given (that hammer comes only once). Win and
+  the level is cleared with an ovation and three heavy throws; lose and the building is
+  there as before.
+
 ## 0.28
 - From the 50th level the plinth goes farther again: twenty-four meters, two more every
   five levels, thirty at most. The view closes in a little closer for it.

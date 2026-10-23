@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.28";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.29";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -36,6 +36,9 @@ final class World implements Physics.Listener {
         /** Heavy throws the gods have given and the player has not used yet. */
         void saveGifts(int heavy);
         int loadGifts();
+        /** A small number kept between games, by name; 0 when never kept. */
+        void saveInt(String key, int value);
+        int loadInt(String key);
         /** Whether the player has ever been given the golden hammer. */
         void saveGoldSeen(boolean seen);
         boolean loadGoldSeen();
@@ -67,6 +70,19 @@ final class World implements Physics.Listener {
     final Physics phys = new Physics();
     private Body plinth;
     private final Body[] cars = new Body[Life.parked()];
+
+    // ---- the golem ----
+    // It comes for a player stuck on one building a second time (the first time brings the
+    // golden hammer), and at every 25th level. The gods give a diamond hammer for the fight.
+    static final int ARMOR = 3;
+    Golem golem;
+    int armor;
+    private boolean bossNext, diamondGift, fromBoss, bossWon;
+    private float bossEnd = -1f, throwIn, flash, stepAt;
+    static final int FLY_MAX = 4;
+    private final Body[] fly = new Body[FLY_MAX];
+    private final int[] flyCar = new int[FLY_MAX], flyState = new int[FLY_MAX];   // 1 lifted, 2 thrown, 3 falling
+    private final float[] flyT = new float[FLY_MAX];
     private final float[] carHitAt = new float[Life.parked()];
     final ArrayList<Body> pieces = new ArrayList<Body>();
     float totalMass;
@@ -78,7 +94,7 @@ final class World implements Physics.Listener {
     private float focal;
 
     // the game
-    static final int BUILD = 0, PLAY = 1, WON = 2, LOST = 3, VANISH = 4, SKY_UP = 5, SKY_HOLD = 6, SKY_DOWN = 7;
+    static final int BUILD = 0, PLAY = 1, WON = 2, LOST = 3, VANISH = 4, SKY_UP = 5, SKY_HOLD = 6, SKY_DOWN = 7, BOSS = 8;
     static final float TILT = 1.0f;          // seconds to tip up into the sky, and back
     static final int HAND = 0, FLY = 1, BACK = 2;
     int state = VANISH;
@@ -246,10 +262,13 @@ final class World implements Physics.Listener {
         plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0xFFF2E3C6);
         plinth.setPose(0f, Builder.TOP * 0.5f, Builder.CZ, 1, 0, 0, 0);
         phys.add(plinth);
+        golem = null;
+        for (int i = 0; i < FLY_MAX; i++) flyState[i] = 0;
+        life.park();
         // the parked cars, as solid as the plinth: the hammer and the blocks bounce off them, and dent them
         for (int i = 0; i < cars.length; i++) {
             cars[i] = new Body(0.95f, 0.65f, 2.3f, Body.CAR, 0);
-            cars[i].setPose(Life.parkX(i), 0.65f, Life.parkZ(i), 1, 0, 0, 0);
+            cars[i].setPose(life.parkX(i), 0.65f, life.parkZ(i), 1, 0, 0, 0);
             phys.add(cars[i]);
         }
         ArrayList<Body> made = takePrepared(lv);
@@ -472,7 +491,8 @@ final class World implements Physics.Listener {
 
     void touch(int type, float x, float y) {
         if (type == DOWN) {
-            if (state != PLAY || hs != HAND || stars <= 0) return;
+            boolean fight = state == BOSS && bossEnd < 0f;
+            if (!fight && (state != PLAY || stars <= 0) || hs != HAND) return;
             aiming = true;
             lastX = x;
             lastY = y;
@@ -484,7 +504,7 @@ final class World implements Physics.Listener {
             aimX = baseX;
             aimY = baseY;
             downAt = clock;
-            tapOnHammer = heavyLeft > 0 && onHammer(x, y);
+            tapOnHammer = golem == null && heavyLeft > 0 && onHammer(x, y);
             anchorX = x;
             anchorY = y;
             movedAt = clock;
@@ -517,12 +537,20 @@ final class World implements Physics.Listener {
                 return;
             }
             aimedBefore = true;
-            throwHammer();
+            if (golem != null) bossThrow();
+            else throwHammer();
         }
     }
 
     /** Where the ring starts on a level's first throw: the middle of what still stands on the plinth. */
     private void buildingCenter() {
+        if (golem != null) {
+            golem.chest(tmp);
+            ras.project(tmp[0], tmp[1], tmp[2], scr);
+            baseX = scr[0];
+            baseY = scr[1];
+            return;
+        }
         float sx = 0f, sy = 0f, m = 0f;
         for (Body b : pieces) {
             if (b.gone) continue;
@@ -677,6 +705,543 @@ final class World implements Physics.Listener {
         int n = 0;
         for (int i = 0; i < life.damage.length; i++) n += life.damage[i];
         return n;
+    }
+
+    // ---- the fight with the golem ----
+
+    /** For the desktop stand's player: the screen point it should throw at now, or null. */
+    float[] standPick(boolean cars) {
+        if (golem == null || bossEnd >= 0f) return null;
+        int best = -1;
+        float bz = 1e9f;
+        for (int i = 0; i < FLY_MAX; i++)
+            if (cars && flyState[i] == 2 && fly[i].pz < bz && flyT[i] > 0.35f) {
+                bz = fly[i].pz;
+                best = i;
+            }
+        float[] o = new float[3];
+        if (best >= 0) {
+            ras.project(fly[best].px, fly[best].py, fly[best].pz, o);
+            o[2] = 1f;
+            return o;
+        }
+        if (golem.kneeL > 0) golem.knee(-1, tmp);
+        else if (golem.kneeR > 0) golem.knee(1, tmp);
+        else golem.headCenter(tmp);
+        ras.project(tmp[0], tmp[1], tmp[2], o);
+        o[2] = 0f;
+        return o;
+    }
+
+    void standBossThrow(float sx, float sy) {
+        if (hs != HAND || golem == null || bossEnd >= 0f) return;
+        aimX = sx;
+        aimY = sy;
+        bossThrow();
+    }
+
+    /** For the desktop stand: 0 fighting, 1 won, -1 lost; and how it stands. */
+    int bossResult() {
+        return golem == null ? (level > 0 ? 1 : 0) : bossEnd < 0f ? 0 : bossWon ? 1 : -1;
+    }
+
+    String bossState() {
+        return golem == null ? "-" : String.format("golem z %.1f knees %d%d head %d armor %d",
+                golem.z, golem.kneeL, golem.kneeR, golem.head, armor);
+    }
+
+    /** For the desktop stand: the golem comes at once, for this level. */
+    void standBoss() {
+        startBoss(level);
+    }
+
+    private void startBoss(int lv) {
+        bossNext = false;
+        level = lv;
+        host.saveLevel(lv);
+        if (zoomed) setZoomed(false);
+        zoomK = 0f;
+        Builder.CZ = Builder.BASE_CZ + Builder.farther(lv);
+        phys.clear();
+        pieces.clear();
+        life.park();
+        hammer = new Body(0.42f, 0.08f, 0.17f, Body.HAMMER, 0xFFD9A066);
+        hammer.ghost = true;
+        hammer.asleep = false;
+        phys.add(hammer);
+        hs = HAND;
+        aiming = false;
+        aimedBefore = false;
+        heavyThrow = false;
+        goldThrow = false;
+        goldOn = false;
+        stars = STARS;
+        golem = new Golem(0.4f, 58f);
+        armor = ARMOR;
+        throwIn = 3.5f;
+        flash = 0f;
+        bossEnd = -1f;
+        bossWon = false;
+        for (int i = 0; i < FLY_MAX; i++) flyState[i] = 0;
+        pN = 0;
+        setState(BOSS);
+    }
+
+    /** How far the golem has come, 0 at its start, 1 at the player. */
+    private float progress() {
+        return Math.max(0f, Math.min(1f, (58f - golem.z) / 50f));
+    }
+
+    private void bossStep(float dt) {
+        golem.update(dt);
+        flash = Math.max(0f, flash - dt * 2.2f);
+        // footfalls
+        if (!golem.down && golem.stagger <= 0f) {
+            float st = (float) Math.floor(golem.phase / (float) Math.PI);
+            if (st != stepAt) {
+                stepAt = st;
+                host.sound(Synth.GROUND, 0.7f, 0.55f + fx.nextFloat() * 0.1f);
+                host.buzz(15);
+            }
+        }
+        boolean holding = false;
+        for (int i = 0; i < FLY_MAX; i++) if (flyState[i] == 1) holding = true;
+        golem.holding = holding;
+        golem.raise = holding ? golem.raise : Math.max(0f, golem.raise - dt * 2f);
+        if (bossEnd >= 0f) {
+            bossEnd += dt;
+            flights(dt);
+            if (bossEnd > (bossWon ? 2.8f : 1.8f)) finishBoss();
+            return;
+        }
+        // throwing: a car at a time, more often the nearer it comes
+        if (!holding && golem.stagger <= 0f) {
+            throwIn -= dt;
+            if (throwIn <= 0f) pickCar();
+        }
+        flights(dt);
+        if (hs == FLY) bossHits();
+        if (golem.arrived()) {
+            // it has reached the player: a sweep of its arm and the fight is lost
+            flash = 1f;
+            host.sound(Synth.CRASH, 1f, 0.6f);
+            host.buzz(300);
+            endBoss(false);
+        }
+    }
+
+    /** Tears the parked car nearest the golem from its place and lifts it to its hand. */
+    private void pickCar() {
+        int slot = -1;
+        for (int i = 0; i < FLY_MAX; i++) if (flyState[i] == 0) slot = i;
+        int best = -1;
+        float bd = 1e9f;
+        for (int i = 0; i < Life.parked(); i++) {
+            if (!life.parkedHere(i)) continue;
+            float cz = life.parkZ(i);
+            if (cz < 9f || cz > golem.z + 7f || cz < golem.z - 20f) continue;
+            float d = Math.abs(cz - golem.z) + Math.abs(life.parkX(i) - golem.x) * 0.5f;
+            if (d < bd) {
+                bd = d;
+                best = i;
+            }
+        }
+        if (slot < 0 || best < 0) {
+            throwIn = 1.5f;
+            return;
+        }
+        life.lift(best);
+        Body c = new Body(0.95f, 0.65f, 2.3f, Body.WOOD, life.parkColor(best));
+        float yaw = life.parkYaw(best);
+        c.setPose(life.parkX(best), 0.65f, life.parkZ(best), (float) Math.cos(yaw / 2), 0f, (float) Math.sin(yaw / 2), 0f);
+        c.homeX = c.px;
+        c.homeY = c.py;
+        c.homeZ = c.pz;
+        fly[slot] = c;
+        flyCar[slot] = best;
+        flyState[slot] = 1;
+        flyT[slot] = 0f;
+        host.sound(Synth.CRASH, 0.5f, 0.7f);
+        host.sound(Synth.ALARM, 0.35f, 0.9f);
+        float p = progress();
+        throwIn = 5.5f - 3f * p;
+    }
+
+    static final float LIFT_T = 0.9f;
+
+    private void flights(float dt) {
+        for (int i = 0; i < FLY_MAX; i++) {
+            Body c = fly[i];
+            int st = flyState[i];
+            if (st == 0) continue;
+            flyT[i] += dt;
+            if (st == 1) {
+                // up into the golem's raised hand
+                float k = Math.min(1f, flyT[i] / LIFT_T);
+                float e = k * k * (3f - 2f * k);
+                golem.raise = e;
+                golem.hand(tmp);
+                c.px = c.homeX + (tmp[0] - c.homeX) * e;
+                c.py = c.homeY + (tmp[1] + 0.3f - c.homeY) * e + (float) Math.sin(Math.PI * k) * 1.5f;
+                c.pz = c.homeZ + (tmp[2] - c.homeZ) * e;
+                c.rotateBy(0.8f * dt, 0.3f * dt, 0f);
+                c.updateR();
+                if (k >= 1f && bossEnd < 0f) {
+                    // and away at the player, high and hard
+                    float p = progress(), t = 2.75f - 0.75f * p;
+                    float tx = CAM_X + 0.3f, ty = 1.4f, tz = 1.0f;
+                    c.vx = (tx - c.px) / t;
+                    c.vz = (tz - c.pz) / t;
+                    c.vy = (ty - c.py) / t - 0.5f * Physics.G * t;
+                    c.wx = (fx.nextFloat() - 0.5f) * 3f;
+                    c.wy = (fx.nextFloat() - 0.5f) * 3f;
+                    c.wz = (fx.nextFloat() - 0.5f) * 2f;
+                    flyState[i] = 2;
+                    flyT[i] = 0f;
+                    host.sound(Synth.WHOOSH, 1f, 0.55f);
+                } else if (k >= 1f) {
+                    flyState[i] = 3;
+                }
+                continue;
+            }
+            c.vy += Physics.G * dt;
+            c.px += c.vx * dt;
+            c.py += c.vy * dt;
+            c.pz += c.vz * dt;
+            c.rotateBy(c.wx * dt, c.wy * dt, c.wz * dt);
+            c.updateR();
+            if (st == 2 && c.pz < 2.6f) {
+                // it reaches the player
+                flyState[i] = 0;
+                life.putDown(flyCar[i], CAM_X - 3.2f, -6f, 0f);
+                flash = 1f;
+                host.sound(Synth.CRASH, 1.2f, 0.75f);
+                host.sound(Synth.GLASS, 0.8f, 0.9f);
+                host.buzz(250);
+                if (armor == 0 && bossEnd < 0f) endBoss(false);
+                else armor = Math.max(0, armor - 1);
+                continue;
+            }
+            if (c.py < 0.65f && c.vy < 0f) {
+                // down on the street, a wreck where it fell
+                flyState[i] = 0;
+                float x = Math.max(-6f, Math.min(6f, c.px));
+                life.putDown(flyCar[i], x, c.pz, (float) Math.atan2(c.r02, c.r22));
+                host.sound(Synth.CRASH, 0.9f, 0.8f + fx.nextFloat() * 0.2f);
+                host.sound(Synth.GROUND, 1f, 0.6f);
+                host.buzz(60);
+                for (int k = 0; k < 16; k++) spawn(c.px, 0.2f, c.pz, true, 0xFFD8CFC0, 3f);
+            }
+        }
+    }
+
+    /** What the diamond hammer has met: a car in the air, a weak point, or the golem's bulk. */
+    private void bossHits() {
+        Body h = hammer;
+        float hx = h.px + h.r00 * 0.31f, hy = h.py + h.r10 * 0.31f, hz = h.pz + h.r20 * 0.31f;
+        for (int i = 0; i < FLY_MAX; i++) {
+            if (flyState[i] != 1 && flyState[i] != 2) continue;
+            Body c = fly[i];
+            float dx = c.px - hx, dy = c.py - hy, dz = c.pz - hz;
+            if (dx * dx + dy * dy + dz * dz > 1.9f * 1.9f) continue;
+            // knocked out of the air: up, back and toward the kerb
+            c.vx = (c.px < 0f ? -1f : 1f) * (2.5f + fx.nextFloat() * 2f);
+            c.vy = 5.5f + fx.nextFloat() * 2f;
+            c.vz = 3f + fx.nextFloat() * 3f;
+            c.wx = (fx.nextFloat() - 0.5f) * 9f;
+            c.wz = (fx.nextFloat() - 0.5f) * 9f;
+            flyState[i] = 3;
+            host.sound(Synth.CRASH, 1f, 1.1f);
+            host.sound(Synth.GLASS, 0.6f, 1.2f);
+            host.buzz(70);
+            for (int k = 0; k < 14; k++) spawn(hx, hy, hz, false, (k & 1) == 0 ? 0xFFCFE2EC : 0xFFFFF2C0, 4f);
+            beginReturn();
+            return;
+        }
+        Golem g = golem;
+        for (int side = -1; side <= 1; side += 2) {
+            if ((side < 0 ? g.kneeL : g.kneeR) == 0) continue;
+            g.knee(side, tmp);
+            if (near(tmp, hx, hy, hz, Golem.KNEE_HIT + 0.25f)) {
+                if (side < 0) g.kneeL = 0;
+                else g.kneeR = 0;
+                weakHit(hx, hy, hz, 1.1f);
+                return;
+            }
+        }
+        g.headCenter(tmp);
+        if (near(tmp, hx, hy, hz, Golem.HEAD_HIT + 0.3f)) {
+            g.head--;
+            weakHit(hx, hy, hz, 0.9f);
+            if (g.head == 0) {
+                topple();
+                endBoss(true);
+            }
+            return;
+        }
+        if (g.bodyDist(hx, hy, hz) < Golem.BODY_HIT + 0.2f) {
+            // a blow to the bulk: a brick knocked out, a moment's pause
+            g.stagger = Math.max(g.stagger, 0.5f);
+            g.hurt = 0.6f;
+            Body b = new Body(0.22f, 0.1f, 0.22f, Body.WOOD, 0xFFC4864F);
+            b.setPose(hx, hy, hz, 1, 0, 0, 0);
+            b.vx = (fx.nextFloat() - 0.5f) * 3f;
+            b.vy = 2f;
+            b.vz = -2f;
+            b.wx = 6f;
+            phys.add(b);
+            pieces.add(b);
+            host.sound(Synth.WOOD, 1f, 0.7f);
+            host.buzz(40);
+            beginReturn();
+        }
+    }
+
+    private boolean near(float[] p, float x, float y, float z, float r) {
+        float dx = p[0] - x, dy = p[1] - y, dz = p[2] - z;
+        return dx * dx + dy * dy + dz * dz < r * r;
+    }
+
+    private void weakHit(float x, float y, float z, float stun) {
+        golem.stagger = Math.max(golem.stagger, stun);
+        golem.hurt = 1f;
+        host.sound(Synth.STONE, 1.3f, 0.5f);
+        host.sound(Synth.THUNDER, 0.5f, 1.6f);
+        host.buzz(110);
+        for (int k = 0; k < 24; k++) spawn(x, y, z, (k & 1) == 0, (k & 1) == 0 ? 0xFFE6DCC8 : 0xFFFFB13A, 5f);
+        beginReturn();
+    }
+
+    /** The golem falls apart into what it was made of. */
+    private void topple() {
+        Golem g = golem;
+        g.down = true;
+        for (int k = 0; k < 4; k++) {
+            g.at((k & 1) == 0 ? -0.7f : 0.7f, 0.6f + (k / 2) * 1.2f, 0f, tmp);
+            rubble(new Body(0.36f, 0.6f, 0.4f, Body.STONE, 0xFFC9BEAD));
+        }
+        for (int k = 0; k < 14; k++) {
+            g.at((fx.nextFloat() - 0.5f) * 2f, 2.6f + fx.nextFloat() * 2.2f, (fx.nextFloat() - 0.5f) * 0.8f, tmp);
+            rubble(new Body(0.29f, 0.14f, 0.3f, Body.WOOD, (k & 1) == 0 ? 0xFFC4864F : 0xFFD39E62));
+        }
+        for (int k = 0; k < 4; k++) {
+            g.at((k & 1) == 0 ? -1.5f : 1.5f, 3.4f + (k / 2) * 0.8f, 0f, tmp);
+            rubble(new Body(Builder.BOTTLE_D * 0.5f * Builder.S, Builder.BOTTLE_H * 0.5f * Builder.S,
+                    Builder.BOTTLE_D * 0.5f * Builder.S, Body.WATER, 0xFF8FC4EE));
+        }
+        g.headCenter(tmp);
+        rubble(Body.ball(Golem.HEAD_HIT, 0xFF2A2F48));
+        host.sound(Synth.THUNDER, 1.2f, 0.8f);
+        host.buzz(200);
+    }
+
+    private void rubble(Body b) {
+        b.setPose(tmp[0], tmp[1], tmp[2], 1, 0, 0, 0);
+        b.vx = (fx.nextFloat() - 0.5f) * 5f;
+        b.vy = fx.nextFloat() * 3f;
+        b.vz = -1f - fx.nextFloat() * 3f;
+        b.wx = (fx.nextFloat() - 0.5f) * 6f;
+        b.wz = (fx.nextFloat() - 0.5f) * 6f;
+        b.homeX = b.px;
+        b.homeY = b.py;
+        b.homeZ = b.pz;
+        phys.add(b);
+        pieces.add(b);
+    }
+
+    private void endBoss(boolean won) {
+        if (bossEnd >= 0f) return;
+        bossWon = won;
+        bossEnd = 0f;
+        aiming = false;
+        if (!won) golem.stagger = 99f;
+    }
+
+    private void finishBoss() {
+        fromBoss = true;
+        nextAfterVanish = bossWon ? 1 : 0;
+        if (!bossWon) {
+            fails = 0;
+            host.saveFails(0);
+        }
+        lookUp(bossWon ? Sky.OVATION : Sky.YAWN);
+    }
+
+    /**
+     * The diamond hammer flies hard and flat. A car in the air near the ring is taken as the
+     * target and led by its flight; otherwise the ring's point on the golem, or on the plane
+     * it walks in.
+     */
+    private void bossThrow() {
+        handPoint(tmp);
+        float sx = tmp[0], sy = tmp[1], sz = tmp[2];
+        float ax = aimX, ay = aimY;
+        int car = -1;
+        float bd = 20f;
+        for (int i = 0; i < FLY_MAX; i++) {
+            if (flyState[i] != 1 && flyState[i] != 2) continue;
+            float vz = ras.project(fly[i].px, fly[i].py, fly[i].pz, scr);
+            if (vz < 0.5f) continue;
+            float d = (float) Math.hypot(scr[0] - ax, scr[1] - ay);
+            if (d < bd) {
+                bd = d;
+                car = i;
+            }
+        }
+        float tx, ty, tz, speed = 26f;
+        if (car >= 0) {
+            Body c = fly[car];
+            tx = c.px;
+            ty = c.py;
+            tz = c.pz;
+            if (flyState[car] == 2)
+                for (int it = 0; it < 4; it++) {
+                    float d = (float) Math.sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy) + (tz - sz) * (tz - sz));
+                    float t = d / speed;
+                    tx = c.px + c.vx * t;
+                    ty = c.py + c.vy * t + 0.5f * Physics.G * t * t;
+                    tz = c.pz + c.vz * t;
+                }
+        } else {
+            bossTarget(ax, ay, dirA);
+            tx = dirA[0];
+            ty = dirA[1];
+            tz = dirA[2];
+            // the golem keeps walking while the hammer flies: meet it where it will be
+            if (golem.stagger <= 0f) {
+                float d = (float) Math.sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy) + (tz - sz) * (tz - sz));
+                float t = d / speed, v = golem.pace();
+                tx += golem.fx * v * 0.15f * t;
+                tz += golem.fz * v * t;
+            }
+        }
+        float dx = tx - sx, dy = ty - sy, dz = tz - sz;
+        float t = Math.max(0.12f, (float) Math.sqrt(dx * dx + dy * dy + dz * dz) / speed);
+        hammer.ghost = false;
+        hammer.asleep = false;
+        hammer.setPose(sx, sy, sz, (float) Math.cos(YAW / 2), 0f, (float) Math.sin(YAW / 2), 0f);
+        hammer.vx = dx / t;
+        hammer.vy = dy / t - 0.5f * Physics.G * t;
+        hammer.vz = dz / t;
+        spinSign = aimX < W * 0.5f ? 1f : -1f;
+        hammer.wy = spinSign * 18f;
+        hammer.savePrev();
+        flightTime = t;
+        hs = FLY;
+        hsTime = 0f;
+        host.sound(Synth.WHOOSH, 1f, 1.3f);
+        host.buzz(12);
+    }
+
+    /** The world point under the ring: the golem's head, knees or body, or the plane it walks in. */
+    private void bossTarget(float sx, float sy, float[] out) {
+        ras.ray(sx, sy, out);
+        float dx = out[0], dy = out[1], dz = out[2];
+        float l = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+        dx /= l;
+        dy /= l;
+        dz /= l;
+        float best = 1e9f;
+        Golem g = golem;
+        float[] c = new float[3];
+        for (int k = 0; k < 4; k++) {
+            float r;
+            if (k == 0) {
+                g.headCenter(c);
+                r = Golem.HEAD_HIT;
+            } else if (k == 1) {
+                g.chest(c);
+                r = Golem.BODY_HIT + 0.2f;
+            } else {
+                g.knee(k == 2 ? -1 : 1, c);
+                r = Golem.KNEE_HIT;
+            }
+            float ox = CAM_X - c[0], oy = CAM_Y - c[1], oz = -c[2];
+            float b = ox * dx + oy * dy + oz * dz, q = ox * ox + oy * oy + oz * oz - r * r;
+            float disc = b * b - q;
+            if (disc < 0f) continue;
+            float t = -b - (float) Math.sqrt(disc);
+            if (t > 0f && t < best) best = t;
+        }
+        if (best == 1e9f) best = Math.max(1f, (g.z - 0f) / Math.max(0.05f, dz));
+        out[0] = CAM_X + dx * best;
+        out[1] = CAM_Y + dy * best;
+        out[2] = dz * best;
+    }
+
+    private void drawFight() {
+        Golem g = golem;
+        // its shadow, long across the street
+        if (!g.down) {
+            g.chest(tmp);
+            float len = (Golem.SHIN + Golem.THIGH + Golem.BODY) * Golem.G * SH_LEN;
+            ras.softShadow(g.x, g.z, g.x + SHX * len, g.z + SHZ * len, 2f, 1.3f, 0.75f);
+        }
+        for (int i = 0; i < FLY_MAX; i++) {
+            if (flyState[i] == 0) continue;
+            Body c = fly[i];
+            float lo = Math.max(0f, c.py - 0.6f);
+            ras.softShadow(c.px + SHX * lo * SH_LEN, c.pz + SHZ * lo * SH_LEN, c.px + SHX * (lo + 1.2f) * SH_LEN,
+                    c.pz + SHZ * (lo + 1.2f) * SH_LEN, 1.1f, 0.9f, 0.6f * (1f - Math.min(1f, lo / 12f)));
+        }
+        g.draw(ras, 960 << 3);
+        for (int i = 0; i < FLY_MAX; i++) if (flyState[i] != 0) drawFlyingCar(fly[i], (970 + i) << 3);
+    }
+
+    /** A car turning over in the air: body, cabin, wheels. */
+    private void drawFlyingCar(Body c, int id) {
+        flyBox(c, 0f, 0f, 0f, 0.9f, 0.27f, 2.2f, c.tint, id);
+        flyBox(c, 0f, 0.42f, -0.2f, 0.78f, 0.2f, 1.05f, 0xFF33414E, id);
+        flyBox(c, 0f, 0.6f, -0.25f, 0.76f, 0.03f, 0.7f, c.tint, id);
+        for (int k = 0; k < 4; k++)
+            flyBox(c, (k & 1) == 0 ? -0.86f : 0.86f, -0.28f, (k & 2) == 0 ? -1.38f : 1.38f, 0.12f, 0.3f, 0.3f, 0xFF1C1B1D, id);
+    }
+
+    private void flyBox(Body c, float lx, float ly, float lz, float hx, float hy, float hz, int color, int id) {
+        float x = c.px + c.r00 * lx + c.r01 * ly + c.r02 * lz;
+        float y = c.py + c.r10 * lx + c.r11 * ly + c.r12 * lz;
+        float z = c.pz + c.r20 * lx + c.r21 * ly + c.r22 * lz;
+        ras.box(x, y, z, c.r00, c.r01, c.r02, c.r10, c.r11, c.r12, c.r20, c.r21, c.r22, hx, hy, hz, color, Raster.PAT_FLAT, id);
+    }
+
+    /** The fight's corner: the armor left, and the golem's weak points still whole. */
+    private void drawFightHud(Px f) {
+        int x = 6, y = 8;
+        for (int i = 0; i < ARMOR; i++) shield(f, x + i * 15, y, i < armor);
+        int bx = W - 7 - 5 * 11;
+        for (int i = 0; i < 5; i++) {
+            boolean whole = i < 2 ? (i == 0 ? golem.kneeL : golem.kneeR) > 0 : golem.head > i - 2;
+            int cx = bx + i * 11;
+            f.rect(cx, y + 1, cx + 9, y + 10, 0xFF5A3A0E);
+            f.rect(cx + 1, y + 2, cx + 8, y + 9, whole ? (i < 2 ? 0xFFFFB13A : 0xFFFFE07A) : 0xFF3A3236);
+        }
+        String lv = "LEVEL " + (level + 1);
+        PixelFont.draw(f, lv, W - 7 - PixelFont.width(lv, 1), y + 15, 1, 0xFF6A4A1A);
+    }
+
+    private void shield(Px f, int x, int y, boolean on) {
+        for (int r = 0; r < 13; r++) {
+            int half = r < 8 ? 6 : 6 - (r - 7);
+            for (int c = -half; c <= half; c++) {
+                boolean edge = Math.abs(c) == half || r == 0 || r == 12;
+                int col = edge ? 0xFF5A4A3A : on ? (c < 0 ? 0xFFB8D8E8 : 0xFF8FB4C8) : 0x00000000;
+                if (col != 0) f.set(x + 6 + c, y + r, col);
+            }
+        }
+    }
+
+    /** A red veil at the edges of the frame when a car or the golem's arm strikes home. */
+    private void drawFlash(Px f) {
+        if (flash <= 0f) return;
+        for (int yy = 0; yy < h; yy++)
+            for (int xx = 0; xx < W; xx++) {
+                float ex = Math.abs(xx - W * 0.5f) / (W * 0.5f), ey = Math.abs(yy - h * 0.5f) / (h * 0.5f);
+                float e = Math.max(ex, ey);
+                float a = flash * 0.6f * Math.max(0f, (e - 0.45f) / 0.55f);
+                if (a <= 0f) continue;
+                int k = yy * W + xx;
+                f.a[k] = Backdrop.mix(f.a[k], 0xFFC02020, a);
+            }
     }
 
     /** For the desktop stand: drops a bowling ball at a point of the street. */
@@ -867,12 +1432,20 @@ final class World implements Physics.Listener {
                 break;
             case SKY_HOLD:
                 if (stateTime >= holdFor) {
-                    // the gods have thrown the blocks: the next building falls into place as we look down
-                    startLevel(level + nextAfterVanish, true);
+                    if (bossNext) {
+                        startBoss(level + nextAfterVanish);
+                        buildFromSky = false;
+                    } else {
+                        // the gods have thrown the blocks: the next building falls into place as we look down
+                        startLevel(level + nextAfterVanish, true);
+                        buildFromSky = true;
+                    }
                     fromSky = true;
-                    buildFromSky = true;
                     backT = 0f;
                 }
+                break;
+            case BOSS:
+                bossStep(dt);
                 break;
             case SKY_DOWN:
                 sky.update(dt);
@@ -889,12 +1462,14 @@ final class World implements Physics.Listener {
 
     private void hammerMoves(float dt) {
         hsTime += dt;
-        if (hs == FLY) {
+        if (hs == FLY && golem != null) {
+            if (hsTime > flightTime + 0.35f || hammer.py < 0.25f || hammer.pz > golem.z + 4f) beginReturn();
+        } else if (hs == FLY) {
             if (hsTime > flightTime + 0.6f && (hammer.speed2() < 4f || hammer.py < 0.4f
                     || hammer.pz > Builder.CZ + 4f) || hsTime > flightTime + 2.2f || hammer.pz > 60f)
                 beginReturn();
         } else if (hs == BACK) {
-            float k = Math.min(1f, hsTime / 0.6f);
+            float k = Math.min(1f, hsTime / (golem != null ? 0.4f : 0.6f));
             handPoint(tmp);
             float e = k * k * (3f - 2f * k);
             hammer.px = retX + (tmp[0] - retX) * e;
@@ -1006,16 +1581,28 @@ final class World implements Physics.Listener {
         sky.begin(verdict, level == 0 && verdict == Sky.OVATION);
         giftShown = -1f;
         goldGift = false;
-        if (verdict == Sky.YAWN) {
+        diamondGift = false;
+        bossNext = false;
+        boolean afterFight = fromBoss;
+        fromBoss = false;
+        if (afterFight) {
+            // the fight is over: no counting, no golem again at once
+        } else if (verdict == Sky.YAWN) {
             fails++;
             host.saveFails(fails);
             if (fails == GOLD_AFTER) {
-                goldGift = true;
                 if (!goldSeen) {
+                    // the first time a building will not fall, the gods give the golden hammer
+                    goldGift = true;
                     goldSeen = true;
                     host.saveGoldSeen(true);
+                    giftShown = 0f;
+                } else {
+                    // ever after, the golem comes instead
+                    bossNext = true;
+                    fails = 0;
+                    host.saveFails(0);
                 }
-                giftShown = 0f;
             }
         } else if (fails > 0) {
             fails = 0;
@@ -1026,6 +1613,14 @@ final class World implements Physics.Listener {
             heavyLeft = Math.min(HEAVY_MAX, heavyLeft + HEAVY_GIFT);
             heavyOn = true;
             host.saveGifts(heavyLeft);
+            giftShown = 0f;
+        }
+        // every 25th level begins with the golem, once
+        int next = level + nextAfterVanish;
+        if (!afterFight && !bossNext && (next + 1) % 25 == 0 && host.loadInt("golem") != next + 1) bossNext = true;
+        if (bossNext) {
+            host.saveInt("golem", next + 1);
+            diamondGift = true;
             giftShown = 0f;
         }
         holdFor = verdict == Sky.YAWN ? 2.2f : verdict == Sky.OVATION ? 3.2f : 2.4f;
@@ -1403,10 +1998,12 @@ final class World implements Physics.Listener {
         System.arraycopy(zoomed ? zLit : bgLit, 0, ras.lit, 0, bgLit.length);
         java.util.Arrays.fill(ras.idb, 0);
 
-        drawBody(plinth, 1f, 0f, 1);
+        if (golem == null) drawBody(plinth, 1f, 0f, 1);
         float st = stagger();
         ras.shadowBegin(6f, Builder.CZ + 1f, 12f);
-        ras.shadowBox(plinth.px, plinth.py, plinth.pz, 1, 0, 0, 0, 1, 0, 0, 0, 1, plinth.hx, plinth.hy, plinth.hz);
+        if (golem == null)
+            ras.shadowBox(plinth.px, plinth.py, plinth.pz, 1, 0, 0, 0, 1, 0, 0, 0, 1, plinth.hx, plinth.hy, plinth.hz);
+        else drawFight();
         for (int i = 0; i < pieces.size(); i++) {
             Body b = pieces.get(i);
             float scale = 1f, drop = 0f;
@@ -1462,11 +2059,17 @@ final class World implements Physics.Listener {
             sky.compose(ras.col, f.a, h, off);
             sky.drawClouds(f, off - h);
             if (giftShown >= 0f && state == SKY_HOLD && stateTime > 0.9f) drawGift(f, stateTime - 0.9f);
-            if (off < h / 8) drawHud(f);
+            if (off < h / 8) {
+                if (golem != null && state == BOSS) drawFightHud(f);
+                else drawHud(f);
+            }
         } else {
             if (!zoomed && zoomK > 0f) closingIn(f);
             else System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
-            drawHud(f);
+            if (golem != null) {
+                drawFightHud(f);
+                drawFlash(f);
+            } else drawHud(f);
         }
     }
 
@@ -1734,6 +2337,7 @@ final class World implements Physics.Listener {
         boolean heavy = hs == HAND ? heavyOn : heavyThrow;
         boolean gold = hs == HAND ? goldOn : goldThrow;
         drawParts(heavy || gold, 1f, 900, gold);
+        if (golem != null) return;
         // the other hammer waits at the lower left, in sight and in reach of a tap
         if (heavyLeft > 0 || heavy) {
             heldPose(-0.5f, -0.96f, 1.65f, 0.5f, 0.8f, 0.2f, 0.94f, -0.2f, 0.28f);
@@ -1744,9 +2348,14 @@ final class World implements Physics.Listener {
     private static final int[] GOLD_COL = {0xFF8A5A32, 0xFF5A3418, 0xFFF2C64A, 0xFFFFF0B0, 0xFFFFF0B0};
     private static final int[] GOLD_PAT = {Raster.PAT_GRAIN, Raster.PAT_FLAT, Raster.PAT_FLAT, Raster.PAT_FLAT, Raster.PAT_FLAT};
 
+    private static final int[] DIAMOND_COL = {0xFF7A5A3A, 0xFF3E2618, 0xFF6CC8EC, 0xFFE8FAFF, 0xFFE8FAFF};
+
     private void drawParts(boolean heavy, float scale, int id, boolean gold) {
+        boolean diamond = golem != null && id == 900;
+        if (diamond) heavy = true;
         float[][] parts = heavy ? HEAVY_PARTS : PARTS;
-        int[] cols = gold ? GOLD_COL : heavy ? HEAVY_COL : PART_COL, pats = gold ? GOLD_PAT : heavy ? HEAVY_PAT : PART_PAT;
+        int[] cols = diamond ? DIAMOND_COL : gold ? GOLD_COL : heavy ? HEAVY_COL : PART_COL;
+        int[] pats = diamond || gold ? GOLD_PAT : heavy ? HEAVY_PAT : PART_PAT;
         float px = pose[0], py = pose[1], pz = pose[2];
         float r00 = pose[3], r01 = pose[4], r02 = pose[5], r10 = pose[6], r11 = pose[7], r12 = pose[8];
         float r20 = pose[9], r21 = pose[10], r22 = pose[11];
@@ -1879,8 +2488,9 @@ final class World implements Physics.Listener {
                 float u = (x * ca + y * sa) / s, v = (-x * sa + y * ca) / s;
                 int c = 0;
                 if (u > 0.2f && u < 0.62f && Math.abs(v) < 0.34f) {
-                    c = (u > 0.27f && u < 0.32f) || (u > 0.5f && u < 0.55f) ? (goldGift ? 0xFFFFF0B0 : 0xFFC08A3C)
-                            : goldGift ? 0xFFE8B83A : 0xFF4A484E;
+                    c = (u > 0.27f && u < 0.32f) || (u > 0.5f && u < 0.55f)
+                            ? (diamondGift ? 0xFFFFFFFF : goldGift ? 0xFFFFF0B0 : 0xFFC08A3C)
+                            : diamondGift ? 0xFFBFEFFF : goldGift ? 0xFFE8B83A : 0xFF4A484E;
                     if (v < -0.2f) c = Backdrop.scale(c, 1.35f);
                 } else if (u > -0.75f && u <= 0.2f && Math.abs(v) < 0.08f) {
                     c = v < 0f ? 0xFF8A5A32 : 0xFF6A4226;

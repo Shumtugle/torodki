@@ -79,6 +79,18 @@ public final class Stand implements World.Host {
     }
 
     private int savedGifts, savedFails;
+    private final java.util.HashMap<String, Integer> ints = new java.util.HashMap<String, Integer>();
+
+    @Override
+    public void saveInt(String key, int value) {
+        ints.put(key, value);
+    }
+
+    @Override
+    public int loadInt(String key) {
+        Integer v = ints.get(key);
+        return v == null ? 0 : v;
+    }
     private boolean savedGold;
 
     @Override
@@ -169,6 +181,47 @@ public final class Stand implements World.Host {
         writeSound();
     }
 
+    /**
+     * Plays the golem fight many times with a player of a given aim (spread in game pixels)
+     * and reaction (seconds before throwing again): knocks down cars in flight first, then
+     * goes for the knees, then the head. Prints how often it wins and how.
+     */
+    private void bossBot(int runs, float spread, float reaction) {
+        int wins = 0, armorLeft = 0;
+        java.util.Random r = new java.util.Random(1);
+        StringBuilder lost = new StringBuilder();
+        for (int run = 0; run < runs; run++) {
+            World w = new World(this);
+            int hh = Math.max(1, screenH * World.W / screenW);
+            w.resize(hh);
+            w.startLevel(30, false);
+            w.standBoss();
+            float t = 0f, ready = 1f;
+            int throwsN = 0;
+            while (w.bossResult() == 0 && t < 150f) {
+                w.update(DT);
+                t += DT;
+                if (w.hs == World.HAND && t >= ready) {
+                    float[] pick = w.standPick(true);
+                    if (pick != null) {
+                        w.standBossThrow(pick[0] + (float) r.nextGaussian() * spread, pick[1] + (float) r.nextGaussian() * spread);
+                        throwsN++;
+                    }
+                }
+                if (w.hs != World.HAND) ready = t + reaction;
+            }
+            String st = w.bossState();
+            for (int i = 0; i < 200; i++) w.update(DT);
+            if (w.bossResult() == 1 || w.golem == null && w.level == 31) {
+                wins++;
+                armorLeft += w.armor;
+            } else lost.append(String.format("    lost at %.0fs after %d throws: %s%n", t, throwsN, st));
+            System.out.println(String.format("run %d: %s, %.0fs, %d throws, %s", run, w.level == 31 ? "WON" : "lost", t, throwsN, st));
+        }
+        System.out.println(String.format("golem: %d of %d won, spread %.1f px, reaction %.2fs, armor left on wins %.1f",
+                wins, runs, spread, reaction, wins > 0 ? armorLeft / (float) wins : 0f));
+    }
+
     private void exec(String[] p) throws IOException {
         String c = p[0];
         if (c.equals("screen")) {
@@ -218,6 +271,25 @@ public final class Stand implements World.Host {
             float[] o = world.screenOf(f(p[1]), f(p[2]), f(p[3]));
             world.throwAt(o[0], o[1], f(p[4]));
             step();
+        } else if (c.equals("fight")) {
+            // the fight bot's hand in this scene: so many seconds, this much spread
+            float secs = f(p[1]), spread = f(p[2]);
+            java.util.Random r = new java.util.Random(3);
+            float ready = 0f, t0 = time;
+            while (time - t0 < secs) {
+                if (world.hs == World.HAND && time - t0 >= ready) {
+                    float[] pick = world.standPick(true);
+                    if (pick != null) world.standBossThrow(pick[0] + (float) r.nextGaussian() * spread,
+                            pick[1] + (float) r.nextGaussian() * spread);
+                }
+                if (world.hs != World.HAND) ready = time - t0 + 0.5f;
+                step();
+            }
+            System.out.println(String.format("%7.2fs  %s", time, world.bossState()));
+        } else if (c.equals("bossbot")) {
+            bossBot(Integer.parseInt(p[1]), f(p[2]), f(p[3]));
+        } else if (c.equals("boss")) {
+            world.standBoss();
         } else if (c.equals("ball")) {
             world.standBall(f(p[1]), f(p[2]), f(p[3]));
         } else if (c.equals("goldseen")) {

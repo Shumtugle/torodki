@@ -1,0 +1,41 @@
+# The golem's two ways in: the 25th level, and a building lost ten times after the golden hammer.
+screen 1096 2560
+level 23
+wait 0.5
+win 1
+wait 5.0
+shot c1_diamond_gift
+wait 4.0
+shot c2_fight
+state
+wait 70
+state
+wait 6
+state
+goldseen
+level 40
+wait 0.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+state
+wait 2.0
+shot c3_stuck_fight
+state

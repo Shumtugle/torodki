@@ -21,6 +21,8 @@ public final class Bot implements World.Host {
     public int loadGifts() { return 0; }
     public void saveFails(int fails) { }
     public int loadFails() { return 0; }
+    public void saveInt(String key, int value) { }
+    public int loadInt(String key) { return 0; }
     public void saveGoldSeen(boolean seen) { }
     public boolean loadGoldSeen() { return false; }
 
