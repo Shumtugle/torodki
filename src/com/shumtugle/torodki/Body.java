@@ -6,9 +6,9 @@ package com.shumtugle.torodki;
  * the hot loops; the rotation matrix is kept in step with the quaternion.
  */
 final class Body {
-    static final int WOOD = 0, STONE = 1, HAMMER = 2, PLINTH = 3, GLASS = 4, WATER = 5, BALL = 6, CAR = 7;
-    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f, 760f, 1500f, 0f};
-    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f, 0.55f, 0.45f, 0.6f};
+    static final int WOOD = 0, STONE = 1, HAMMER = 2, PLINTH = 3, GLASS = 4, WATER = 5, BALL = 6, CAR = 7, BALLOON = 8;
+    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f, 760f, 1500f, 0f, 160f};
+    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f, 0.55f, 0.45f, 0.6f, 0.95f};
 
     static final float INERTIA = 3f;
 
@@ -17,6 +17,7 @@ final class Body {
     int tint;                       // base color
     float hx, hy, hz;               // half extents
     float radius;                   // above zero for a ball: a sphere of this radius
+    float lift;                     // upward pull against gravity, m/s^2: a balloon floats
     float mass, invMass;
     float iix, iiy, iiz;            // inverse inertia, body frame
 
@@ -75,6 +76,23 @@ final class Body {
         b.iiy = ii;
         b.iiz = ii;
         b.updateR();
+        return b;
+    }
+
+    /**
+     * A big rubber balloon, firm enough to carry a plank. Its pull upward is a little more
+     * than its weight: loaded it stays put, freed it drifts up into the sky.
+     */
+    static Body balloon(float r, int tint) {
+        Body b = ball(r, tint);
+        b.material = BALLOON;
+        b.mass = DENSITY[BALLOON] * 4.18879f * r * r * r;
+        b.invMass = 1f / b.mass;
+        float ii = 1f / (0.4f * b.mass * r * r * 1.6f);
+        b.iix = ii;
+        b.iiy = ii;
+        b.iiz = ii;
+        b.lift = 9.81f * 1.3f;
         return b;
     }
 

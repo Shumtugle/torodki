@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.21";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.22";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -63,7 +63,6 @@ final class World implements Physics.Listener {
     private final Body[] cars = new Body[Life.parked()];
     private final float[] carHitAt = new float[Life.parked()];
     final ArrayList<Body> pieces = new ArrayList<Body>();
-    private final Builder builder = new Builder();
     float totalMass;
 
     // camera
@@ -176,6 +175,39 @@ final class World implements Physics.Listener {
         return level * 2654435761L ^ 0x2545F4914F6CDD1DL;
     }
 
+    // the next building, grown on a thread of its own while the gods are watching
+    private volatile ArrayList<Body> prepared;
+    private int preparedFor = -1;
+    private Thread preparing;
+
+    private void prepare(final int lv) {
+        if (preparedFor == lv) return;
+        preparedFor = lv;
+        prepared = null;
+        preparing = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                prepared = buildingFor(lv);
+            }
+        });
+        preparing.setDaemon(true);
+        preparing.start();
+    }
+
+    private ArrayList<Body> takePrepared(int lv) {
+        if (preparedFor != lv || preparing == null) return null;
+        try {
+            preparing.join();
+        } catch (InterruptedException e) {
+            return null;
+        }
+        ArrayList<Body> r = prepared;
+        prepared = null;
+        preparing = null;
+        preparedFor = -1;
+        return r;
+    }
+
     /** Raises the building for a level: tested for standing still, asleep, ready to fall. */
     void startLevel(int lv, boolean animate) {
         level = lv;
@@ -196,7 +228,11 @@ final class World implements Physics.Listener {
             cars[i].setPose(Life.parkX(i), 0.65f, Life.parkZ(i), 1, 0, 0, 0);
             phys.add(cars[i]);
         }
-        ArrayList<Body> made = standingBuilding(lv, seed);
+        ArrayList<Body> made = takePrepared(lv);
+        if (made == null) made = buildingFor(lv);
+        // grown at the first plinth spot: carried along to where the plinth stands now
+        float shift = Builder.CZ - Builder.BASE_CZ;
+        for (Body b : made) b.homeZ += shift;
         totalMass = 0f;
         for (Body b : made) {
             b.setPose(b.homeX, b.homeY, b.homeZ, 1, 0, 0, 0);
@@ -227,7 +263,13 @@ final class World implements Physics.Listener {
     }
 
     /** Tries seeds until the building stands still on its own for a second. */
-    private ArrayList<Body> standingBuilding(int lv, long sd) {
+    /** A building for a level, tested and ready, laid out at the first plinth spot. Thread-safe. */
+    static ArrayList<Body> buildingFor(int lv) {
+        return standingBuilding(new Builder(), lv, seedOf(lv));
+    }
+
+    private static ArrayList<Body> standingBuilding(Builder builder, int lv, long sd) {
+        if (Builder.kindOf(lv) == Builder.GROWN) return grownBuilding(builder, lv, sd);
         for (int attempt = 0; attempt < 6; attempt++) {
             ArrayList<Body> made = builder.build(lv, sd + attempt * 7919L);
             if (standsStill(made)) return made;
@@ -235,11 +277,83 @@ final class World implements Physics.Listener {
         return builder.build(0, sd);
     }
 
+    /**
+     * How hard a grown building should be: the share of its weight one full throw at its
+     * middle should knock off. Early on most of it; later on a fifth.
+     */
+    static float wantedShare(int lv) {
+        return Math.max(0.2f, Math.min(0.75f, 0.85f - 0.012f * (lv + 1)));
+    }
+
+    /** Grows candidates until one stands and is about as hard as this level wants. */
+    private static ArrayList<Body> grownBuilding(Builder builder, int lv, long sd) {
+        float want = wantedShare(lv), bestGap = 9f;
+        ArrayList<Body> best = null;
+        for (int attempt = 0; attempt < 6; attempt++) {
+            ArrayList<Body> made = builder.build(lv, sd + attempt * 7919L);
+            if (!standsStill(made)) continue;
+            float gap = Math.abs(probe(made) - want);
+            if (gap < bestGap) {
+                bestGap = gap;
+                best = made;
+            }
+            if (gap < 0.12f) break;
+        }
+        return best != null ? best : builder.build(0, sd);
+    }
+
+    /**
+     * One full throw at the middle of a building, played out in a physics of its own:
+     * the share of its weight that ends up off the plinth. The building is put back after.
+     */
+    static float probe(ArrayList<Body> made) {
+        Physics p = new Physics();
+        p.sleeping = false;
+        Body pl = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0);
+        pl.setPose(0f, Builder.TOP * 0.5f, Builder.BASE_CZ, 1, 0, 0, 0);
+        p.add(pl);
+        float mx = 0f, my = 0f, mz = 0f, m = 0f, front = 1e9f;
+        for (Body b : made) {
+            b.setPose(b.homeX, b.homeY, b.homeZ, 1, 0, 0, 0);
+            b.asleep = false;
+            p.add(b);
+            mx += b.px * b.mass;
+            my += b.py * b.mass;
+            m += b.mass;
+            front = Math.min(front, b.minZ);
+        }
+        mx /= m;
+        my /= m;
+        mz = front;
+        Body hm = new Body(0.42f, 0.08f, 0.17f, Body.HAMMER, 0);
+        float sx = CAM_X + 0.6f, sy = CAM_Y - 0.75f, sz = 1.2f;
+        hm.setPose(sx, sy, sz, 1, 0, 0, 0);
+        float dx = mx - sx, dy = my - sy, dz = mz - sz;
+        float t = Math.max(0.18f, (float) Math.sqrt(dx * dx + dy * dy + dz * dz) / 13.5f);
+        hm.vx = dx / t;
+        hm.vy = dy / t - 0.5f * Physics.G * t;
+        hm.vz = dz / t;
+        hm.wy = 15f;
+        p.add(hm);
+        hm.savePrev();
+        int steps = Math.round((t + 1.6f) * 60f);
+        for (int i = 0; i < steps; i++) p.step(1f / 60f);
+        float on = 0f;
+        for (Body b : made)
+            if (Math.abs(b.px) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.BASE_CZ) < Builder.PHZ + 0.05f
+                    && b.py > Builder.TOP - 0.05f && b.py < Builder.TOP + 8f) on += b.mass;
+        for (Body b : made) {
+            b.setPose(b.homeX, b.homeY, b.homeZ, 1, 0, 0, 0);
+            b.id = 0;
+        }
+        return 1f - on / m;
+    }
+
     static boolean standsStill(ArrayList<Body> made) {
         Physics p = new Physics();
         p.sleeping = false;
         Body pl = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0);
-        pl.setPose(0f, Builder.TOP * 0.5f, Builder.CZ, 1, 0, 0, 0);
+        pl.setPose(0f, Builder.TOP * 0.5f, Builder.BASE_CZ, 1, 0, 0, 0);
         p.add(pl);
         for (Body b : made) {
             b.setPose(b.homeX, b.homeY, b.homeZ, 1, 0, 0, 0);
@@ -614,6 +728,7 @@ final class World implements Physics.Listener {
             steps++;
             if (state != BUILD && state != VANISH) phys.step(1f / 60f);
             bursts();
+            pops();
             blast();
         }
         if (acc > 1f / 30f) acc = 0f;
@@ -796,6 +911,7 @@ final class World implements Physics.Listener {
     }
 
     private void lookUp(int verdict) {
+        prepare(level + nextAfterVanish);
         // the first building is the gods' welcome: they all laugh aloud
         sky.begin(verdict, level == 0 && verdict == Sky.OVATION);
         giftShown = -1f;
@@ -882,6 +998,9 @@ final class World implements Physics.Listener {
     public void knock(Body a, Body b, float speed, float x, float y, float z) {
         boolean hammerHit = a == hammer || b == hammer;
         Body other = a == hammer ? b : a;
+        // a balloon bursts at the touch of the hammer, or at any hard knock
+        if (a.material == Body.BALLOON && (hammerHit || speed > 3f)) pop(a);
+        if (b != null && b.material == Body.BALLOON && (hammerHit || speed > 3f)) pop(b);
         if ((a.material == Body.CAR || (b != null && b.material == Body.CAR))) {
             carKnock(a.material == Body.CAR ? a : b, speed, x, y, z);
             return;
@@ -987,6 +1106,36 @@ final class World implements Physics.Listener {
             spawn(blastX, blastY, blastZ, (i & 1) == 0, (i & 1) == 0 ? 0xFFE6DCC8 : 0xFFD39E62, 5f);
         host.sound(Synth.THUNDER, 0.8f, 1.3f);
         host.buzz(80);
+    }
+
+    private final ArrayList<Body> toPop = new ArrayList<Body>();
+
+    private void pop(Body b) {
+        if (b.gone || toPop.contains(b)) return;
+        toPop.add(b);
+    }
+
+    /** Balloons burst this step: gone with a crack and a spray of rubber shreds. */
+    private void pops() {
+        // a freed balloon drifts away and is gone once it is well up in the sky
+        for (Body b : pieces)
+            if (b.material == Body.BALLOON && !b.gone && b.py > Builder.TOP + 25f) {
+                b.gone = true;
+                b.ghost = true;
+            }
+        if (toPop.isEmpty()) return;
+        for (Body b : toPop) {
+            b.gone = true;
+            b.ghost = true;
+            float e = 0.08f;
+            for (Body o : pieces)
+                if (o.asleep && !(o.maxX + e < b.minX || b.maxX + e < o.minX || o.maxY + e < b.minY
+                        || b.maxY + e < o.minY || o.maxZ + e < b.minZ || b.maxZ + e < o.minZ)) phys.wake(o);
+            for (int i = 0; i < 14; i++) spawn(b.px, b.py, b.pz, false, Backdrop.scale(b.tint, 0.8f + fx.nextFloat() * 0.4f), 3.5f);
+            host.sound(Synth.POP, 1f, 0.9f + fx.nextFloat() * 0.25f);
+            host.buzz(20);
+        }
+        toPop.clear();
     }
 
     /** Bottles hit hard enough this step: gone in a splash, leaving a puddle. */
@@ -1212,7 +1361,15 @@ final class World implements Physics.Listener {
         if (b.radius > 0f) {
             // the swirl in a ball is its own color, lit up
             ras.ball(b.px, b.py + drop, b.pz, b.radius * scale, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12,
-                    b.r20, b.r21, b.r22, b.tint, Backdrop.mix(b.tint, 0xFFFFFFFF, 0.28f), id << 3);
+                    b.r20, b.r21, b.r22, b.tint, Backdrop.mix(b.tint, 0xFFFFFFFF, 0.28f), id << 3,
+                    b.material == Body.BALLOON);
+            if (b.material == Body.BALLOON) {
+                // the knot under it, tied off in a darker twist of the same rubber
+                float kr = b.radius * scale;
+                float vz = ras.project(b.px, b.py + drop - kr * 1.02f, b.pz, scr);
+                if (vz > 0.3f) ras.disc(scr[0], scr[1], Math.max(0.8f, 0.09f * kr * ras.f / vz), 1f / (vz - kr),
+                        Backdrop.scale(b.tint, 0.6f), id << 3);
+            }
             return;
         }
         int pat = b.material == Body.STONE ? Raster.PAT_STONE : b.material == Body.PLINTH ? Raster.PAT_STONE : Raster.PAT_GRAIN;

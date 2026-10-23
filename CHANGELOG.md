@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.22
+- Buildings are grown now, not only drawn from recipes. From the 9th level two buildings
+  of three are grown storey by storey: posts under a slab, a brick wall, a palisade of
+  close posts, a top-heavy deck on two posts, low steps, or a slab carried by something
+  that gives way. Towers narrow, shift aside, or split in two, mostly mirrored; twin
+  towers of one height may be bridged by a plank and go on above it. Crowns: a cube, a
+  little pyramid of three, a balanced T with a weight at each end, a ball, a bottle.
+- What carries a slab can give way: water bottles that burst, bowling balls on pads that
+  roll out, and balloons. A balloon floats a little, carries a plank while loaded, pops
+  at the touch of the hammer or a hard knock, and a freed one drifts up and away.
+- Each grown building is tested twice before it is shown: it must stand on its own, and
+  one full throw at its middle must knock off about the share this level asks for, from
+  three quarters early on to a fifth later. The next building is grown in the background
+  while the gods are watching.
+- Every third building from the 9th on is still one of the recipes, as a landmark.
+
 ## 0.21
 - From the 40th level the plinth goes farther still: twelve meters, then two more every
   five levels, twenty at most.

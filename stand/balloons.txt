@@ -1,0 +1,13 @@
+# A grown building on balloons: a hit pops them, the slab drops, freed ones fly off.
+screen 1096 2560
+level 20
+wait 1.5
+shot k0
+down 140 470
+wait 1.0
+up 140 470
+wait 0.45
+shot k1
+wait 1.2
+shot k2
+state

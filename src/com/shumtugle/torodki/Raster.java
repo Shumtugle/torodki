@@ -359,6 +359,12 @@ final class Raster {
      */
     void ball(float x, float y, float z, float r, float r00, float r01, float r02, float r10, float r11, float r12,
               float r20, float r21, float r22, int color, int color2, int id) {
+        ball(x, y, z, r, r00, r01, r02, r10, r11, r12, r20, r21, r22, color, color2, id, false);
+    }
+
+    /** The same, or a rubber balloon: plain, no holes, a broader shine. */
+    void ball(float x, float y, float z, float r, float r00, float r01, float r02, float r10, float r11, float r12,
+              float r20, float r21, float r22, int color, int color2, int id, boolean rubber) {
         float vz = project(x, y, z, ballP);
         if (vz < 0.3f) return;
         float sx = ballP[0], sy = ballP[1], sr = r * f / vz;
@@ -389,12 +395,12 @@ final class Raster {
                 float ly = r01 * nx + r11 * ny + r21 * nz;
                 float lz = r02 * nx + r12 * ny + r22 * nz;
                 boolean hole = false;
-                for (int i = 0; i < HOLES.length; i++) {
+                for (int i = 0; i < HOLES.length && !rubber; i++) {
                     float[] hd = HOLES[i];
                     if (lx * hd[0] + ly * hd[1] + lz * hd[2] > 0.988f) hole = true;
                 }
                 float swirl = (float) Math.sin(lx * 7f + (float) Math.sin(ly * 5f + lz * 3f) * 2.2f);
-                int base = hole ? 0xFF14121A : swirl > 0.25f ? color2 : color;
+                int base = hole ? 0xFF14121A : !rubber && swirl > 0.25f ? color2 : color;
                 float ndl = nx * slx + ny * sly + nz * slz;
                 lightK(-n3, ny, ndl, ballK);
                 int cr = (int) (((base >> 16) & 0xFF) * ballK[0]);
@@ -405,8 +411,8 @@ final class Raster {
                     sp = sp * sp;
                     sp = sp * sp;
                     sp = sp * sp;
-                    sp = sp * sp;
-                    int g = (int) (sp * 230f);
+                    if (!rubber) sp = sp * sp;
+                    int g = (int) (sp * (rubber ? 170f : 230f));
                     cr += g;
                     cg += g * 0.92f;
                     cb += g * 0.8f;

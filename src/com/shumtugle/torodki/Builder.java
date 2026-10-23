@@ -34,10 +34,10 @@ final class Builder {
     // in the order they first appear: the first ones fall easily, the pyramid is the stubborn one;
     // the last three carry heavy polished balls and come in from the 15th level
     static final String[] KINDS = {"TOWER", "SEESAW", "RACK", "WALL", "WELL", "GATE", "PRESS", "STEPS",
-            "PILE", "CRADLE", "CROWN"};
-    static final int FIRST_KINDS = 8;
+            "PILE", "CRADLE", "CROWN", "GROWN"};
+    static final int FIRST_KINDS = 8, RECIPES = 11, GROWN = 11;
     static final int BALLS_FROM = 14;        // level, counted from 0
-    // from then on: every other building is one of the new ones, the old ones go round between
+    // the recipes after the first eight: every other one carries balls
     private static final int[] LATE = {8, 0, 9, 1, 10, 2, 8, 3, 9, 4, 10, 5, 8, 6, 9, 7, 10};
 
     static final int[] WOODS = {0xFFE3B47C, 0xFFD39E62, 0xFFC4864F, 0xFFE8C08C};
@@ -49,7 +49,11 @@ final class Builder {
     private float paintChance;
     private boolean water;           // this building has water bottles in it
 
-    /** The pieces of one building. */
+    /**
+     * The pieces of one building, laid out on a plinth at the first plinth spot; the game
+     * moves them along with the plinth. Building in one place keeps the generator free of
+     * the game's state, so the next building can grow while this one is played.
+     */
     ArrayList<Body> build(int level, long seed) {
         out.clear();
         rnd = new Random(seed);
@@ -69,13 +73,22 @@ final class Builder {
         else if (k.equals("PILE")) pile(size);
         else if (k.equals("CRADLE")) cradle(size);
         else if (k.equals("CROWN")) crown(size);
+        else if (k.equals("GROWN")) grown(level);
         else gate(size);
         return new ArrayList<Body>(out);
     }
 
+    /**
+     * The first eight levels show the eight first recipes, one each. From then on two
+     * buildings of three are grown fresh, and every third is a recipe, as a landmark.
+     */
     static int kindOf(int level) {
-        if (level < BALLS_FROM) return level % FIRST_KINDS;
-        return LATE[(level - BALLS_FROM) % LATE.length];
+        if (level < FIRST_KINDS) return level;
+        int i = level - FIRST_KINDS;
+        if (i % 3 != 2) return GROWN;
+        int r = i / 3;
+        if (level < BALLS_FROM) return r % FIRST_KINDS;
+        return LATE[r % LATE.length];
     }
 
     // ---- pieces ----
@@ -100,7 +113,7 @@ final class Builder {
 
     /** A water bottle standing at a bottom-center point; returns the height of its top. */
     private float bottle(float x, float bottom, float z) {
-        float wxp = x * S, wyp = TOP + (bottom + BOTTLE_H * 0.5f) * S, wzp = CZ + z * S;
+        float wxp = x * S, wyp = TOP + (bottom + BOTTLE_H * 0.5f) * S, wzp = BASE_CZ + z * S;
         Body b = new Body(BOTTLE_D * 0.5f * S, BOTTLE_H * 0.5f * S, BOTTLE_D * 0.5f * S, Body.WATER, 0xFF8FC4EE);
         b.setPose(wxp, wyp, wzp, 1, 0, 0, 0);
         b.homeX = wxp;
@@ -113,7 +126,7 @@ final class Builder {
     /** A piece by its bottom-center point, in recipe units above the plinth top. */
     private float put(float x, float bottom, float z, float sx, float sy, float sz, boolean stone) {
         // recipes are written at a modest size; the world builds them bigger
-        piece(x * S, TOP + (bottom + sy * 0.5f) * S, CZ + z * S, sx * S, sy * S, sz * S, stone);
+        piece(x * S, TOP + (bottom + sy * 0.5f) * S, BASE_CZ + z * S, sx * S, sy * S, sz * S, stone);
         return bottom + sy;
     }
 
@@ -123,7 +136,7 @@ final class Builder {
 
     /** A ball with its center at a point in recipe units above the plinth top. */
     private void ballAt(float x, float cy, float z) {
-        float wx = x * S, wy = TOP + cy * S, wz = CZ + z * S;
+        float wx = x * S, wy = TOP + cy * S, wz = BASE_CZ + z * S;
         Body b = Body.ball(BALL_R * S, BALL_COLORS[rnd.nextInt(BALL_COLORS.length)]);
         b.setPose(wx, wy, wz, 1, 0, 0, 0);
         b.homeX = wx;
@@ -144,6 +157,232 @@ final class Builder {
         put(x + reach + sw / 2, bottom, z, sw, pad + stop, 0.2f, false);
         ballAt(x, top + BALL_R, z);
         return top + 2f * BALL_R;
+    }
+
+    // ---- the grower ----
+    //
+    // A building is grown from the plinth up, storey by storey. Each storey is one of a few
+    // ways to carry weight: posts under a slab, a brick wall, bottles under a slab, balls or
+    // balloons under a slab, a stack of cubes. Above it the tower goes on as wide, narrows,
+    // or splits in two, often mirrored. Whatever stands on something is placed over its
+    // support, so most of what grows stands; the physics test throws out the rest.
+
+    private int budget;
+    private float maxH;
+    private boolean useBottles, useBalls, useBalloons;
+    private static final int[] BALLOON_COLORS = {0xFFE8483C, 0xFFF2C230, 0xFF3F8FD8, 0xFF5DBE6A, 0xFFE87AB0, 0xFFF29A3A};
+
+    private void grown(int level) {
+        budget = 12 + Math.min(32, level * 3 / 4);
+        maxH = 2.6f + Math.min(0.9f, level * 0.025f);
+        useBottles = rnd.nextFloat() < (water ? 0.8f : 0.3f);
+        useBalls = level >= BALLS_FROM && rnd.nextFloat() < 0.45f;
+        useBalloons = level >= BALLS_FROM + 2 && rnd.nextFloat() < 0.45f;
+        float hw = 0.95f + rnd.nextFloat() * 0.35f;
+        float d = 0.34f + rnd.nextInt(3) * 0.08f;
+        if (useBalls || useBalloons) d = Math.max(d, 0.46f);
+        grow(0f, hw, 0f, d, 0, 1f, true);
+    }
+
+    private void balloonAt(float x, float cy, float z, float r) {
+        float wx = x * S, wy = TOP + cy * S, wz = BASE_CZ + z * S;
+        Body b = Body.balloon(r * S, BALLOON_COLORS[rnd.nextInt(BALLOON_COLORS.length)]);
+        b.setPose(wx, wy, wz, 1, 0, 0, 0);
+        b.homeX = wx;
+        b.homeY = wy;
+        b.homeZ = wz;
+        out.add(b);
+    }
+
+    /**
+     * Grows a tower over [cx - hw, cx + hw] from height y; sign mirrors anything lopsided.
+     * Returns the height it reached; with capIt false the top is left bare for a bridge.
+     */
+    private float grow(float cx, float hw, float y, float d, int storey, float sign, boolean capIt) {
+        if (y > maxH || out.size() >= budget || hw < 0.16f) {
+            if (capIt) cap(cx, hw, y, d);
+            return y;
+        }
+        boolean stone = storey == 0 ? rnd.nextFloat() < 0.5f : rnd.nextFloat() < 0.2f;
+        float top;
+        float nhw = hw;
+        if (hw < 0.3f) {
+            top = column(cx, hw, y, stone);
+            nhw = Math.min(hw, 0.17f);
+        } else {
+            // each way of carrying weight by its own chance, among those this building may use
+            boolean deep = d >= 0.42f && hw >= 0.4f;
+            float wBalloon = useBalloons && deep ? 1.2f : 0f, wBall = useBalls && deep ? 1.2f : 0f;
+            float wBottle = useBottles ? 1.4f : 0f, wSteps = storey == 0 && hw > 0.6f ? 0.5f : 0f;
+            float wWall = 1.1f, wPortal = 1.6f, wFence = hw > 0.45f ? 0.9f : 0f, wDeck = storey > 0 && hw > 0.5f ? 0.5f : 0f;
+            float r = rnd.nextFloat() * (wBalloon + wBall + wBottle + wSteps + wWall + wPortal + wFence + wDeck);
+            if ((r -= wBalloon) < 0f) top = carried(cx, hw, y, d, 2);
+            else if ((r -= wBall) < 0f) top = carried(cx, hw, y, d, 1);
+            else if ((r -= wBottle) < 0f) top = carried(cx, hw, y, d, 0);
+            else if ((r -= wSteps) < 0f) {
+                float[] t = steps(cx, hw, y, d, stone);
+                top = t[0];
+                nhw = t[1];
+            } else if ((r -= wWall) < 0f) top = wall(cx, hw, y, d, stone);
+            else if ((r -= wFence) < 0f) top = fence(cx, hw, y, d, stone);
+            else if ((r -= wDeck) < 0f) {
+                top = deck(cx, hw, y, d, stone);
+                nhw = Math.min(hw * 1.35f, hw + 0.3f);
+            } else top = portal(cx, hw, y, d, stone);
+        }
+        float next = rnd.nextFloat();
+        if (nhw > 0.72f && next < 0.38f && out.size() < budget - 6) {
+            // two towers side by side, usually mirror images
+            float gap = 0.12f + rnd.nextFloat() * 0.25f;
+            float shw = (nhw - gap / 2f) / 2f;
+            long seed = rnd.nextLong();
+            boolean mirror = rnd.nextFloat() < 0.75f;
+            // twin towers of one height may be bridged by a plank, and the tower goes on over it
+            boolean bridge = mirror && rnd.nextFloat() < 0.45f && out.size() < budget - 10;
+            Random keep = rnd;
+            rnd = new Random(seed);
+            float hl = grow(cx - sign * (shw + gap / 2f), shw, top, d, storey + 1, -sign, !bridge);
+            if (mirror) rnd = new Random(seed);
+            float hr = grow(cx + sign * (shw + gap / 2f), shw, top, d, storey + 1, sign, !bridge);
+            rnd = keep;
+            if (bridge && Math.abs(hl - hr) < 0.005f) {
+                float bt = put(cx, hl, 0, 2f * nhw + 0.04f, 0.1f, d + 0.04f, rnd.nextFloat() < 0.4f);
+                return grow(cx, nhw * (0.45f + rnd.nextFloat() * 0.3f), bt, d, storey + 2, sign, true);
+            }
+            if (bridge) {
+                cap(cx - sign * (shw + gap / 2f), shw, hl, d);
+                cap(cx + sign * (shw + gap / 2f), shw, hr, d);
+            }
+            return Math.max(hl, hr);
+        } else if (next < 0.75f) {
+            // narrower, in the middle or toward one side
+            float k = 0.5f + rnd.nextFloat() * 0.35f;
+            float shift = rnd.nextFloat() < 0.6f ? 0f : sign * (nhw - nhw * k) * rnd.nextFloat();
+            return grow(cx + shift, nhw * k, top, Math.max(0.3f, d - (rnd.nextFloat() < 0.3f ? 0.08f : 0f)), storey + 1, sign, capIt);
+        }
+        return grow(cx, nhw, top, d, storey + 1, sign, capIt);
+    }
+
+    /** A palisade: a row of upright posts, a hand's breadth apart, under one plank. */
+    private float fence(float cx, float hw, float y, float d, boolean stone) {
+        float p = 0.12f, gap = 0.1f + rnd.nextFloat() * 0.06f, h = 0.45f + rnd.nextFloat() * 0.3f;
+        int n = Math.max(3, Math.min(6, (int) ((2f * hw + gap) / (p + gap))));
+        float span = n * p + (n - 1) * gap;
+        for (int i = 0; i < n; i++) put(cx - span / 2f + p / 2f + i * (p + gap), y, 0, p, h, d, stone);
+        return put(cx, y + h, 0, 2f * hw + 0.06f, 0.1f, d + 0.04f, false);
+    }
+
+    /** Top-heavy: a wide deck on two close posts in the middle, overhanging both sides. */
+    private float deck(float cx, float hw, float y, float d, boolean stone) {
+        float p = 0.16f, h = 0.4f + rnd.nextFloat() * 0.2f, o = hw * 0.35f;
+        put(cx - o, y, 0, p, h, d, stone);
+        put(cx + o, y, 0, p, h, d, stone);
+        float w = Math.min(2f * hw * 1.35f, 2f * hw + 0.6f);
+        return put(cx, y + h, 0, w, 0.1f, d + 0.04f, false);
+    }
+
+    /** Posts under a slab: two at the ends, a third in the middle of a wide one, four for a deep one. */
+    private float portal(float cx, float hw, float y, float d, boolean stone) {
+        float p = 0.14f + rnd.nextFloat() * 0.06f, h = 0.4f + rnd.nextFloat() * 0.25f;
+        boolean four = d >= 0.5f && rnd.nextFloat() < 0.4f;
+        float o = hw - p / 2f;
+        for (int s = -1; s <= 1; s += 2) {
+            if (four) {
+                put(cx + s * o, y, -(d / 2f - p / 2f), p, h, p, stone);
+                put(cx + s * o, y, d / 2f - p / 2f, p, h, p, stone);
+            } else put(cx + s * o, y, 0, p, h, d, stone);
+        }
+        if (hw > 0.9f) put(cx, y, 0, p, h, four ? p : d, stone);
+        return put(cx, y + h, 0, 2f * hw + 0.06f, 0.1f, d + 0.04f, rnd.nextFloat() < 0.3f);
+    }
+
+    /** Bricks in running bond, two to four courses. */
+    private float wall(float cx, float hw, float y, float d, boolean stone) {
+        int n = Math.max(2, Math.round(2f * hw / 0.42f));
+        float bw = 2f * hw / n, bh = 0.2f;
+        int rows = 2 + rnd.nextInt(3);
+        for (int r = 0; r < rows; r++) {
+            boolean st = stone && r == 0;
+            if ((r & 1) == 0) {
+                for (int c = 0; c < n; c++) put(cx - hw + bw * (c + 0.5f), y, 0, bw, bh, d, st);
+            } else {
+                put(cx - hw + bw * 0.25f, y, 0, bw * 0.5f, bh, d, st);
+                for (int c = 0; c < n - 1; c++) put(cx - hw + bw * (c + 1f), y, 0, bw, bh, d, st);
+                put(cx + hw - bw * 0.25f, y, 0, bw * 0.5f, bh, d, st);
+            }
+            y += bh;
+        }
+        return y;
+    }
+
+    /** Cubes stacked into a little column. */
+    private float column(float cx, float hw, float y, boolean stone) {
+        float c = Math.min(2f * hw, 0.34f);
+        int n = 1 + rnd.nextInt(3);
+        for (int i = 0; i < n; i++) y = put(cx, y, 0, c, c, c, stone && i == 0);
+        return y;
+    }
+
+    /** A low stepped pyramid; returns its top and the half width of its top block. */
+    private float[] steps(float cx, float hw, float y, float d, boolean stone) {
+        int base = Math.max(3, Math.min(5, Math.round(2f * hw / 0.45f)));
+        float bw = 2f * hw / base, bh = 0.26f;
+        int rows = Math.min(base, 2 + rnd.nextInt(2));
+        for (int r = 0; r < rows; r++) {
+            int n = base - r;
+            for (int i = 0; i < n; i++) put(cx + (i - (n - 1) / 2f) * bw, y, 0, bw, bh, d, stone && r == 0);
+            y += bh;
+        }
+        return new float[]{y, (base - rows + 1) * bw / 2f};
+    }
+
+    /**
+     * A slab carried by something that gives way: water bottles (0) that burst, polished
+     * balls on pads (1) that roll out, or balloons (2) that pop and fly off.
+     */
+    private float carried(float cx, float hw, float y, float d, int what) {
+        float top;
+        float o = Math.max(0.2f, hw - 0.18f);
+        if (what == 0) {
+            int n = hw > 0.8f ? 3 : 2;
+            top = y;
+            for (int i = 0; i < n; i++) top = Math.max(top, bottle(cx - o + 2f * o * i / (n - 1), y, 0));
+        } else {
+            float zo = d / 2f - 0.15f;
+            top = y;
+            for (int i = -1; i <= 1; i += 2)
+                for (int j = -1; j <= 1; j += 2) {
+                    if (what == 1) top = Math.max(top, nested(cx + i * o, y, j * Math.max(0.17f, zo)));
+                    else {
+                        float r = 0.2f;
+                        balloonAt(cx + i * o, y + r, j * Math.max(0.2f, zo), r);
+                        top = Math.max(top, y + 2f * r);
+                    }
+                }
+        }
+        return put(cx, top, 0, 2f * hw + 0.06f, 0.1f, d + 0.04f, false);
+    }
+
+    /** What crowns a tower: a cube, a ball, a bottle, three cubes, or nothing. */
+    private void cap(float cx, float hw, float y, float d) {
+        float r = rnd.nextFloat();
+        if (out.size() >= budget + 4 || r < 0.15f) return;
+        if (useBalls && r < 0.35f && hw >= 0.2f) nested(cx, y, 0);
+        else if (r < 0.42f && hw >= 0.2f) {
+            // a balanced T: a plank on one narrow post, a weight at each end
+            float t = put(cx, y, 0, 0.14f, 0.36f, 0.14f, true);
+            float half = 0.45f + rnd.nextFloat() * 0.2f;
+            t = put(cx, t, 0, 2f * half, 0.08f, 0.3f, false);
+            put(cx - half + 0.12f, t, 0, 0.22f, 0.22f, 0.22f, false);
+            put(cx + half - 0.12f, t, 0, 0.22f, 0.22f, 0.22f, false);
+        }
+        else if (useBottles && r < 0.5f) bottle(cx, y, 0);
+        else if (hw >= 0.45f && r < 0.75f) {
+            float c = 0.3f;
+            put(cx - c / 2f - 0.01f, y, 0, c, c, c, false);
+            float t = put(cx + c / 2f + 0.01f, y, 0, c, c, c, false);
+            put(cx, t, 0, c, c, c, false);
+        } else put(cx, y, 0, Math.min(0.3f, 2f * hw), Math.min(0.3f, 2f * hw), Math.min(0.3f, 2f * hw), false);
     }
 
     // ---- recipes ----

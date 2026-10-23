@@ -62,7 +62,7 @@ final class Physics {
             if (!b.dynamic() || b.asleep) continue;
             b.savePrev();
             if (b.ghost) continue;
-            b.vy += G * h;
+            b.vy += (G + b.lift) * h;
             b.px += b.vx * h;
             b.py += b.vy * h;
             b.pz += b.vz * h;

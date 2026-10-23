@@ -12,9 +12,9 @@ import java.util.Random;
 final class Synth {
     static final int RATE = 22050;
     static final int WOOD = 0, STONE = 1, GROUND = 2, WHOOSH = 3, THUNDER = 4, CATCH = 5, TOCK = 6, GLASS = 7;
-    static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11;
+    static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11, POP = 12;
 
-    final float[][] bank = new float[12][];
+    final float[][] bank = new float[13][];
 
     Synth() {
         Random r = new Random(7);
@@ -34,6 +34,7 @@ final class Synth {
         bank[CRASH] = knock(r, 0.55f, new float[]{170f, 410f, 1120f, 2390f, 3310f}, new float[]{0.8f, 0.7f, 0.5f, 0.35f, 0.25f},
                 new float[]{8f, 10f, 15f, 19f, 24f}, 1.1f, 0.6f);
         bank[ALARM] = alarm();
+        bank[POP] = pop(r);
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
     }
@@ -63,6 +64,21 @@ final class Synth {
                 v += 0.35f * (float) Math.sin(2 * Math.PI * f * u) * (float) Math.exp(-50f * u);
             }
             s[i] = v * 0.8f;
+        }
+        return s;
+    }
+
+    /** A balloon bursting: a sharp crack of noise and a rubbery flap after it. */
+    private static float[] pop(Random r) {
+        int n = (int) (0.22f * RATE);
+        float[] s = new float[n];
+        float lp = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.7f;
+            float v = lp * (float) Math.exp(-70f * t) * 1.4f;
+            v += (float) Math.sin(2 * Math.PI * (210f - 300f * t) * t) * (float) Math.exp(-30f * t) * 0.35f;
+            s[i] = v * Math.min(1f, t * 4000f);
         }
         return s;
     }
