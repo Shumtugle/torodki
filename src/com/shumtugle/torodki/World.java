@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.32";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.33";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -821,7 +821,7 @@ final class World implements Physics.Listener {
             if (key.equals("C")) dialled.setLength(0);
             else if (key.equals("CALL")) {
                 int lv = dialled.length() == 0 ? -1 : Integer.parseInt(dialled.toString());
-                if (lv < 1 || lv > best()) {
+                if (lv < 2 || lv > best()) {
                     wrongAt = booth;
                     dialled.setLength(0);
                     host.sound(Synth.ALARM, 0.25f, 1.6f);
@@ -874,7 +874,7 @@ final class World implements Physics.Listener {
             String shown = dialled.length() == 0 ? (((int) (booth * 2f) & 1) == 0 ? "_" : " ") : dialled.toString();
             PixelFont.draw(f, "LEVEL", cx0 + 20, dy + 8, 1, ink);
             PixelFont.draw(f, shown, W / 2 - PixelFont.width(shown, 3) / 2 + 18, dy + 8, 3, ink);
-            String up = "1 TO " + best();
+            String up = "2 TO " + best();
             PixelFont.draw(f, up, W / 2 - PixelFont.width(up, 1) / 2, dy + 38, 1, 0xFF4A5E2A);
         }
         // the keypad: steel keys, the pressed one sunk for a moment
@@ -1061,7 +1061,24 @@ final class World implements Physics.Listener {
         if (bossEnd >= 0f) {
             bossEnd += dt;
             flights(dt);
-            if (bossEnd > (bossWon ? 2.8f : 1.8f)) finishBoss();
+            if (bossWon) {
+                // the pieces jump and the ground trembles, a while after it falls
+                rumble -= dt;
+                if (rumble <= 0f && bossEnd < 2.4f) {
+                    rumble = 0.32f + fx.nextFloat() * 0.15f;
+                    shake = Math.max(shake, 0.55f);
+                    host.sound(Synth.GROUND, 1.2f, 0.5f + fx.nextFloat() * 0.2f);
+                    host.buzz(70);
+                    for (Body b : pieces) {
+                        if (b.gone || b.py > 3f || fx.nextFloat() < 0.4f) continue;
+                        b.vy += 2.5f + fx.nextFloat() * 3f;
+                        b.vx += (fx.nextFloat() - 0.5f) * 1.5f;
+                        b.wx += (fx.nextFloat() - 0.5f) * 6f;
+                        b.asleep = false;
+                    }
+                }
+                if (bossEnd > 2.8f) finishBoss();
+            } else if (bossEnd > 1.3f) wakeUp();
             return;
         }
         // throwing: a car at a time, more often the nearer it comes
@@ -1307,14 +1324,23 @@ final class World implements Physics.Listener {
         if (!won) golem.stagger = 99f;
     }
 
+    private float rumble;
+
+    /** The fight is won: up into the sky, from red through gold to day, and the gods rejoice. */
     private void finishBoss() {
         fromBoss = true;
-        nextAfterVanish = bossWon ? 1 : 0;
-        if (!bossWon) {
-            fails = 0;
-            host.saveFails(0);
-        }
-        lookUp(bossWon ? Sky.OVATION : Sky.YAWN);
+        nextAfterVanish = 1;
+        winSky = 0f;
+        lookUp(Sky.OVATION);
+    }
+
+    /** The fight is lost: the player wakes on the street, before the same building, as from a dream. */
+    private void wakeUp() {
+        fails = 0;
+        host.saveFails(0);
+        startLevel(level, false);
+        wake = 0f;
+        host.sound(Synth.BEAT, 0.8f, 0.9f);
     }
 
     /**
@@ -1671,6 +1697,14 @@ final class World implements Physics.Listener {
         windUp(dt);
         zoomStep(dt);
         hammerMoves(dt);
+        if (winSky >= 0f) {
+            winSky += dt;
+            if (winSky > 2.4f) winSky = -1f;
+        }
+        if (wake >= 0f) {
+            wake += dt;
+            if (wake > 1.8f) wake = -1f;
+        }
         if (closeCall()) dt *= 0.4f;
         if (state == SKY_UP || state == SKY_HOLD || fromSky) {
             sky.update(dt);
@@ -1856,7 +1890,7 @@ final class World implements Physics.Listener {
     private void lookUp(int verdict) {
         prepare(level + nextAfterVanish);
         // the first building is the gods' welcome: they all laugh aloud
-        sky.begin(verdict, level == 0 && verdict == Sky.OVATION);
+        sky.begin(verdict, (level == 0 || fromBoss) && verdict == Sky.OVATION);
         giftShown = -1f;
         goldGift = false;
         diamondGift = false;
@@ -2334,6 +2368,7 @@ final class World implements Physics.Listener {
             sky.compose(ras.col, f.a, h, off);
             sky.drawClouds(f, off - h);
             if (giftShown >= 0f && state == SKY_HOLD && stateTime > 0.9f) drawGift(f, stateTime - 0.9f);
+            grade(f, off);
             if (off < h / 8) {
                 if (golem != null && state == BOSS) drawFightHud(f);
                 else drawHud(f);
@@ -2341,12 +2376,139 @@ final class World implements Physics.Listener {
         } else {
             if (!zoomed && zoomK > 0f) closingIn(f);
             else System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
+            if (golem != null) shakeFrame(f);
+            grade(f, 0);
             if (golem != null) {
-                shakeFrame(f);
                 drawFightHud(f);
                 drawFlash(f);
             } else drawHud(f);
             if (booth >= 0f) drawBooth(f);
+        }
+        dream(f);
+    }
+
+    // ---- the golem's world, seen through a filter ----
+    // Its street is red and black, every color still alive under it; the golem itself burns
+    // with a golden fire. The way in is down from the sky; a win goes back up into the sky
+    // from red through gold to plain day. A loss goes dark, and the player wakes on the street.
+
+    private float winSky = -1f;          // seconds since the sky opened after a won fight
+    private float wake = -1f;            // seconds since the player opened his eyes
+
+    /** How red the world is now, and how golden. */
+    private float redness() {
+        if (winSky >= 0f) return Math.max(0f, 1f - winSky / 0.9f);
+        if (golem == null || state != BOSS) return 0f;
+        if (state == BOSS && fromSky) return Math.min(1f, backT / TILT);
+        if (state == BOSS) return Math.min(1f, stateTime / 0.8f);
+        return 1f;
+    }
+
+    private float goldness() {
+        if (winSky < 0f) return 0f;
+        return winSky < 0.9f ? winSky / 0.9f : Math.max(0f, 1f - (winSky - 0.9f) / 1.3f);
+    }
+
+    private void grade(Px f, int off) {
+        float red = redness(), gold = goldness();
+        if (red <= 0.003f && gold <= 0.003f) return;
+        boolean fire = golem != null && !golem.down && red > 0f;
+        int gid = 960 << 3;
+        float flick = clock * 11f;
+        for (int y = 0; y < h; y++) {
+            int sy = y - off;
+            float fl = 0.88f + 0.12f * (float) Math.sin(y * 0.31f + flick) * (float) Math.sin(y * 0.07f - flick * 0.6f);
+            for (int x = 0; x < W; x++) {
+                int k = y * W + x;
+                int c = f.a[k];
+                int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+                float l = (r * 0.3f + g * 0.55f + b * 0.15f) / 255f;
+                float or = r, og = g, ob = b;
+                if (fire && sy >= 0 && ras.idb[sy * W + x] == gid) {
+                    // golden fire: dark embers in the folds, gold and white heat on the edges
+                    float t = Math.min(1f, l * fl * 1.25f);
+                    float fr = t < 0.4f ? 60f + t / 0.4f * 170f : 230f + (t - 0.4f) / 0.6f * 25f;
+                    float fg = t < 0.4f ? 10f + t / 0.4f * 70f : 80f + (t - 0.4f) / 0.6f * 160f;
+                    float fb = t < 0.7f ? 8f + t * 20f : 22f + (t - 0.7f) / 0.3f * 150f;
+                    or += (fr - or) * red;
+                    og += (fg - og) * red;
+                    ob += (fb - ob) * red;
+                } else if (red > 0f) {
+                    // red and black: the reds kept, the rest sunk, shadows deepened
+                    float d = l * l * 1.4f;
+                    float rr = Math.min(255f, r * 0.55f + 255f * d * 0.75f), gg = g * 0.22f + 40f * d, bb = b * 0.2f + 30f * d;
+                    or += (rr - or) * red * 0.85f;
+                    og += (gg - og) * red * 0.85f;
+                    ob += (bb - ob) * red * 0.85f;
+                }
+                if (gold > 0f) {
+                    float gr = Math.min(255f, l * 290f + 20f), gg = Math.min(255f, l * 230f + 8f), gb = l * 110f;
+                    or += (gr - or) * gold * 0.75f;
+                    og += (gg - og) * gold * 0.75f;
+                    ob += (gb - ob) * gold * 0.75f;
+                }
+                f.a[k] = 0xFF000000 | ((int) Math.max(0f, Math.min(255f, or)) << 16)
+                        | ((int) Math.max(0f, Math.min(255f, og)) << 8) | (int) Math.max(0f, Math.min(255f, ob));
+            }
+        }
+    }
+
+    private int[] blurA, blurB;
+
+    /** Going dark after a lost fight; opening the eyes again, the world blurred, then clear. */
+    private void dream(Px f) {
+        float dark = 0f;
+        if (golem != null && bossEnd >= 0f && !bossWon) dark = Math.min(1f, bossEnd / 0.9f);
+        if (wake >= 0f) {
+            float k = Math.min(1f, wake / 1.6f);
+            int r = Math.round((1f - k) * 7f);
+            if (r > 0) blur(f, r);
+            dark = Math.max(dark, Math.max(0f, 1f - wake / 0.5f) * 0.8f);
+            // the lids part: dark from above and below, opening
+            float open = k * k * (3f - 2f * k);
+            int lid = Math.round(h * 0.5f * (1f - open));
+            for (int y = 0; y < h; y++) {
+                float e = y < lid ? 1f : y >= h - lid ? 1f : 0f;
+                int edge = Math.min(Math.abs(y - lid), Math.abs(h - lid - y));
+                if (e == 0f && edge < 30) e = (30 - edge) / 30f * (1f - open);
+                if (e <= 0f) continue;
+                for (int x = 0; x < W; x++) f.a[y * W + x] = Backdrop.mix(f.a[y * W + x], 0xFF000000, Math.min(1f, e));
+            }
+        }
+        if (dark > 0f) for (int k = 0; k < f.a.length; k++) f.a[k] = Backdrop.mix(f.a[k], 0xFF000000, dark);
+    }
+
+    private void blur(Px f, int r) {
+        int n = f.a.length;
+        if (blurA == null || blurA.length != n) {
+            blurA = new int[n];
+            blurB = new int[n];
+        }
+        boxPass(f.a, blurA, r, true);
+        boxPass(blurA, blurB, r, false);
+        boxPass(blurB, blurA, r, true);
+        boxPass(blurA, f.a, r, false);
+    }
+
+    private void boxPass(int[] in, int[] out, int r, boolean rows) {
+        int len = rows ? W : h, lines = rows ? h : W, step = rows ? 1 : W;
+        int d = 2 * r + 1;
+        for (int l = 0; l < lines; l++) {
+            int base = rows ? l * W : l;
+            int sr = 0, sg = 0, sb = 0;
+            for (int i = -r; i <= r; i++) {
+                int c = in[base + Math.max(0, Math.min(len - 1, i)) * step];
+                sr += (c >> 16) & 0xFF;
+                sg += (c >> 8) & 0xFF;
+                sb += c & 0xFF;
+            }
+            for (int i = 0; i < len; i++) {
+                out[base + i * step] = 0xFF000000 | ((sr / d) << 16) | ((sg / d) << 8) | (sb / d);
+                int ca = in[base + Math.min(len - 1, i + r + 1) * step], cs = in[base + Math.max(0, i - r) * step];
+                sr += ((ca >> 16) & 0xFF) - ((cs >> 16) & 0xFF);
+                sg += ((ca >> 8) & 0xFF) - ((cs >> 8) & 0xFF);
+                sb += (ca & 0xFF) - (cs & 0xFF);
+            }
         }
     }
 

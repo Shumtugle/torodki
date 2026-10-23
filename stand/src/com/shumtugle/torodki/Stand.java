@@ -276,7 +276,7 @@ public final class Stand implements World.Host {
             float secs = f(p[1]), spread = f(p[2]);
             java.util.Random r = new java.util.Random(3);
             float ready = 0f, t0 = time;
-            while (time - t0 < secs) {
+            while (time - t0 < secs && world.bossResult() == 0) {
                 if (world.hs == World.HAND && time - t0 >= ready) {
                     float[] pick = world.standPick(true);
                     if (pick != null) world.standBossThrow(pick[0] + (float) r.nextGaussian() * spread,

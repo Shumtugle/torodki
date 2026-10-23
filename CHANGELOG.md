@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.33
+- The golem's world: on the way down from the sky the street turns red and black, every
+  color still alive under the filter, and the golem burns in a flickering golden fire.
+- A lost fight goes dark; a moment later the player opens his eyes on the street, the
+  lids parting and the world blurred, then clear, before the same building.
+- A won fight: the pieces of the golem jump about while the ground trembles, then the view
+  goes up into the sky, from red through gold to plain day, and every god laughs aloud,
+  as on the very first level.
+- Level 1 cannot be dialled from the booth any more.
+
 ## 0.32
 - The farthest level reached is kept when you go back to an earlier one. In 0.31 it
   was saved only when a new level was passed, so going back from far ahead lost it.

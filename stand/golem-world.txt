@@ -1,0 +1,56 @@
+# The golem's world: in from the sky, red and black, the golem in golden fire; a win goes
+# back up through gold to day; a loss goes dark and wakes on the street.
+screen 1096 2560
+goldseen
+level 40
+wait 0.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+lose
+wait 7.5
+wait 3.9
+shot e1_descending
+wait 0.6
+shot e2_red_world
+fight 60 3
+wait 0.3
+shot e3_fallen
+wait 1.0
+shot e4_rumble
+wait 2.0
+shot e5_sky_red_gold
+wait 0.5
+shot e6_sky_gold
+wait 1.0
+shot e7_sky_day
+wait 1.4
+shot e8_jubilee
+state
+boss
+wait 1.0
+golemz 9
+wait 2.0
+shot l1_dark
+wait 1.0
+shot l2_waking
+wait 0.6
+shot l3_waking
+wait 1.0
+shot l4_awake
+state
