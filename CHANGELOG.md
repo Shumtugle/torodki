@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.19
+- The plinth's move down the street is now plain to see: three meters at the 21st
+  level, two more every five levels after, ten meters at most by the 51st.
+
 ## 0.18
 - The first building is a welcome. It stands close, where the first plinth of the game
   stood, and flies to pieces at the first touch of the hammer. Every god who can laugh
@@ -15,8 +19,8 @@
 - The gift comes without words: the heavy hammer drops from the thunderer's cloud and
   tumbles down past the gods.
 - The other hammer is always in sight, its head at the lower left; a tap on it swaps.
-- The plinth moves a full meter farther every five levels from the 21st, so the change
-  is plain to see; four meters at most.
+- The plinth moves a full meter farther every five levels from the 21st; four meters at
+  most.
 
 ## 0.16
 - From the 21st level the plinth stands farther down the street, every five levels a
