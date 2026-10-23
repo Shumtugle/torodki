@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.9";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.10";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -33,6 +33,8 @@ final class World implements Physics.Listener {
         void sound(int id, float gain, float rate);
         void saveLevel(int level);
         int loadLevel();
+        /** A file shipped with the game, or null. */
+        byte[] asset(String name);
     }
 
     private final Host host;
@@ -122,7 +124,7 @@ final class World implements Physics.Listener {
         bgCol = ras.col.clone();
         bgZ = ras.zb.clone();
         bgLit = ras.lit.clone();
-        sky.build(ras);
+        sky.build(ras, host.asset("faces.bin"));
         if (firstBuild) {
             firstBuild = false;
             startLevel(level, true);
@@ -159,6 +161,7 @@ final class World implements Physics.Listener {
         hammer.asleep = false;
         phys.add(hammer);
         buildFromSky = false;
+        lastBuildTime = 0f;
         stars = STARS;
         throwsMade = 0;
         thundered = false;
@@ -581,8 +584,31 @@ final class World implements Physics.Listener {
 
     private float buildDuration() {
         int n = pieces.size();
+        if (buildFromSky) {
+            float end = 0f;
+            for (int i = 0; i < n; i++) end = Math.max(end, skyAppear(i) + skyFall(i));
+            return end;
+        }
         return Math.min(0.05f, 1.7f / Math.max(1, n)) * n + 0.4f;
     }
+
+    // pieces sent down by the gods: they appear 15, 10 or 5 meters up and fall under a brisk gravity
+    private static final float SKY_G = 26f;
+    private static final float[] SKY_H = {15f, 10f, 5f};
+
+    private float skyHeight(int i) {
+        return SKY_H[i % 3];
+    }
+
+    private float skyFall(int i) {
+        return (float) Math.sqrt(2f * skyHeight(i) / SKY_G);
+    }
+
+    private float skyAppear(int i) {
+        return 0.25f + i * Math.min(0.07f, 1.6f / Math.max(1, pieces.size()));
+    }
+
+    private float lastBuildTime;
 
     private float stagger() {
         return Math.min(0.05f, 1.7f / Math.max(1, pieces.size()));
@@ -591,6 +617,15 @@ final class World implements Physics.Listener {
     private int lastLanded = -1;
 
     private void buildSounds() {
+        if (buildFromSky) {
+            for (int i = 0; i < pieces.size(); i++) {
+                float land = skyAppear(i) + skyFall(i);
+                if (land > lastBuildTime && land <= stateTime)
+                    host.sound(Synth.TOCK, 0.18f + skyHeight(i) * 0.02f, 0.75f + fx.nextFloat() * 0.5f);
+            }
+            lastBuildTime = stateTime;
+            return;
+        }
         float st = stagger();
         int landed = (int) ((stateTime - 0.4f) / st);
         if (stateTime < 0.4f) landed = -1;
@@ -807,12 +842,21 @@ final class World implements Physics.Listener {
         for (int i = 0; i < pieces.size(); i++) {
             Body b = pieces.get(i);
             float scale = 1f, drop = 0f;
-            if (state == BUILD) {
+            if (state == BUILD && buildFromSky) {
+                // out of nothing, high above, and down into place
+                float t = stateTime - skyAppear(i);
+                if (t < 0f) continue;
+                float fall = skyFall(i);
+                if (t < fall) {
+                    drop = skyHeight(i) - 0.5f * SKY_G * t * t;
+                    scale = Math.min(1f, t / 0.12f);
+                }
+            } else if (state == BUILD) {
                 float t = stateTime - 0.4f - i * st;
                 if (t < -0.35f) continue;
                 if (t < 0f) {
                     float k = (t + 0.35f) / 0.35f;
-                    drop = (1f - k * k) * (fromSky || buildFromSky ? 16f : 4f);
+                    drop = (1f - k * k) * 4f;
                 }
             } else if (state == VANISH) {
                 float k = Math.min(1f, stateTime / 0.35f);

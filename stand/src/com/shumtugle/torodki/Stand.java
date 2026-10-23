@@ -61,6 +61,15 @@ public final class Stand implements World.Host {
     }
 
     @Override
+    public byte[] asset(String name) {
+        try {
+            return java.nio.file.Files.readAllBytes(new File("assets", name).toPath());
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    @Override
     public void saveLevel(int level) {
         savedLevel = level;
     }

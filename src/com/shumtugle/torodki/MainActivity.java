@@ -90,6 +90,21 @@ public final class MainActivity extends Activity implements World.Host {
     }
 
     @Override
+    public byte[] asset(String name) {
+        try {
+            java.io.InputStream in = getAssets().open(name);
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            in.close();
+            return out.toByteArray();
+        } catch (java.io.IOException e) {
+            return null;
+        }
+    }
+
+    @Override
     public void quit() {
         runOnUiThread(new Runnable() {
             @Override

@@ -20,12 +20,14 @@ wait 1.3
 shot s4_throwing
 wait 0.9
 shot s5_down
-wait 0.6
+wait 0.35
 shot s6_falling
-wait 1.5
+wait 0.35
+shot s6b_falling
+wait 1.3
 shot s7_next
 state
 lose
-wait 3.6
+wait 4.2
 shot s8_yawn
 state

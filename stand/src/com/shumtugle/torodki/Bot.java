@@ -16,6 +16,7 @@ public final class Bot implements World.Host {
     public void sound(int id, float gain, float rate) { }
     public void saveLevel(int level) { }
     public int loadLevel() { return 0; }
+    public byte[] asset(String name) { return null; }
 
     static final float DT = 1f / 60f;
     /** A casual player throws at a random piece instead of the best one. */

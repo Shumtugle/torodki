@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10
+- A new sky: towering clouds made of noise, heaped in billows, gold where the low sun
+  reaches, soft lavender in the folds, with a fine grain.
+- The gods are carved faces half dissolved in the clouds, toned to their light. They
+  have no hands any more; they judge with their mouths: laughter (and the thunderer's
+  lightning), a smile, nothing, or a yawn.
+- The next building comes out of nothing: its pieces appear 15, 10 and 5 meters up and
+  fall into place as the view comes back down to the street.
+
 ## 0.9
 - The audience in the sky are now the old gods of the place, carved of cloud like marble
   and lit gold from below by the low sun: a bearded thunderer, a goddess with a laurel
