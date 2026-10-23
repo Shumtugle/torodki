@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.25
+- Five more likenesses of the gods, seen from below. These have one face each, at rest,
+  so they come on visits when that god is to keep his face; a god who is to laugh, frown
+  or doze comes in a likeness that has that face. More faces, more chance.
+
 ## 0.24
 - The bearded gods never yawn: when the stars run out the elder keeps his calm face.
 - The golden cube: once the golden hammer has been given, now and then (one building in

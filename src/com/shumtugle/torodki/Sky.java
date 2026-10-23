@@ -298,15 +298,6 @@ final class Sky {
     /** A verdict; on a jubilee every god who can laugh laughs aloud, open mouths and all. */
     void begin(int verdict, boolean jubilee) {
         this.verdict = verdict;
-        // each god comes in one of his pictures
-        for (int g = 0; g < GODS; g++) {
-            int n = 0;
-            for (int e = 0; e < pictures; e++) if (role[e] == g) n++;
-            if (n == 0) continue;
-            int k = rnd.nextInt(n);
-            for (int e = 0; e < pictures; e++)
-                if (role[e] == g && k-- == 0) pick[g] = e;
-        }
         // one open mouth at most: the thunderer's on an ovation (he brings the lightning), else anyone's
         int open = 0;
         for (int g = 0; g < GODS; g++) {
@@ -319,6 +310,15 @@ final class Sky {
             boolean mine = jubilee || (verdict == OVATION ? g == THUNDERER : k == keep);
             k++;
             if (!mine) faceTo[g] = 0;
+        }
+        // each god comes in one of his pictures: one that has the face he is to change to
+        for (int g = 0; g < GODS; g++) {
+            int n = 0;
+            for (int e = 0; e < pictures; e++) if (role[e] == g && face[e].length > faceTo[g]) n++;
+            if (n == 0) continue;
+            int k = rnd.nextInt(n);
+            for (int e = 0; e < pictures; e++)
+                if (role[e] == g && face[e].length > faceTo[g] && k-- == 0) pick[g] = e;
         }
         time = 0f;
         boltIdx = -1;
