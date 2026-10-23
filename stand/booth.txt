@@ -1,0 +1,23 @@
+# The call box on the lamp post: three presses open the booth; a level, or the golem.
+screen 1096 2560
+level 75
+wait 2.5
+shot b0_post
+press
+wait 0.3
+shot b1_pressed
+wait 0.8
+press
+wait 0.8
+press
+wait 0.3
+shot b2_opening
+wait 0.6
+shot b3_open
+drag 137 500 137 300 0.4
+wait 0.2
+shot b4_scrolled
+tap 137 570
+wait 1.5
+shot b5_golem
+state

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.31
+- A call box on the lamp post to the right: a grey case with a red button. Each press
+  rings the dispatcher. Press three times and a phone booth opens: inside, a button for
+  every level reached, the current one lit, and at the bottom the golem's button. The
+  way out is the button marked STREET, or the back key.
+- Swapping hammers is easier: a tap on the hammer may last up to six tenths of a second
+  and wander a little; before, a slow tap turned into a throw.
+
 ## 0.30
 - The golem is new: a hunched giant heaped from stone blocks and courses of brick, rods
   of rusty iron out of its shoulders and back, fists of rubble, a stone head sunk between

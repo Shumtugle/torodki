@@ -233,6 +233,9 @@ final class Backdrop {
                 r.box(x, 2.1f, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.06f, 2.1f, 0.06f, 0xFF2E2D2F, Raster.PAT_FLAT, 0);
                 r.box(x, 4.35f, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.16f, 0.22f, 0.16f, 0xFF3A3836, Raster.PAT_FLAT, 0);
                 r.box(x, 4.3f, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.13f, 0.12f, 0.13f, 0xFFF3E2B4, Raster.PAT_FLAT, 0);
+                // a call box on one post: a grey case facing the street, its button lit by the game
+                if (side == 1 && z == World.CALL_Z)
+                    r.box(x - 0.12f, World.CALL_Y, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.07f, 0.26f, 0.17f, 0xFF8E959C, Raster.PAT_FLAT, 0);
             }
             for (int b = 1; b < 4; b++)
                 r.box(4.45f, 0.4f, z + b * 3.2f, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08f, 0.4f, 0.08f, 0xFF2E2D2F, Raster.PAT_FLAT, 0);

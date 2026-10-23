@@ -12,9 +12,9 @@ import java.util.Random;
 final class Synth {
     static final int RATE = 22050;
     static final int WOOD = 0, STONE = 1, GROUND = 2, WHOOSH = 3, THUNDER = 4, CATCH = 5, TOCK = 6, GLASS = 7;
-    static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11, POP = 12, ROAR = 13, BEAT = 14;
+    static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11, POP = 12, ROAR = 13, BEAT = 14, RING = 15, DOOR = 16;
 
-    final float[][] bank = new float[15][];
+    final float[][] bank = new float[17][];
 
     Synth() {
         Random r = new Random(7);
@@ -37,6 +37,8 @@ final class Synth {
         bank[POP] = pop(r);
         bank[ROAR] = roar(r);
         bank[BEAT] = beat();
+        bank[RING] = ring(r);
+        bank[DOOR] = door(r);
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
     }
@@ -85,6 +87,44 @@ final class Synth {
             float throb = 0.65f + 0.35f * (float) Math.sin(t * 2f * Math.PI * 17f);
             float env = Math.min(1f, t * 6f) * Math.min(1f, (1.5f - t) * 2.5f);
             s[i] = (saw * 0.45f + saw2 * 0.25f + lp * 0.9f) * throb * env * 0.6f;
+        }
+        return s;
+    }
+
+    /** A call to the dispatcher: the click of the button, then the ringing tone down a line. */
+    private static float[] ring(Random r) {
+        int n = (int) (1.1f * RATE);
+        float[] s = new float[n];
+        float lp = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float v = 0f;
+            if (t < 0.03f) v = (r.nextFloat() * 2f - 1f) * (1f - t / 0.03f);
+            float tt = t - 0.12f;
+            if (tt > 0f && tt < 0.85f) {
+                float tone = (float) Math.sin(2 * Math.PI * 425f * tt) + 0.35f * (float) Math.sin(2 * Math.PI * 850f * tt);
+                float env = Math.min(1f, tt * 30f) * Math.min(1f, (0.85f - tt) * 30f);
+                lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.5f;
+                v += (tone * 0.5f + lp * 0.08f) * env;
+            }
+            s[i] = v * 0.55f;
+        }
+        return s;
+    }
+
+    /** The folding door of the booth: a creak, the rattle of glass, a soft knock. */
+    private static float[] door(Random r) {
+        int n = (int) (0.7f * RATE);
+        float[] s = new float[n];
+        float ph = 0f, lp = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            ph += (300f + 200f * (float) Math.sin(t * 9f)) / RATE;
+            float creak = ((ph % 1f) < 0.5f ? 1f : -1f) * (float) Math.exp(-4f * t) * 0.18f;
+            lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.6f;
+            float rattle = lp * (0.5f + 0.5f * (float) Math.sin(t * 2 * Math.PI * 23f)) * 0.15f * Math.min(1f, t * 8f);
+            float knock = t > 0.55f ? (float) Math.sin(2 * Math.PI * 110f * (t - 0.55f)) * (float) Math.exp(-30f * (t - 0.55f)) * 0.6f : 0f;
+            s[i] = creak + rattle + knock;
         }
         return s;
     }

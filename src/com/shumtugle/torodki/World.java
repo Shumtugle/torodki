@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.30";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.31";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -245,6 +245,7 @@ final class World implements Physics.Listener {
 
     /** Raises the building for a level: tested for standing still, asleep, ready to fall. */
     void startLevel(int lv, boolean animate) {
+        if (lv + 1 > best()) host.saveInt("best", lv + 1);
         if (lv != level) {
             fails = 0;
             host.saveFails(0);
@@ -490,6 +491,19 @@ final class World implements Physics.Listener {
     // ---- input ----
 
     void touch(int type, float x, float y) {
+        if (booth >= 0f) {
+            boothTouch(type, x, y);
+            return;
+        }
+        if (type == DOWN && state == PLAY && hs == HAND && onCallButton(x, y)) {
+            call();
+            return;
+        }
+        if (type == DOWN) {
+            tapX = x;
+            tapY = y;
+            tapFar = 0f;
+        } else tapFar = Math.max(tapFar, (float) Math.hypot(x - tapX, y - tapY));
         if (type == DOWN) {
             boolean fight = state == BOSS && bossEnd < 0f;
             if (!fight && (state != PLAY || stars <= 0) || hs != HAND) return;
@@ -529,7 +543,7 @@ final class World implements Physics.Listener {
         if (type == UP) {
             aiming = false;
             // a short tap on the hammer, without a move, swaps hammers instead of throwing
-            if (tapOnHammer && clock - downAt < 0.35f && movedAt == downAt) {
+            if (tapOnHammer && clock - downAt < 0.6f && tapFar < 6f) {
                 heavyOn = !heavyOn;
                 power = 0f;
                 host.sound(Synth.CATCH, 0.6f, heavyOn ? 0.7f : 1.2f);
@@ -570,7 +584,8 @@ final class World implements Physics.Listener {
     }
 
     void back() {
-        host.quit();
+        if (booth >= 0f) closeBooth();
+        else host.quit();
     }
 
     /** Where the hammer in hand is on screen, the other one at the lower left, and the gift marks. */
@@ -707,6 +722,166 @@ final class World implements Physics.Listener {
         return n;
     }
 
+    // ---- the call box ----
+    // On the lamp post to the right a call box with a red button. Each press rings the
+    // dispatcher; three in a row and a phone booth opens: inside, a button for every level
+    // reached, and one at the bottom that calls the golem.
+
+    static final float CALL_Z = 16f, CALL_Y = 1.45f, CALL_X = 4.55f - 0.2f;
+    private float tapX, tapY, tapFar;
+    private int calls;
+    private float callAt = -9f;
+    float booth = -1f;                   // seconds since the booth opened, or -1 when shut
+    private float boothScroll, boothDownY, boothDownX, boothMoved, boothScroll0;
+
+    int best() {
+        return Math.max(level + 1, host.loadInt("best"));
+    }
+
+    private boolean onCallButton(float x, float y) {
+        float vz = ras.project(CALL_X, CALL_Y, CALL_Z, scr);
+        if (vz < 0.5f) return false;
+        return Math.hypot(x - scr[0], y - scr[1]) < 11f;
+    }
+
+    private void call() {
+        if (clock - callAt > 6f) calls = 0;
+        calls++;
+        callAt = clock;
+        host.sound(Synth.RING, 0.9f, 1f);
+        host.buzz(20);
+        if (calls >= 3) {
+            calls = 0;
+            booth = 0f;
+            boothScroll = 0f;
+            host.sound(Synth.DOOR, 1f, 1f);
+        }
+    }
+
+    private void closeBooth() {
+        booth = -1f;
+        host.sound(Synth.DOOR, 0.8f, 1.15f);
+    }
+
+    /** The button on the post: red, and lit for a moment after each press. */
+    private void drawCallButton() {
+        float vz = ras.project(CALL_X, CALL_Y, CALL_Z, scr);
+        if (vz < 0.5f) return;
+        boolean lit = clock - callAt < 1.1f && ((int) ((clock - callAt) * 8f) & 1) == 0;
+        float r = Math.max(1.6f, 0.1f * ras.f / vz);
+        ras.disc(scr[0], scr[1], r + 0.6f, 1f / (vz - 0.25f), 0xFF3A3C40, 990 << 3);
+        ras.disc(scr[0], scr[1], r, 1f / (vz - 0.3f), lit ? 0xFFFF6A4A : 0xFFC8231E, 990 << 3);
+        ras.disc(scr[0] - r * 0.3f, scr[1] - r * 0.35f, Math.max(0.6f, r * 0.3f), 1f / (vz - 0.32f), 0xFFFFB0A0, 990 << 3);
+    }
+
+    // the booth on screen: doors, glass, and the panel inside
+    private static final int BX0 = 18, BX1 = World.W - 18, BCOLS = 5, BBW = 38, BBH = 22, BGAP = 5;
+
+    private int boothTop() {
+        return 44;
+    }
+
+    private int panelY0() {
+        return boothTop() + 38;
+    }
+
+    private int panelY1() {
+        return h - 92;
+    }
+
+    private void boothTouch(int type, float x, float y) {
+        if (booth < 0.6f) return;
+        if (type == DOWN) {
+            boothDownX = x;
+            boothDownY = y;
+            boothMoved = 0f;
+            boothScroll0 = boothScroll;
+            return;
+        }
+        boothMoved = Math.max(boothMoved, Math.abs(y - boothDownY) + Math.abs(x - boothDownX));
+        if (type == MOVE) {
+            int rows = (best() + BCOLS - 1) / BCOLS;
+            float maxScroll = Math.max(0f, rows * (BBH + BGAP) - (panelY1() - panelY0()) + BGAP);
+            boothScroll = Math.max(0f, Math.min(maxScroll, boothScroll0 - (y - boothDownY)));
+            return;
+        }
+        if (type != UP || boothMoved > 6f) return;
+        // the two buttons at the bottom
+        int gy = h - 84;
+        if (y >= gy && y < gy + 30 && x >= BX0 + 10 && x < BX1 - 10) {
+            booth = -1f;
+            host.sound(Synth.ROAR, 0.8f, 1f);
+            startBoss(level);
+            return;
+        }
+        if (y >= gy + 38 && y < gy + 62 && x >= BX0 + 50 && x < BX1 - 50) {
+            closeBooth();
+            return;
+        }
+        // a level
+        if (y < panelY0() || y >= panelY1()) return;
+        int x0 = (W - (BCOLS * BBW + (BCOLS - 1) * BGAP)) / 2;
+        int col = (int) ((x - x0) / (BBW + BGAP)), row = (int) ((y - panelY0() + boothScroll - BGAP) / (BBH + BGAP));
+        if (col < 0 || col >= BCOLS || x - x0 - col * (BBW + BGAP) > BBW) return;
+        int lv = row * BCOLS + col;
+        if (lv < 0 || lv >= best()) return;
+        booth = -1f;
+        host.sound(Synth.TOCK, 1f, 1f);
+        startLevel(lv, true);
+    }
+
+    private void drawBooth(Px f) {
+        // the street goes dim behind
+        for (int k = 0; k < f.a.length; k++) f.a[k] = Backdrop.mix(f.a[k], 0xFF101418, 0.55f);
+        int top = boothTop(), bot = h - 10;
+        // the booth: a frame of painted iron, a roof with a lamp
+        f.rect(BX0 - 6, top - 22, BX1 + 6, bot, 0xFF5E1612);
+        f.rect(BX0 - 10, top - 30, BX1 + 10, top - 20, 0xFF4A100C);
+        f.rect(W / 2 - 34, top - 19, W / 2 + 34, top - 7, 0xFF2A2420);
+        PixelFont.draw(f, "CALL BOX", W / 2 - PixelFont.width("CALL BOX", 1) / 2, top - 16, 1, 0xFFFFE6A0);
+        f.rect(BX0, top, BX1, bot - 6, 0xFF30353A);
+        // the panel inside: rows of buttons, one for every level reached
+        int y0 = panelY0(), y1 = panelY1();
+        PixelFont.draw(f, "LEVELS", BX0 + 8, top + 10, 1, 0xFFD8D0C0);
+        f.rect(BX0 + 4, y0 - 4, BX1 - 4, y1 + 4, 0xFF22262A);
+        int n = best();
+        int x0 = (W - (BCOLS * BBW + (BCOLS - 1) * BGAP)) / 2;
+        for (int lv = 0; lv < n; lv++) {
+            int col = lv % BCOLS, row = lv / BCOLS;
+            int bx = x0 + col * (BBW + BGAP), by = y0 + BGAP + row * (BBH + BGAP) - Math.round(boothScroll);
+            if (by + BBH < y0 || by >= y1) continue;
+            boolean here = lv == level;
+            for (int yy = Math.max(y0, by); yy < Math.min(y1, by + BBH); yy++) {
+                boolean edge = yy == by || yy == by + BBH - 1;
+                int c = here ? 0xFFF2C14E : edge ? 0xFF8C9298 : 0xFFB8BEC4;
+                for (int xx = bx; xx < bx + BBW; xx++) f.set(xx, yy, xx == bx || xx == bx + BBW - 1 ? 0xFF6A7076 : c);
+            }
+            String s = String.valueOf(lv + 1);
+            int ty = by + BBH / 2 - 3;
+            if (ty >= y0 && ty + 7 <= y1)
+                PixelFont.draw(f, s, bx + BBW / 2 - PixelFont.width(s, 1) / 2, ty, 1, 0xFF2A2420);
+        }
+        // the golem's button, and the way back out
+        int gy = h - 84;
+        f.rect(BX0 + 10, gy, BX1 - 10, gy + 30, 0xFF3A1A10);
+        f.rect(BX0 + 12, gy + 2, BX1 - 12, gy + 28, ((int) (clock * 3f) & 1) == 0 ? 0xFFE0602A : 0xFFC8501E);
+        PixelFont.draw(f, "GOLEM", W / 2 - PixelFont.width("GOLEM", 2) / 2, gy + 8, 2, 0xFF2A1408);
+        f.rect(BX0 + 50, gy + 38, BX1 - 50, gy + 62, 0xFF6A7076);
+        PixelFont.draw(f, "STREET", W / 2 - PixelFont.width("STREET", 1) / 2, gy + 47, 1, 0xFFF2F0E8);
+        // the doors fold away to the sides as it opens
+        float k = Math.min(1f, booth / 0.6f);
+        int half = (BX1 - BX0) / 2, open = Math.round(half * k * k * (3f - 2f * k));
+        for (int side = 0; side < 2; side++) {
+            int a = side == 0 ? BX0 : W / 2 + open, b = side == 0 ? W / 2 - open : BX1;
+            if (b <= a) continue;
+            f.rect(a, top, b, bot - 6, 0xFF8E2018);
+            for (int py = top + 6; py < bot - 12; py += 26)
+                for (int px = a + 4; px < b - 4; px += 1)
+                    for (int yy = py; yy < Math.min(bot - 12, py + 20); yy++)
+                        f.a[yy * W + px] = Backdrop.mix(f.a[yy * W + px], 0xFFAFC8D2, 0.35f);
+        }
+    }
+
     // ---- the fight with the golem ----
 
     /** For the desktop stand's player: the screen point it should throw at now, or null. */
@@ -730,6 +905,13 @@ final class World implements Physics.Listener {
         else golem.headCenter(tmp);
         ras.project(tmp[0], tmp[1], tmp[2], o);
         o[2] = 0f;
+        return o;
+    }
+
+    /** For the desktop stand: where the call button is on screen. */
+    float[] standCallButton() {
+        float[] o = new float[2];
+        ras.project(CALL_X, CALL_Y, CALL_Z, o);
         return o;
     }
 
@@ -1428,6 +1610,10 @@ final class World implements Physics.Listener {
     // ---- simulation ----
 
     void update(float dt) {
+        if (booth >= 0f) {
+            booth += dt;
+            return;
+        }
         clock += dt;
         stateTime += dt;
         // fixed physics steps, at most two a frame
@@ -2053,6 +2239,7 @@ final class World implements Physics.Listener {
         java.util.Arrays.fill(ras.idb, 0);
 
         if (golem == null) drawBody(plinth, 1f, 0f, 1);
+        drawCallButton();
         float st = stagger();
         ras.shadowBegin(6f, Builder.CZ + 1f, 12f);
         if (golem == null)
@@ -2125,6 +2312,7 @@ final class World implements Physics.Listener {
                 drawFightHud(f);
                 drawFlash(f);
             } else drawHud(f);
+            if (booth >= 0f) drawBooth(f);
         }
     }
 
