@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.8";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.9";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -100,6 +100,10 @@ final class World implements Physics.Listener {
     private final Life life;
     private final Sky sky = new Sky();
     private float holdFor;
+    private boolean fromSky;          // looking back down from the sky at a building in the making
+    private float backT;
+    private int boltsHeard;
+    private boolean buildFromSky;
 
     World(Host host) {
         this.host = host;
@@ -154,6 +158,7 @@ final class World implements Physics.Listener {
         hammer.ghost = true;
         hammer.asleep = false;
         phys.add(hammer);
+        buildFromSky = false;
         stars = STARS;
         throwsMade = 0;
         thundered = false;
@@ -391,6 +396,18 @@ final class World implements Physics.Listener {
         trail();
 
         hammerMoves(dt);
+        if (state == SKY_UP || state == SKY_HOLD || fromSky) {
+            sky.update(dt);
+            if (sky.bolts != boltsHeard) {
+                boltsHeard = sky.bolts;
+                host.sound(Synth.THUNDER, 1.0f, 0.9f + fx.nextFloat() * 0.2f);
+                host.buzz(90);
+            }
+        }
+        if (fromSky) {
+            backT += dt;
+            if (backT >= TILT + 0.2f) fromSky = false;
+        }
         switch (state) {
             case BUILD:
                 if (stateTime > buildDuration() + 0.15f) setState(PLAY);
@@ -413,16 +430,16 @@ final class World implements Physics.Listener {
                 }
                 break;
             case SKY_UP:
-                sky.update(dt);
-                if (stateTime >= TILT) {
-                    // while everyone looks up, the next building rises below
-                    startLevel(level + nextAfterVanish, false);
-                    setState(SKY_HOLD);
-                }
+                if (stateTime >= TILT) setState(SKY_HOLD);
                 break;
             case SKY_HOLD:
-                sky.update(dt);
-                if (stateTime >= holdFor) setState(SKY_DOWN);
+                if (stateTime >= holdFor) {
+                    // the gods have thrown the blocks: the next building falls into place as we look down
+                    startLevel(level + nextAfterVanish, true);
+                    fromSky = true;
+                    buildFromSky = true;
+                    backT = 0f;
+                }
                 break;
             case SKY_DOWN:
                 sky.update(dt);
@@ -546,7 +563,8 @@ final class World implements Physics.Listener {
 
     private void lookUp(int verdict) {
         sky.begin(verdict);
-        holdFor = verdict == Sky.YAWN ? 1.5f : verdict == Sky.OVATION ? 2.6f : 2.0f;
+        holdFor = verdict == Sky.YAWN ? 2.2f : verdict == Sky.OVATION ? 3.0f : 2.4f;
+        boltsHeard = sky.bolts;
         setState(SKY_UP);
     }
 
@@ -555,7 +573,7 @@ final class World implements Physics.Listener {
         float k;
         if (state == SKY_UP) k = Math.min(1f, stateTime / TILT);
         else if (state == SKY_HOLD) k = 1f;
-        else if (state == SKY_DOWN) k = 1f - Math.min(1f, stateTime / TILT);
+        else if (fromSky) k = 1f - Math.min(1f, backT / TILT);
         else return 0;
         k = k * k * (3f - 2f * k);
         return Math.round(k * h);
@@ -794,7 +812,7 @@ final class World implements Physics.Listener {
                 if (t < -0.35f) continue;
                 if (t < 0f) {
                     float k = (t + 0.35f) / 0.35f;
-                    drop = (1f - k * k) * 4f;
+                    drop = (1f - k * k) * (fromSky || buildFromSky ? 16f : 4f);
                 }
             } else if (state == VANISH) {
                 float k = Math.min(1f, stateTime / 0.35f);

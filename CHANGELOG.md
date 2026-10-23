@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9
+- The audience in the sky are now the old gods of the place, carved of cloud like marble
+  and lit gold from below by the low sun: a bearded thunderer, a goddess with a laurel
+  wreath, a thinker with his chin on his fist, an elder and one who is easily bored.
+- They judge the fall: laughter and three strokes of lightning (with thunder) for one
+  throw, smiles for a few, a polite stare for many; when the stars run out, eyes close
+  and the bored one yawns behind his hand.
+- The gods build the next level: the elder and the thunderer throw blocks down, and as
+  the view comes back to the street the new building falls out of the sky into place.
+- Towering cumulus banks lit as whole masses: gold on the sun side, lavender in the folds.
+
 ## 0.8
 - Between buildings the view tips up into the evening sky, where the clouds are the
   audience, with faces you can just make out. One throw: they bounce and burst into puffs
