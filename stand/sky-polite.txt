@@ -1,0 +1,6 @@
+screen 1096 2560
+level 0
+wait 0.5
+win 5
+wait 3.4
+shot polite
