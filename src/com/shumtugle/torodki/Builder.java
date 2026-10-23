@@ -11,9 +11,10 @@ import java.util.Random;
  * caller to test.
  */
 final class Builder {
-    static final float TOP = 0.75f;          // plinth top
+    static final float S = 1.5f;             // recipe units to meters
+    static final float TOP = 1.0f;           // plinth top
     static final float CZ = 11.5f;           // plinth center along the street
-    static final float PHX = 1.42f, PHZ = 0.78f;
+    static final float PHX = 1.42f * S, PHZ = 0.78f * S;
 
     // in the order they first appear: the first ones fall easily, the pyramid is the stubborn one
     static final String[] KINDS = {"TOWER", "SEESAW", "WALL", "WELL", "GATE", "PRESS", "STEPS"};
@@ -65,9 +66,10 @@ final class Builder {
         return b;
     }
 
-    /** A piece by its bottom-center point. */
+    /** A piece by its bottom-center point, in recipe units above the plinth top. */
     private float put(float x, float bottom, float z, float sx, float sy, float sz, boolean stone) {
-        piece(x, bottom + sy * 0.5f, CZ + z, sx, sy, sz, stone);
+        // recipes are written at a modest size; the world builds them bigger
+        piece(x * S, TOP + (bottom + sy * 0.5f) * S, CZ + z * S, sx * S, sy * S, sz * S, stone);
         return bottom + sy;
     }
 
@@ -80,7 +82,7 @@ final class Builder {
         float bw = 0.42f, bh = 0.2f, bd = 0.24f + rnd.nextFloat() * 0.06f;
         boolean stoneRows = rnd.nextBoolean();
         float width = cols * bw;
-        float y = TOP;
+        float y = 0f;
         for (int r = 0; r < rows; r++) {
             boolean stone = stoneRows && r % 3 == 0;
             if ((r & 1) == 0) {
@@ -98,7 +100,7 @@ final class Builder {
     private void tower(int size) {
         int storeys = 2 + Math.min(2, size) + rnd.nextInt(2);
         float w = 1.25f + rnd.nextFloat() * 0.2f;
-        float y = TOP;
+        float y = 0f;
         float post = 0.15f;
         for (int s = 0; s < storeys; s++) {
             float ph = 0.5f + rnd.nextFloat() * 0.15f;
@@ -114,7 +116,7 @@ final class Builder {
 
     /** A pillar with a long beam balanced on it and loads at both ends. */
     private void seesaw(int size) {
-        float y = TOP;
+        float y = 0f;
         int blocks = 2 + rnd.nextInt(2);
         for (int i = 0; i < blocks; i++) y = put(0, y, 0, 0.42f, 0.38f, 0.42f, true);
         float len = 2.4f + 0.2f * Math.min(2, size);
@@ -129,7 +131,7 @@ final class Builder {
 
     /** A heavy cube of small blocks on one thin stone leg. */
     private void press(int size) {
-        float y = TOP;
+        float y = 0f;
         int legs = 1 + rnd.nextInt(2);
         for (int i = 0; i < legs; i++) y = put(0, y, 0, 0.3f, 0.55f, 0.3f, true);
         y = put(0, y, 0, 1.3f, 0.1f, 1.0f, true);
@@ -147,7 +149,7 @@ final class Builder {
     private void well(int size) {
         int layers = 6 + Math.min(4, size * 2) + rnd.nextInt(3);
         float len = 1.45f, t = 0.16f, o = len / 2 - 0.14f;
-        float y = TOP;
+        float y = 0f;
         for (int l = 0; l < layers; l++) {
             boolean alongX = (l & 1) == 0;
             for (int s = -1; s <= 1; s += 2) {
@@ -163,7 +165,7 @@ final class Builder {
     private void steps(int size) {
         int base = 4 + Math.min(2, size);
         float bw = 2.6f / base, bh = 0.3f, bd = 0.42f;
-        float y = TOP;
+        float y = 0f;
         for (int r = 0; r < base; r++) {
             int n = base - r;
             for (int i = 0; i < n; i++) {
@@ -179,7 +181,7 @@ final class Builder {
     private void gate(int size) {
         int h = 3 + Math.min(2, size) + rnd.nextInt(2);
         float c = 0.34f, gap = 1.1f;
-        float y = TOP;
+        float y = 0f;
         for (int i = 0; i < h; i++) {
             put(-gap / 2 - c / 2, y, 0, c, c, c, i == 0);
             put(gap / 2 + c / 2, y, 0, c, c, c, i == 0);

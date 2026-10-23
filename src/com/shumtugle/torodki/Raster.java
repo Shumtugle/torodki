@@ -19,9 +19,10 @@ final class Raster {
     boolean flat;                        // boxes take their color as it is: silhouettes                 // yaw: forward is (syw, 0, cyw)
 
     // sun: direction toward it, and the shadow map basis
-    static final float LX = -0.42f, LY = 0.80f, LZ = -0.43f;
+    // a low evening sun from the left, over the promenade: long shadows across the street
+    static final float LX = -0.80f, LY = 0.31f, LZ = -0.20f;
     private float e1x, e1y, e1z, e2x, e2y, e2z;
-    static final int SM = 224;
+    static final int SM = 320;
     private final float[] sm = new float[SM * SM];
     private float smCx, smCz, smHalf = 5f;
 
@@ -118,7 +119,7 @@ final class Raster {
 
     // ---- polygons ----
 
-    static final int PAT_FLAT = 0, PAT_GRAIN = 1, PAT_WINDOWS = 2, PAT_STONE = 3, PAT_BANDS = 4;
+    static final int PAT_FLAT = 0, PAT_GRAIN = 1, PAT_WINDOWS = 2, PAT_STONE = 3, PAT_BANDS = 4, PAT_FACADE = 5;
 
     private final float[] vx = new float[16], vy = new float[16], vz = new float[16], vu = new float[16], vv = new float[16];
     private final float[] cxs = new float[16], cys = new float[16], czs = new float[16], cus = new float[16], cvs = new float[16];
@@ -212,6 +213,12 @@ final class Raster {
                 float iq = 1f / z;
                 float uu = (w0 * u0 + w1 * u1 + w2 * u2) * iq;
                 float vv2 = (w0 * v0 + w1 * v1 + w2 * v2) * iq;
+                if (pat == PAT_FACADE) {
+                    int fc = facade(uu, vv2, facadeBase, facadeSeed);
+                    int r = (int) (((fc >> 16) & 0xFF) * fk[0]), g = (int) (((fc >> 8) & 0xFF) * fk[1]), bl = (int) ((fc & 0xFF) * fk[2]);
+                    col[k] = 0xFF000000 | (Math.min(255, r) << 16) | (Math.min(255, g) << 8) | Math.min(255, bl);
+                    continue;
+                }
                 int m = shade(pat, uu, vv2);
                 int r = cr * m >> 8, g = cg * m >> 8, bl = cb * m >> 8;
                 if (r > 255) r = 255;
@@ -220,6 +227,78 @@ final class Raster {
                 col[k] = 0xFF000000 | (r << 16) | (g << 8) | bl;
             }
         }
+    }
+
+    // the facade being drawn: its wall color, its own seed, and the light on the face
+    int facadeBase;
+    int facadeSeed;
+    private final float[] fk = new float[3];
+
+    private static int nz(int a, int b, int seed) {
+        int h = a * 374761393 + b * 668265263 + seed * 1442695041;
+        h = (h ^ (h >>> 13)) * 1274126177;
+        return (h ^ (h >>> 16)) & 0xFF;
+    }
+
+    /**
+     * A street front in a seaside quarter, unlit, at (u along the wall, v up), meters:
+     * shops with awnings at street level; above, tall windows with shutters and small
+     * iron balconies, floor after floor, with a cornice line at every floor.
+     */
+    static int facade(float u, float v, int base, int seed) {
+        final float fh = 3.3f, bw = 2.9f;
+        int storey = (int) Math.floor(v / fh);
+        float fv = v - storey * fh;
+        int bay = (int) Math.floor(u / bw);
+        float fu = u - bay * bw;
+        int h = nz(bay, storey, seed);
+        // stucco: patches of the wall a little lighter or darker
+        int st = nz((int) (u * 3f), (int) (v * 3f), seed + 7);
+        int wall = Backdrop.scale(base, 0.93f + st / 2550f + (nz(bay, storey / 2, seed + 3) - 128) / 2200f);
+        if (fv < 0.14f && storey > 0) return Backdrop.scale(base, 0.78f);           // cornice line
+        if (fv < 0.22f && storey > 0) return Backdrop.scale(base, 1.06f);
+        if (storey == 0) {
+            if (fu > 0.3f && fu < 2.6f && fv < 2.75f) {
+                if (fv > 2.25f && (h & 3) != 0) {
+                    // an awning, striped or plain
+                    boolean stripe = (h & 4) != 0 && ((int) (fu * 4f) & 1) == 0;
+                    return stripe ? 0xFFF4EEE2 : ((h & 8) != 0 ? 0xFFB5523E : 0xFF4F7A5E);
+                }
+                int glow = nz(bay, 99, seed) > 150 ? 0xFF6E4A2E : 0xFF35302D;
+                return fv < 0.2f ? 0xFF4A4440 : glow;
+            }
+            return Backdrop.scale(wall, 0.92f);
+        }
+        boolean closed = (h & 7) == 0;
+        int shutter = (h & 16) != 0 ? 0xFF3F6A50 : 0xFF557587;
+        boolean balcony = (h & 32) != 0 || storey == 1;
+        // balcony: slab and iron railing in front of the lower half of the window
+        if (balcony && fu > 0.7f && fu < 2.2f) {
+            if (fv > 0.22f && fv < 0.34f) return 0xFF5C5450;
+            if (fv > 1.18f && fv < 1.26f) return 0xFF2B2A2C;
+            if (fv > 0.34f && fv < 1.18f && (((int) (fu * 9f)) & 1) == 0 && fu * 9f - (int) (fu * 9f) < 0.35f)
+                return 0xFF2B2A2C;
+            if (fv > 0.34f && fv < 0.62f && (h & 64) != 0 && fu > 0.85f && fu < 2.05f) {
+                // flower pots
+                int f = nz((int) (fu * 6f), storey, seed + 11);
+                return f < 90 ? 0xFF4D7A3A : f < 150 ? 0xFFD9505A : 0xFF6E9440;
+            }
+        }
+        if (balcony && fu > 0.7f && fu < 2.2f && fv > 0.1f && fv < 0.22f) return Backdrop.scale(wall, 0.62f);
+        if (fv > 0.36f && fv < 2.7f) {
+            if (fu > 0.95f && fu < 1.95f) {
+                if (closed) return ((int) (fv * 9f) & 1) == 0 ? shutter : Backdrop.scale(shutter, 0.8f);
+                if (fu < 1.01f || fu > 1.89f || fv > 2.62f) return 0xFFE9E3D6;               // frame
+                return fv > 1.6f ? 0xFF3A4048 : 0xFF2C2E33;                                    // glass
+            }
+            if ((fu > 0.5f && fu < 0.95f) || (fu > 1.95f && fu < 2.4f)) {
+                if (closed) return wall;
+                return ((int) (fv * 9f) & 1) == 0 ? shutter : Backdrop.scale(shutter, 0.8f);  // open shutters
+            }
+            if (fu > 0.42f && fu < 2.48f && fv > 2.7f - 0.08f) return Backdrop.scale(wall, 1.08f);
+        }
+        if (fv > 2.7f && fv < 2.95f && fu > 0.85f && fu < 2.05f) return Backdrop.scale(wall, 1.1f); // lintel
+        return wall;
     }
 
     /** Brightness multiplier in 1/256 for a surface pattern at (u, v). */
@@ -232,7 +311,11 @@ final class Raster {
             }
             case PAT_STONE: {
                 int i = ((int) (u * 24f) * 31 + (int) (v * 24f) * 17) & 1023;
-                return 238 + (NOISE[i] >> 3);
+                int j = ((int) (u * 5f) * 13 + (int) (v * 5f) * 29) & 1023;
+                int n = NOISE[i];
+                int m = 206 + (n >> 2) + (NOISE[j] >> 3) - 16;
+                if (n < 10) m = 150;
+                return m;
             }
             case PAT_WINDOWS: {
                 float fu = u - (float) Math.floor(u), fv = v - (float) Math.floor(v);
@@ -343,6 +426,10 @@ final class Raster {
             if ((fx - camX) * nx + (fy - camY) * ny + (fz - camZ) * nz >= 0f) continue; // facing away
             float ndl = nx * sunX() + ny * sunY() + nz * sunZ();
             int c = flat ? color : light(color, nx, ny, nz, ndl);
+            if (pat == PAT_FACADE) {
+                lightK(ny, ndl, fk);
+                facadeBase = color;
+            }
             for (int k = 0; k < 4; k++) {
                 int ci = fc[k];
                 bx[k] = cor[3 * ci];
@@ -361,25 +448,46 @@ final class Raster {
                     bu[k] = loc[3 - axis - longAxis];
                     bv[k] = loc[longAxis];
                 }
+                if (pat == PAT_FACADE) {
+                    bu[k] = axis == 0 ? lz + hz : lx + hx;
+                    bv[k] = ly + hy;
+                }
                 if (pat == PAT_STONE || pat == PAT_BANDS) {
                     bu[k] = axis == 0 ? lz + ly * 0.3f : axis == 1 ? lx + lz * 0.3f : lx + ly * 0.3f;
                     bv[k] = axis == 1 ? lz : ly;
                 }
             }
-            poly(bx, by, bz, bu, bv, 4, c, pat, id, ndl > 0.02f);
+            poly(bx, by, bz, bu, bv, 4, c, pat, id, ndl > 0.3f);
         }
     }
 
     /** Sun and sky light on a base color for a face normal. */
     static int light(int color, float nx, float ny, float nz, float ndl) {
-        float sun = Math.max(0f, ndl);
-        float sky = 0.5f + 0.5f * ny;
-        float rr = 0.36f + 0.14f * sky + 0.62f * sun;
-        float gg = 0.37f + 0.15f * sky + 0.58f * sun;
-        float b = 0.42f + 0.18f * sky + 0.50f * sun;
+        float[] k = KL.get();
+        lightK(ny, ndl, k);
+        float rr = k[0], gg = k[1], b = k[2];
         int r = (int) (((color >> 16) & 0xFF) * rr), g = (int) (((color >> 8) & 0xFF) * gg), bl = (int) ((color & 0xFF) * b);
         return 0xFF000000 | (Math.min(255, r) << 16) | (Math.min(255, g) << 8) | Math.min(255, bl);
     }
+
+    private static final ThreadLocal<float[]> KL = new ThreadLocal<float[]>() {
+        @Override
+        protected float[] initialValue() {
+            return new float[3];
+        }
+    };
+
+    /** Light on a surface as three channel factors: blue sky from above, a warm low sun. */
+    static void lightK(float ny, float ndl, float[] out) {
+        float sun = Math.max(0f, ndl);
+        float sky = 0.5f + 0.5f * ny;
+        out[0] = 0.27f + 0.10f * sky + 1.08f * sun;
+        out[1] = 0.30f + 0.11f * sky + 0.84f * sun;
+        out[2] = 0.40f + 0.16f * sky + 0.60f * sun;
+    }
+
+    // multiply for what the sun does not reach: dark and a little blue
+    static final int SH_R = 112, SH_G = 122, SH_B = 162;
 
     // ---- shadows ----
 
@@ -471,7 +579,7 @@ final class Raster {
                 if (s < 0 || t < 0 || s >= SM || t >= SM) continue;
                 if (sm[t * SM + s] > smD(wx, wy, wz) + bias) {
                     int c = col[k];
-                    int r = ((c >> 16) & 0xFF) * 150 >> 8, g = ((c >> 8) & 0xFF) * 160 >> 8, b = (c & 0xFF) * 196 >> 8;
+                    int r = ((c >> 16) & 0xFF) * SH_R >> 8, g = ((c >> 8) & 0xFF) * SH_G >> 8, b = (c & 0xFF) * SH_B >> 8;
                     col[k] = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
             }
@@ -520,7 +628,7 @@ final class Raster {
                 float z = w0 * gz[a] + w1 * gz[b] + w2 * gz[c];
                 if (zb[k] > z * 1.01f + 1e-5f) continue;   // something nearer stands in front
                 int col0 = col[k];
-                int r = ((col0 >> 16) & 0xFF) * 168 >> 8, g = ((col0 >> 8) & 0xFF) * 176 >> 8, bl = (col0 & 0xFF) * 205 >> 8;
+                int r = ((col0 >> 16) & 0xFF) * SH_R >> 8, g = ((col0 >> 8) & 0xFF) * SH_G >> 8, bl = (col0 & 0xFF) * SH_B >> 8;
                 col[k] = 0xFF000000 | (r << 16) | (g << 8) | bl;
                 lit[k] = 2;
             }

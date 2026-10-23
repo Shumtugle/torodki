@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5
+- Evening by the sea. A low sun from the left lays long, dark shadows across the road:
+  dappled shadows of palm crowns, the shadow of the plinth and of every piece.
+- To the left a promenade with two rows of palms, a stone parapet and the sea glittering
+  beyond it; to the right a row of old pastel houses with shutters, iron balconies,
+  flower pots and striped awnings over the shops. Lamp posts, bollards, cafe parasols.
+- An evening sky, deep blue above and warm by the sun, with streaks of pink cloud.
+- Buildings are half as big again, on a bigger granite plinth; the hammer is heavier.
+- People and cars in colour, lit by the low sun, each with a long shadow.
+
 ## 0.4
 - The plinth stands farther off, and the hammer flies a real arc: slower, higher, with a
   pale wake behind its head. The hammer is heavier to make up for it.

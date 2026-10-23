@@ -7,7 +7,7 @@ package com.shumtugle.torodki;
  */
 final class Body {
     static final int WOOD = 0, STONE = 1, HAMMER = 2, PLINTH = 3, GLASS = 4;
-    static final float[] DENSITY = {600f, 1200f, 2800f, 0f, 900f};
+    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f};
     static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f};
 
     static final float INERTIA = 3f;

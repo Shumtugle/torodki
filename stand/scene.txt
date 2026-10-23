@@ -10,8 +10,8 @@ move 145 520
 move 140 470
 wait 0.05
 shot 03_aiming
-move 115 392
-up 115 392
+move 106 371
+up 106 371
 wait 0.3
 shot 04_flight
 wait 0.3

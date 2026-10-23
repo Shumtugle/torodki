@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.4";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.5";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -134,7 +134,7 @@ final class World implements Physics.Listener {
         seed = seedOf(lv);
         phys.clear();
         pieces.clear();
-        plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0xFFF1E7D3);
+        plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0xFFE8D9BC);
         plinth.setPose(0f, Builder.TOP * 0.5f, Builder.CZ, 1, 0, 0, 0);
         phys.add(plinth);
         ArrayList<Body> made = standingBuilding(lv, seed);
@@ -630,7 +630,7 @@ final class World implements Physics.Listener {
 
         drawBody(plinth, 1f, 0f, 1);
         float st = stagger();
-        ras.shadowBegin(0f, Builder.CZ, 4.6f);
+        ras.shadowBegin(6f, Builder.CZ + 1f, 12f);
         ras.shadowBox(plinth.px, plinth.py, plinth.pz, 1, 0, 0, 0, 1, 0, 0, 0, 1, plinth.hx, plinth.hy, plinth.hz);
         for (int i = 0; i < pieces.size(); i++) {
             Body b = pieces.get(i);
@@ -658,8 +658,8 @@ final class World implements Physics.Listener {
         // shadows fall only near the plinth: work on that part of the screen
         float minX = W, minY = h, maxX = 0, maxY = 0;
         for (int i = 0; i < 8; i++) {
-            ras.project((i & 1) == 0 ? -3.6f : 3.6f, (i & 2) == 0 ? 0f : 4.5f,
-                    Builder.CZ + ((i & 4) == 0 ? -3f : 5f), scr);
+            ras.project((i & 1) == 0 ? -4f : 17f, (i & 2) == 0 ? 0f : 7f,
+                    Builder.CZ + ((i & 4) == 0 ? -4f : 7f), scr);
             minX = Math.min(minX, scr[0]);
             maxX = Math.max(maxX, scr[0]);
             minY = Math.min(minY, scr[1]);
@@ -673,7 +673,7 @@ final class World implements Physics.Listener {
     }
 
     private void drawBody(Body b, float scale, float drop, int id) {
-        int pat = b.material == Body.STONE ? Raster.PAT_STONE : b.material == Body.PLINTH ? Raster.PAT_FLAT : Raster.PAT_GRAIN;
+        int pat = b.material == Body.STONE ? Raster.PAT_STONE : b.material == Body.PLINTH ? Raster.PAT_STONE : Raster.PAT_GRAIN;
         int tint = b.tint;
         for (int k = 0; k < 1; k++)
             ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,

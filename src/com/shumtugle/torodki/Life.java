@@ -6,7 +6,7 @@ import java.util.Random;
  * The street around the plinth, kept in the background: people strolling along the
  * pavements and cars that come down the road, turn round short of the plinth and
  * drive back the way they came. Nobody here notices the game. They are drawn as soft
- * flat silhouettes in the haze, each with a long summer shadow on the ground, and
+ * figures in the low sun, each with a long evening shadow on the ground, and
  * never touch the physics or make a sound.
  */
 final class Life {
@@ -15,7 +15,7 @@ final class Life {
     private final float[] px = new float[PEOPLE], pz = new float[PEOPLE], pYaw = new float[PEOPLE];
     private final float[] pSpeed = new float[PEOPLE], pPhase = new float[PEOPLE];
     private final float[] pScale = new float[PEOPLE], pDir = new float[PEOPLE];
-    private final int[] pTone = new int[PEOPLE];
+    private final int[] pSkin = new int[PEOPLE], pShirt = new int[PEOPLE], pLegs = new int[PEOPLE], pHair = new int[PEOPLE];
     private final boolean[] pHat = new boolean[PEOPLE];
 
     // ---- cars ----
@@ -28,8 +28,11 @@ final class Life {
 
     private final Random rnd = new Random(2026);
 
-    static final int[] PERSON_TONES = {0xFF5C5650, 0xFF655A52, 0xFF57585E, 0xFF62574F};
-    static final int[] CAR_TONES = {0xFF6E6964, 0xFF77706A, 0xFF686A70};
+    static final int[] SKINS = {0xFFE7B892, 0xFFD39B74, 0xFFB57B55, 0xFF7E5034, 0xFFEFC8A8};
+    static final int[] SHIRTS = {0xFFF2EEE4, 0xFFD9735A, 0xFFE8C25A, 0xFF5E9E92, 0xFF6F92C6, 0xFFD58FAE, 0xFF2E2E34};
+    static final int[] LEGS = {0xFF3F5679, 0xFFCDBB98, 0xFF54704A, 0xFF2F2F36, 0xFFE3DDCF};
+    static final int[] HAIRS = {0xFF2E2118, 0xFF5A3C24, 0xFFC9A25E, 0xFF161311};
+    static final int[] CAR_TONES = {0xFFE9DFC6, 0xFF6E9DB0, 0xFFC9584A, 0xFFE7BE4E, 0xFF9DBB8E, 0xFF3C3E44};
 
     // the way shadows fall: away from the sun, along the ground
     private static final float SHX, SHZ, SH_LEN;
@@ -56,7 +59,10 @@ final class Life {
         pSpeed[i] = 1.0f + rnd.nextFloat() * 0.6f;
         pPhase[i] = rnd.nextFloat() * 6f;
         pScale[i] = rnd.nextInt(6) == 0 ? 0.72f : 0.93f + rnd.nextFloat() * 0.14f;
-        pTone[i] = PERSON_TONES[rnd.nextInt(PERSON_TONES.length)];
+        pSkin[i] = SKINS[rnd.nextInt(SKINS.length)];
+        pShirt[i] = SHIRTS[rnd.nextInt(SHIRTS.length)];
+        pLegs[i] = LEGS[rnd.nextInt(LEGS.length)];
+        pHair[i] = HAIRS[rnd.nextInt(HAIRS.length)];
         pHat[i] = rnd.nextInt(3) == 0;
     }
 
@@ -169,17 +175,20 @@ final class Life {
         // shadows first, so every figure stands in its own
         for (int c = 0; c < CARS; c++) if (cState[c] != OFF) carShadow(c);
         for (int i = 0; i < PEOPLE; i++) personShadow(i);
-        r.flat = true;
         for (int c = 0; c < CARS; c++) if (cState[c] != OFF) drawCar(c);
         for (int i = 0; i < PEOPLE; i++) drawPerson(i);
-        r.flat = false;
     }
 
-    /** A figure's tone, washed out with distance like the houses behind it. */
-    private int toneAt(int base, float x, float z) {
+    private float fog;
+
+    /** A color washed out with distance like the houses behind it. */
+    private int far(int base) {
+        return Backdrop.mix(base, Backdrop.HAZE, fog);
+    }
+
+    private void fogAt(float x, float z) {
         float d = Math.max(1f, ras.depth(x, 1f, z));
-        float fog = 1f - (float) Math.exp(-d / 140f);
-        return Backdrop.mix(base, Backdrop.HAZE, 0.08f + fog * 0.75f);
+        fog = (1f - (float) Math.exp(-d / 150f)) * 0.9f;
     }
 
     private void frame(float x, float z, float yaw) {
@@ -212,18 +221,32 @@ final class Life {
         if (depth < 0.8f || depth > 70f) return;
         float swing = (float) Math.sin(pPhase[i]) * 0.5f;
         frame(px[i], pz[i], pYaw[i]);
-        tone = toneAt(pTone[i], px[i], pz[i]);
+        fogAt(px[i], pz[i]);
         float leg = 0.82f * s;
-        for (int side = -1; side <= 1; side += 2)
-            part(side * 0.09f * s, leg, 0f, -0.41f * s, 0.07f * s, 0.41f * s, 0.075f * s, swing * side);
+        for (int side = -1; side <= 1; side += 2) {
+            tone = far(pLegs[i]);
+            part(side * 0.09f * s, leg, 0f, -0.25f * s, 0.075f * s, 0.25f * s, 0.08f * s, swing * side);
+            tone = far(pSkin[i]);
+            part(side * 0.09f * s, leg, 0f, -0.66f * s, 0.06f * s, 0.17f * s, 0.065f * s, swing * side);
+        }
+        tone = far(pShirt[i]);
         part(0f, leg + 0.3f * s, 0f, 0f, 0.19f * s, 0.31f * s, 0.11f * s, 0f);
-        for (int side = -1; side <= 1; side += 2)
-            part(side * 0.25f * s, leg + 0.56f * s, 0f, -0.28f * s, 0.055f * s, 0.29f * s, 0.06f * s, -swing * side * 0.9f);
+        for (int side = -1; side <= 1; side += 2) {
+            tone = far(pShirt[i]);
+            part(side * 0.25f * s, leg + 0.56f * s, 0f, -0.12f * s, 0.06f * s, 0.12f * s, 0.065f * s, -swing * side * 0.9f);
+            tone = far(pSkin[i]);
+            part(side * 0.25f * s, leg + 0.56f * s, 0f, -0.4f * s, 0.05f * s, 0.16f * s, 0.055f * s, -swing * side * 0.9f);
+        }
         float hy = leg + 0.75f * s;
+        tone = far(pSkin[i]);
         part(0f, hy, 0f, 0f, 0.12f * s, 0.13f * s, 0.12f * s, 0f);
         if (pHat[i]) {
+            tone = far(0xFFE3C784);
             part(0f, hy + 0.13f * s, 0f, 0f, 0.23f * s, 0.016f * s, 0.23f * s, 0f);
             part(0f, hy + 0.19f * s, 0f, 0f, 0.13f * s, 0.06f * s, 0.13f * s, 0f);
+        } else {
+            tone = far(pHair[i]);
+            part(0f, hy + 0.12f * s, -0.01f * s, 0f, 0.127f * s, 0.04f * s, 0.127f * s, 0f);
         }
     }
 
@@ -231,9 +254,14 @@ final class Life {
         float depth = ras.depth(cx[c], 1f, cz[c]);
         if (depth < 1.5f || depth > 175f) return;
         frame(cx[c], cz[c], cYaw[c]);
-        tone = toneAt(cTone[c], cx[c], cz[c]);
+        fogAt(cx[c], cz[c]);
+        tone = far(cTone[c]);
         part(0f, 0.56f, 0f, 0f, 0.9f, 0.28f, 2.08f, 0f);
+        tone = far(0xFF2F3A44);
         part(0f, 1.06f, -0.25f, 0f, 0.8f, 0.24f, 1.05f, 0f);
+        tone = far(cTone[c]);
+        part(0f, 1.32f, -0.25f, 0f, 0.82f, 0.03f, 1.07f, 0f);
+        tone = far(0xFF1F1E20);
         for (int side = -1; side <= 1; side += 2)
             for (int end = -1; end <= 1; end += 2)
                 part(side * 0.84f, 0.31f, end * 1.33f, 0f, 0.13f, 0.31f, 0.31f, 0f);

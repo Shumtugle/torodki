@@ -7,8 +7,8 @@ shot l2_car_looks
 down 150 600
 move 140 500
 move 120 420
-move 115 392
-up 115 392
+move 106 371
+up 106 371
 wait 0.3
 shot l3_flight
 wait 0.35
