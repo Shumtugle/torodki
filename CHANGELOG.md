@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.27
+- The thinker's newest likeness smirks as well, so it comes on every kind of visit.
+
 ## 0.26
 - The five newest likenesses have their reactions now: the elder laughs, the thunderer
   laughs and glowers, the goddess smiles and dozes, the idler grins and yawns, the
