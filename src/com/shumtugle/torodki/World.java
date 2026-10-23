@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.29";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.30";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -78,7 +78,7 @@ final class World implements Physics.Listener {
     Golem golem;
     int armor;
     private boolean bossNext, diamondGift, fromBoss, bossWon;
-    private float bossEnd = -1f, throwIn, flash, stepAt;
+    private float bossEnd = -1f, throwIn, flash;
     static final int FLY_MAX = 4;
     private final Body[] fly = new Body[FLY_MAX];
     private final int[] flyCar = new int[FLY_MAX], flyState = new int[FLY_MAX];   // 1 lifted, 2 thrown, 3 falling
@@ -733,6 +733,10 @@ final class World implements Physics.Listener {
         return o;
     }
 
+    void standGolemAt(float z) {
+        if (golem != null) golem.z = z;
+    }
+
     void standBossThrow(float sx, float sy) {
         if (hs != HAND || golem == null || bossEnd >= 0f) return;
         aimX = sx;
@@ -776,9 +780,13 @@ final class World implements Physics.Listener {
         goldThrow = false;
         goldOn = false;
         stars = STARS;
-        golem = new Golem(0.4f, 58f);
+        golem = new Golem(0.4f, START_Z);
         armor = ARMOR;
-        throwIn = 3.5f;
+        throwIn = 2.2f;
+        shake = 0f;
+        landingsSeen = 0;
+        beatIn = 0f;
+        host.sound(Synth.ROAR, 1f, 1f);
         flash = 0f;
         bossEnd = -1f;
         bossWon = false;
@@ -787,21 +795,47 @@ final class World implements Physics.Listener {
         setState(BOSS);
     }
 
+    static final float START_Z = 46f;
+    private float shake, beatIn;
+    private int landingsSeen;
+
     /** How far the golem has come, 0 at its start, 1 at the player. */
     private float progress() {
-        return Math.max(0f, Math.min(1f, (58f - golem.z) / 50f));
+        return Math.max(0f, Math.min(1f, (START_Z - golem.z) / (START_Z - 8f)));
+    }
+
+    /** A thrown car about to arrive: time runs slow, so the player can still answer it. */
+    private boolean closeCall() {
+        if (golem == null || state != BOSS || bossEnd >= 0f) return false;
+        for (int i = 0; i < FLY_MAX; i++) if (flyState[i] == 2 && fly[i].pz < 13f && fly[i].vz < 0f) return true;
+        return false;
     }
 
     private void bossStep(float dt) {
-        golem.update(dt);
+        golem.update(dt, progress());
         flash = Math.max(0f, flash - dt * 2.2f);
-        // footfalls
-        if (!golem.down && golem.stagger <= 0f) {
-            float st = (float) Math.floor(golem.phase / (float) Math.PI);
-            if (st != stepAt) {
-                stepAt = st;
-                host.sound(Synth.GROUND, 0.7f, 0.55f + fx.nextFloat() * 0.1f);
-                host.buzz(15);
+        shake = Math.max(0f, shake - dt * 2.5f);
+        // it comes down: the street shakes, dust flies
+        if (golem.landings != landingsSeen) {
+            landingsSeen = golem.landings;
+            float near = progress();
+            shake = Math.max(shake, 0.5f + near * 0.6f);
+            host.sound(Synth.GROUND, 1.4f, 0.45f);
+            host.sound(Synth.CRASH, 0.5f + near * 0.4f, 0.45f);
+            host.buzz((int) (60 + near * 120));
+            for (int k = 0; k < 30; k++) {
+                float a = k * 0.2094f;
+                spawn(golem.x + (float) Math.cos(a) * 2.5f, 0.15f, golem.z + (float) Math.sin(a) * 2.5f, true, 0xFFD8CFC0, 4f);
+            }
+            if (fx.nextFloat() < 0.35f) host.sound(Synth.ROAR, 0.8f, 0.9f + fx.nextFloat() * 0.2f);
+        }
+        // on the last armor the heart is heard
+        if (armor == 0 && bossEnd < 0f) {
+            beatIn -= dt;
+            if (beatIn <= 0f) {
+                beatIn = 0.75f;
+                host.sound(Synth.BEAT, 1.1f, 1f);
+                host.buzz(20);
             }
         }
         boolean holding = false;
@@ -864,7 +898,7 @@ final class World implements Physics.Listener {
         host.sound(Synth.CRASH, 0.5f, 0.7f);
         host.sound(Synth.ALARM, 0.35f, 0.9f);
         float p = progress();
-        throwIn = 5.5f - 3f * p;
+        throwIn = 4.0f - 2.6f * p;
     }
 
     static final float LIFT_T = 0.9f;
@@ -888,7 +922,7 @@ final class World implements Physics.Listener {
                 c.updateR();
                 if (k >= 1f && bossEnd < 0f) {
                     // and away at the player, high and hard
-                    float p = progress(), t = 2.75f - 0.75f * p;
+                    float p = progress(), t = 2.4f - 0.8f * p;
                     float tx = CAM_X + 0.3f, ty = 1.4f, tz = 1.0f;
                     c.vx = (tx - c.px) / t;
                     c.vz = (tz - c.pz) / t;
@@ -943,7 +977,7 @@ final class World implements Physics.Listener {
             if (flyState[i] != 1 && flyState[i] != 2) continue;
             Body c = fly[i];
             float dx = c.px - hx, dy = c.py - hy, dz = c.pz - hz;
-            if (dx * dx + dy * dy + dz * dz > 1.9f * 1.9f) continue;
+            if (dx * dx + dy * dy + dz * dz > 1.6f * 1.6f) continue;
             // knocked out of the air: up, back and toward the kerb
             c.vx = (c.px < 0f ? -1f : 1f) * (2.5f + fx.nextFloat() * 2f);
             c.vy = 5.5f + fx.nextFloat() * 2f;
@@ -1077,7 +1111,7 @@ final class World implements Physics.Listener {
         float sx = tmp[0], sy = tmp[1], sz = tmp[2];
         float ax = aimX, ay = aimY;
         int car = -1;
-        float bd = 20f;
+        float bd = 15f;
         for (int i = 0; i < FLY_MAX; i++) {
             if (flyState[i] != 1 && flyState[i] != 2) continue;
             float vz = ras.project(fly[i].px, fly[i].py, fly[i].pz, scr);
@@ -1111,8 +1145,7 @@ final class World implements Physics.Listener {
             if (golem.stagger <= 0f) {
                 float d = (float) Math.sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy) + (tz - sz) * (tz - sz));
                 float t = d / speed, v = golem.pace();
-                tx += golem.fx * v * 0.15f * t;
-                tz += golem.fz * v * t;
+                tz -= v * t;
             }
         }
         float dx = tx - sx, dy = ty - sy, dz = tz - sz;
@@ -1174,8 +1207,10 @@ final class World implements Physics.Listener {
         // its shadow, long across the street
         if (!g.down) {
             g.chest(tmp);
-            float len = (Golem.SHIN + Golem.THIGH + Golem.BODY) * Golem.G * SH_LEN;
-            ras.softShadow(g.x, g.z, g.x + SHX * len, g.z + SHZ * len, 2f, 1.3f, 0.75f);
+            float lo = Math.max(0f, tmp[1] - 3f * Golem.G), len = (Golem.HIP + Golem.TORSO) * Golem.G * SH_LEN;
+            float k = 1f - Math.min(0.8f, lo / 8f);
+            ras.softShadow(g.x + SHX * lo * SH_LEN, g.z + SHZ * lo * SH_LEN, g.x + SHX * (lo * SH_LEN + len),
+                    g.z + SHZ * (lo * SH_LEN + len), 2.4f * k, 1.6f * k, 0.75f * k);
         }
         for (int i = 0; i < FLY_MAX; i++) {
             if (flyState[i] == 0) continue;
@@ -1190,7 +1225,10 @@ final class World implements Physics.Listener {
 
     /** A car turning over in the air: body, cabin, wheels. */
     private void drawFlyingCar(Body c, int id) {
-        flyBox(c, 0f, 0f, 0f, 0.9f, 0.27f, 2.2f, c.tint, id);
+        flyBox(c, 0f, 0.06f, 0f, 0.9f, 0.21f, 2.2f, c.tint, id);
+        // the floor, black, with the exhaust under it
+        flyBox(c, 0f, -0.2f, 0f, 0.86f, 0.06f, 2.12f, 0xFF1A1918, id);
+        flyBox(c, 0.4f, -0.27f, -1.6f, 0.05f, 0.05f, 0.5f, 0xFF4A4642, id);
         flyBox(c, 0f, 0.42f, -0.2f, 0.78f, 0.2f, 1.05f, 0xFF33414E, id);
         flyBox(c, 0f, 0.6f, -0.25f, 0.76f, 0.03f, 0.7f, c.tint, id);
         for (int k = 0; k < 4; k++)
@@ -1226,6 +1264,25 @@ final class World implements Physics.Listener {
                 boolean edge = Math.abs(c) == half || r == 0 || r == 12;
                 int col = edge ? 0xFF5A4A3A : on ? (c < 0 ? 0xFFB8D8E8 : 0xFF8FB4C8) : 0x00000000;
                 if (col != 0) f.set(x + 6 + c, y + r, col);
+            }
+        }
+    }
+
+    private int[] shakeBuf;
+
+    /** The street jolts when the golem comes down: the whole frame jumps a few pixels. */
+    private void shakeFrame(Px f) {
+        if (shake <= 0.02f) return;
+        int a = Math.round(shake * 5f);
+        int dx = (int) ((fx.nextFloat() - 0.5f) * 2f * a), dy = (int) ((fx.nextFloat() - 0.5f) * 2f * a);
+        if (dx == 0 && dy == 0) return;
+        if (shakeBuf == null || shakeBuf.length != f.a.length) shakeBuf = new int[f.a.length];
+        System.arraycopy(f.a, 0, shakeBuf, 0, f.a.length);
+        for (int y = 0; y < h; y++) {
+            int sy = Math.max(0, Math.min(h - 1, y - dy));
+            for (int x = 0; x < W; x++) {
+                int sx = Math.max(0, Math.min(W - 1, x - dx));
+                f.a[y * W + x] = shakeBuf[sy * W + sx];
             }
         }
     }
@@ -1394,6 +1451,7 @@ final class World implements Physics.Listener {
         windUp(dt);
         zoomStep(dt);
         hammerMoves(dt);
+        if (closeCall()) dt *= 0.4f;
         if (state == SKY_UP || state == SKY_HOLD || fromSky) {
             sky.update(dt);
             if (sky.bolts != boltsHeard) {
@@ -1615,11 +1673,7 @@ final class World implements Physics.Listener {
             host.saveGifts(heavyLeft);
             giftShown = 0f;
         }
-        // every 25th level begins with the golem, once
-        int next = level + nextAfterVanish;
-        if (!afterFight && !bossNext && (next + 1) % 25 == 0 && host.loadInt("golem") != next + 1) bossNext = true;
         if (bossNext) {
-            host.saveInt("golem", next + 1);
             diamondGift = true;
             giftShown = 0f;
         }
@@ -2067,6 +2121,7 @@ final class World implements Physics.Listener {
             if (!zoomed && zoomK > 0f) closingIn(f);
             else System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
             if (golem != null) {
+                shakeFrame(f);
                 drawFightHud(f);
                 drawFlash(f);
             } else drawHud(f);

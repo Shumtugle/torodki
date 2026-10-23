@@ -12,9 +12,9 @@ import java.util.Random;
 final class Synth {
     static final int RATE = 22050;
     static final int WOOD = 0, STONE = 1, GROUND = 2, WHOOSH = 3, THUNDER = 4, CATCH = 5, TOCK = 6, GLASS = 7;
-    static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11, POP = 12;
+    static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11, POP = 12, ROAR = 13, BEAT = 14;
 
-    final float[][] bank = new float[13][];
+    final float[][] bank = new float[15][];
 
     Synth() {
         Random r = new Random(7);
@@ -35,6 +35,8 @@ final class Synth {
                 new float[]{8f, 10f, 15f, 19f, 24f}, 1.1f, 0.6f);
         bank[ALARM] = alarm();
         bank[POP] = pop(r);
+        bank[ROAR] = roar(r);
+        bank[BEAT] = beat();
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
     }
@@ -64,6 +66,39 @@ final class Synth {
                 v += 0.35f * (float) Math.sin(2 * Math.PI * f * u) * (float) Math.exp(-50f * u);
             }
             s[i] = v * 0.8f;
+        }
+        return s;
+    }
+
+    /** A roar of stone: low rasping tones, grinding grit, a throb in it. */
+    private static float[] roar(Random r) {
+        int n = (int) (1.5f * RATE);
+        float[] s = new float[n];
+        float p1 = 0f, p2 = 0f, lp = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float f = 62f + 18f * (float) Math.sin(t * 3.1f) - 10f * t;
+            p1 += f / RATE;
+            p2 += f * 1.51f / RATE;
+            float saw = (p1 % 1f) * 2f - 1f, saw2 = (p2 % 1f) * 2f - 1f;
+            lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.15f;
+            float throb = 0.65f + 0.35f * (float) Math.sin(t * 2f * Math.PI * 17f);
+            float env = Math.min(1f, t * 6f) * Math.min(1f, (1.5f - t) * 2.5f);
+            s[i] = (saw * 0.45f + saw2 * 0.25f + lp * 0.9f) * throb * env * 0.6f;
+        }
+        return s;
+    }
+
+    /** A heartbeat: two soft low thumps. */
+    private static float[] beat() {
+        int n = (int) (0.45f * RATE);
+        float[] s = new float[n];
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float a = (float) Math.sin(2 * Math.PI * 55f * t) * (float) Math.exp(-22f * t);
+            float t2 = t - 0.2f;
+            float b = t2 > 0f ? (float) Math.sin(2 * Math.PI * 48f * t2) * (float) Math.exp(-24f * t2) * 0.7f : 0f;
+            s[i] = (a + b) * Math.min(1f, t * 600f);
         }
         return s;
     }

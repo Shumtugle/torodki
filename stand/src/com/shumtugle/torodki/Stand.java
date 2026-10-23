@@ -288,6 +288,8 @@ public final class Stand implements World.Host {
             System.out.println(String.format("%7.2fs  %s", time, world.bossState()));
         } else if (c.equals("bossbot")) {
             bossBot(Integer.parseInt(p[1]), f(p[2]), f(p[3]));
+        } else if (c.equals("golemz")) {
+            world.standGolemAt(f(p[1]));
         } else if (c.equals("boss")) {
             world.standBoss();
         } else if (c.equals("ball")) {

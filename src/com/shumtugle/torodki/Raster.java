@@ -121,7 +121,7 @@ final class Raster {
 
     // ---- polygons ----
 
-    static final int PAT_FLAT = 0, PAT_GRAIN = 1, PAT_WINDOWS = 2, PAT_STONE = 3, PAT_BANDS = 4, PAT_FACADE = 5;
+    static final int PAT_FLAT = 0, PAT_GRAIN = 1, PAT_WINDOWS = 2, PAT_STONE = 3, PAT_BANDS = 4, PAT_FACADE = 5, PAT_BRICK = 6;
 
     private final float[] vx = new float[16], vy = new float[16], vz = new float[16], vu = new float[16], vv = new float[16];
     private final float[] cxs = new float[16], cys = new float[16], czs = new float[16], cus = new float[16], cvs = new float[16];
@@ -338,6 +338,16 @@ final class Raster {
                 int i = ((int) Math.floor(u) * 13 + (int) Math.floor(v) * 7) & 1023;
                 return 150 + (NOISE[i] >> 3);
             }
+            case PAT_BRICK: {
+                // courses of brick in running bond, dark mortar between them, each brick its own shade
+                float row = v / 0.11f;
+                int ri = (int) Math.floor(row);
+                float col = u / 0.24f + ((ri & 1) == 0 ? 0f : 0.5f);
+                int ci = (int) Math.floor(col);
+                float fr = row - ri, fc = col - ci;
+                if (fr < 0.16f || fc < 0.07f) return 150;
+                return 214 + (NOISE[(ri * 31 + ci * 17) & 1023] >> 3);
+            }
             case PAT_BANDS: {
                 float fu = u - (float) Math.floor(u);
                 return fu < 0.18f ? 150 : 256;
@@ -552,6 +562,10 @@ final class Raster {
                 }
                 if (pat == PAT_STONE || pat == PAT_BANDS) {
                     bu[k] = axis == 0 ? lz + ly * 0.3f : axis == 1 ? lx + lz * 0.3f : lx + ly * 0.3f;
+                    bv[k] = axis == 1 ? lz : ly;
+                }
+                if (pat == PAT_BRICK) {
+                    bu[k] = axis == 0 ? lz : lx;
                     bv[k] = axis == 1 ? lz : ly;
                 }
             }

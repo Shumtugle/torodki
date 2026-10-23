@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.30
+- The golem is new: a hunched giant heaped from stone blocks and courses of brick, rods
+  of rusty iron out of its shoulders and back, fists of rubble, a stone head sunk between
+  the shoulders with a brick jaw and burning eyes. Bricks are laid in courses now.
+- It leaps. It crouches, springs six to eight meters down the street and comes down with
+  a blow that shakes the screen and throws up dust; it stands a moment, then leaps again,
+  more often the nearer it is. A broken knee makes the leaps short; both, and it drags
+  itself along on its knees.
+- It throws faster and harder the nearer it is. When a car is about to arrive, time runs
+  slow, so it can still be knocked away. On the last armor the heartbeat is heard. It
+  roars.
+- A car in the air shows a black floor, not a painted one.
+- It comes only where the second golden hammer would have come; no more every 25th level.
+
 ## 0.29
 - The golem. A giant put together from what the buildings are made of: stone legs, a
   body of bricks, arms of water bottles, a polished ball for a head. It comes up the

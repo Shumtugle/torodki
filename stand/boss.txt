@@ -1,19 +1,19 @@
-# The golem: it comes up the street, tears parked cars from their places and throws them;
+# The golem: it leaps up the street, tears parked cars from their places and throws them;
 # the fight bot knocks the cars from the air and goes for the knees, then the head.
 screen 1096 2560
 level 30
 wait 0.5
 boss
-wait 1.0
+wait 0.6
 shot q1_start
-wait 3.4
-shot q2_lifting
-wait 1.3
-shot q3_thrown
-fight 4 4
-shot q4
-fight 4 4
-shot q5
+wait 1.0
+shot q2_crouch
+wait 0.55
+shot q3_air
+wait 0.6
+shot q4_land
+wait 1.2
+shot q5_throw
 fight 4 4
 shot q6
 fight 4 4
@@ -24,8 +24,8 @@ fight 4 4
 shot q9
 fight 4 4
 shot q10
-wait 0.8
+fight 4 4
 shot q11
-wait 1.5
+wait 1.0
 shot q12
 state
