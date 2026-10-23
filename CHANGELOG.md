@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4
+- The plinth stands farther off, and the hammer flies a real arc: slower, higher, with a
+  pale wake behind its head. The hammer is heavier to make up for it.
+- The street keeps to the background: people walk by without noticing the game, cars
+  come, turn round and drive back. They are drawn as soft silhouettes with long
+  shadows, and make no sound.
+
 ## 0.3
 - The street is alive: people stroll along both pavements, some in straw hats or dark
   glasses. They stop to watch a throw, jump at a crash and run off.

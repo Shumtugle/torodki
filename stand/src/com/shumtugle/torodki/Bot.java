@@ -20,7 +20,7 @@ public final class Bot implements World.Host {
     static final float DT = 1f / 60f;
     /** A casual player throws at a random piece instead of the best one. */
     static boolean casual;
-    static final float[] SPEEDS = {21f, 15f};
+    static final float[] SPEEDS = {13.5f, 9f};
 
     public static void main(String[] args) {
         int a = args.length > 0 ? Integer.parseInt(args[0]) : 0;

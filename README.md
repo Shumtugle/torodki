@@ -12,8 +12,8 @@ building stands up again at once, so you can try the throw you now know.
 - Seven kinds of buildings (tower, seesaw, wall, well, gate, press, steps), grown from
   the level number and a seed. Each one is held still for a second before you see it,
   and a building that moves is thrown away and grown again.
-- The street lives: people walk the pavements and watch, cars come to look and
-  flee from what they see.
+- The street lives in the background: people stroll by, cars come and turn back,
+  all as soft silhouettes with long shadows.
 - Rigid-body physics written for the game: boxes solved on positions in small
   substeps, with friction that holds a stack still and sleep for what does not move.
 - 3D drawn in software into a small pixel frame, with sun shadows and outlines.

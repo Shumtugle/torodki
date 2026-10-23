@@ -1,0 +1,19 @@
+# The flight of the hammer, frame by frame.
+screen 1096 2560
+wait 2.5
+down 150 600
+move 140 500
+move 120 420
+move 115 392
+up 115 392
+wait 0.15
+shot t1
+wait 0.2
+shot t2
+wait 0.2
+shot t3
+wait 0.2
+shot t4
+wait 0.4
+shot t5
+state

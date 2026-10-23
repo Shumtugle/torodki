@@ -15,7 +15,8 @@ final class Raster {
 
     // camera
     float camX, camY, camZ, pitch, f, cx, cy, cp, sp;
-    float cyw = 1f, syw;                 // yaw: forward is (syw, 0, cyw)
+    float cyw = 1f, syw;
+    boolean flat;                        // boxes take their color as it is: silhouettes                 // yaw: forward is (syw, 0, cyw)
 
     // sun: direction toward it, and the shadow map basis
     static final float LX = -0.42f, LY = 0.80f, LZ = -0.43f;
@@ -341,7 +342,7 @@ final class Raster {
             float fx = cor[3 * fc[0]], fy = cor[3 * fc[0] + 1], fz = cor[3 * fc[0] + 2];
             if ((fx - camX) * nx + (fy - camY) * ny + (fz - camZ) * nz >= 0f) continue; // facing away
             float ndl = nx * sunX() + ny * sunY() + nz * sunZ();
-            int c = light(color, nx, ny, nz, ndl);
+            int c = flat ? color : light(color, nx, ny, nz, ndl);
             for (int k = 0; k < 4; k++) {
                 int ci = fc[k];
                 bx[k] = cor[3 * ci];
@@ -459,7 +460,7 @@ final class Raster {
         for (int y = sy0; y <= sy1; y++) {
             for (int x = sx0; x <= sx1; x++) {
                 int k = y * w + x;
-                if (lit[k] == 0) continue;
+                if (lit[k] != 1) continue;
                 float q = zb[k];
                 if (q <= 0f) continue;
                 float vz = 1f / q;
@@ -475,6 +476,54 @@ final class Raster {
                 }
             }
         }
+    }
+
+    private final float[] gx = new float[8], gy = new float[8], gz = new float[8];
+
+    /**
+     * Darkens the ground under a polygon given on the ground plane (world x and z),
+     * wherever nothing nearer stands in front. Each pixel is darkened once a frame.
+     */
+    void groundShade(float[] px, float[] pz, int n) {
+        for (int i = 0; i < n; i++) {
+            float ex = px[i] - camX, dy = 0.004f - camY, ez = pz[i] - camZ;
+            float dx = ex * cyw - ez * syw, dz = ex * syw + ez * cyw;
+            float vz2 = dz * cp + dy * sp;
+            float vy2 = dy * cp - dz * sp;
+            if (vz2 < 0.3f) return;
+            float q = 1f / vz2;
+            gx[i] = cx + f * dx * q;
+            gy[i] = cy - f * vy2 * q;
+            gz[i] = q;
+        }
+        for (int t = 1; t < n - 1; t++) shadeTri(0, t, t + 1);
+    }
+
+    private void shadeTri(int a, int b, int c) {
+        float x0 = gx[a], y0 = gy[a], x1 = gx[b], y1 = gy[b], x2 = gx[c], y2 = gy[c];
+        float area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+        if (Math.abs(area) < 1e-6f) return;
+        int minx = Math.max(0, (int) Math.floor(Math.min(x0, Math.min(x1, x2))));
+        int maxx = Math.min(w - 1, (int) Math.ceil(Math.max(x0, Math.max(x1, x2))));
+        int miny = Math.max(0, (int) Math.floor(Math.min(y0, Math.min(y1, y2))));
+        int maxy = Math.min(h - 1, (int) Math.ceil(Math.max(y0, Math.max(y1, y2))));
+        float ia = 1f / area;
+        for (int py = miny; py <= maxy; py++)
+            for (int px = minx; px <= maxx; px++) {
+                float pxc = px + 0.5f, pyc = py + 0.5f;
+                float w0 = ((x1 - pxc) * (y2 - pyc) - (x2 - pxc) * (y1 - pyc)) * ia;
+                float w1 = ((x2 - pxc) * (y0 - pyc) - (x0 - pxc) * (y2 - pyc)) * ia;
+                float w2 = 1f - w0 - w1;
+                if (w0 < 0f || w1 < 0f || w2 < 0f) continue;
+                int k = py * w + px;
+                if (lit[k] != 1) continue;
+                float z = w0 * gz[a] + w1 * gz[b] + w2 * gz[c];
+                if (zb[k] > z * 1.01f + 1e-5f) continue;   // something nearer stands in front
+                int col0 = col[k];
+                int r = ((col0 >> 16) & 0xFF) * 168 >> 8, g = ((col0 >> 8) & 0xFF) * 176 >> 8, bl = (col0 & 0xFF) * 205 >> 8;
+                col[k] = 0xFF000000 | (r << 16) | (g << 8) | bl;
+                lit[k] = 2;
+            }
     }
 
     /** Dark lines where one object meets another or the backdrop. */

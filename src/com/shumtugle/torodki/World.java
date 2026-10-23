@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.3";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.4";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -100,7 +100,7 @@ final class World implements Physics.Listener {
 
     World(Host host) {
         this.host = host;
-        life = new Life(host, CAM_X, 0f);
+        life = new Life();
         level = Math.max(0, host.loadLevel());
         phys.listener = this;
     }
@@ -249,7 +249,7 @@ final class World implements Physics.Listener {
     /** Throw speed in m/s from the flick: a lazy release lobs, a sharp one flies flat. */
     private float throwSpeed() {
         if (forcedSpeed > 0f) return forcedSpeed;
-        return 12f + Math.min(1f, flick() / 650f) * 9f;
+        return 8f + Math.min(1f, flick() / 650f) * 5.5f;
     }
 
     private float forcedSpeed = -1f;
@@ -300,7 +300,6 @@ final class World implements Physics.Listener {
         hs = FLY;
         hsTime = 0f;
         host.sound(Synth.WHOOSH, 0.9f, 0.9f + speed / 60f);
-        life.onThrow();
         host.buzz(12);
     }
 
@@ -381,8 +380,8 @@ final class World implements Physics.Listener {
         }
         if (acc > 1f / 30f) acc = 0f;
         particles(dt);
-        life.damage = cleared ? 1f : 1f - onPlinth();
         life.update(dt);
+        trail();
 
         hammerMoves(dt);
         switch (state) {
@@ -440,6 +439,40 @@ final class World implements Physics.Listener {
         }
     }
 
+    // the hammer's wake: where its head has been over the last frames
+    private static final int TRAIL = 14;
+    private final float[] tX = new float[TRAIL], tY = new float[TRAIL], tZ = new float[TRAIL];
+    private int tN;
+
+    private void trail() {
+        if (hs == HAND) {
+            tN = 0;
+            return;
+        }
+        if (tN == TRAIL) {
+            System.arraycopy(tX, 1, tX, 0, TRAIL - 1);
+            System.arraycopy(tY, 1, tY, 0, TRAIL - 1);
+            System.arraycopy(tZ, 1, tZ, 0, TRAIL - 1);
+            tN--;
+        }
+        Body b = hammer;
+        tX[tN] = b.px + b.r00 * 0.31f;
+        tY[tN] = b.py + b.r10 * 0.31f;
+        tZ[tN] = b.pz + b.r20 * 0.31f;
+        tN++;
+    }
+
+    private void drawTrail() {
+        float moving = hs == FLY ? (float) Math.sqrt(hammer.speed2()) : 8f;
+        if (moving < 3f) return;
+        for (int i = 0; i < tN - 1; i++) {
+            float vz = ras.project(tX[i], tY[i], tZ[i], scr);
+            if (vz < 0.4f) continue;
+            float k = (i + 1) / (float) tN;
+            ras.haze(scr[0], scr[1], (0.1f + 0.16f * k) * ras.f / vz, 1f / vz, 0xFFFFF2D2, (int) (190 * k * k));
+        }
+    }
+
     private void beginReturn() {
         hammer.ghost = true;
         hammer.vx = hammer.vy = hammer.vz = hammer.wx = hammer.wy = hammer.wz = 0f;
@@ -457,7 +490,6 @@ final class World implements Physics.Listener {
             thundered = true;
             host.sound(Synth.THUNDER, 1.1f, 1f);
             host.buzz(160);
-            life.onCrash(1f);
         }
         if (off >= CLEAR && state != WON) {
             if (!thundered && throwsMade == 1) {
@@ -465,7 +497,6 @@ final class World implements Physics.Listener {
                 host.sound(Synth.THUNDER, 1.1f, 1f);
                 host.buzz(160);
             }
-            life.onCrash(1f);
             wonAt = stars;
             cleared = true;
             setState(WON);
@@ -521,8 +552,6 @@ final class World implements Physics.Listener {
             host.sound(stone ? Synth.STONE : Synth.WOOD, gain, rate);
         }
         if (hammerHit) host.buzz((int) Math.min(60f, 10f + speed * 3f));
-        if (hammerHit && speed > 4f) life.onCrash(Math.min(1f, speed / 10f));
-        else if (b == null && speed > 4f) life.onCrash(0.4f);
         if (speed > 2.2f && other != null) {
             int n = (int) Math.min(14f, speed * 1.2f);
             boolean dusty = other.material == Body.STONE || other.material == Body.PLINTH;
@@ -623,6 +652,7 @@ final class World implements Physics.Listener {
                     b.hx * scale, b.hy * scale, b.hz * scale);
         }
         life.draw(ras);
+        drawTrail();
         drawHammer();
         drawParticles();
         // shadows fall only near the plinth: work on that part of the screen

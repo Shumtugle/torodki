@@ -12,7 +12,7 @@ import java.util.Random;
  */
 final class Builder {
     static final float TOP = 0.75f;          // plinth top
-    static final float CZ = 9.6f;           // plinth center along the street
+    static final float CZ = 11.5f;           // plinth center along the street
     static final float PHX = 1.42f, PHZ = 0.78f;
 
     // in the order they first appear: the first ones fall easily, the pyramid is the stubborn one
