@@ -16,6 +16,8 @@ final class Raster {
     // camera
     float camX, camY, camZ, pitch, f, cx, cy, cp, sp;
     float cyw = 1f, syw;
+    int alpha = 255;                     // below 255 polygons are see-through
+    boolean depthWrite = true;
     boolean flat;                        // boxes take their color as it is: silhouettes                 // yaw: forward is (syw, 0, cyw)
 
     // sun: direction toward it, and the shadow map basis
@@ -203,6 +205,18 @@ final class Raster {
                 float z = w0 * z0 + w1 * z1 + w2 * z2;
                 int k = row + px;
                 if (z <= zb[k]) continue;
+                if (alpha < 255) {
+                    int c0 = col[k];
+                    int r0 = (c0 >> 16) & 0xFF, g0 = (c0 >> 8) & 0xFF, b0 = c0 & 0xFF;
+                    col[k] = 0xFF000000 | ((r0 + ((cr - r0) * alpha >> 8)) << 16) | ((g0 + ((cg - g0) * alpha >> 8)) << 8)
+                            | (b0 + ((cb - b0) * alpha >> 8));
+                    lit[k] = 0;
+                    if (depthWrite) {
+                        zb[k] = z;
+                        idb[k] = id;
+                    }
+                    continue;
+                }
                 zb[k] = z;
                 idb[k] = id;
                 lit[k] = lf;
@@ -650,6 +664,82 @@ final class Raster {
                 col[k] = 0xFF000000 | ((int) (cr + (sr - cr) * a) << 16) | ((int) (cg + (sg - cg) * a) << 8)
                         | (int) (cb + (sb - cb) * a);
                 if (a > 0.55f) lit[k] = 2;
+            }
+    }
+
+    /**
+     * A puddle on a level surface at height py: a wet, darker patch with a ragged edge
+     * that mirrors a little of the sky. Only where that surface is what the eye sees.
+     */
+    void puddle(float px, float py, float pz, float rad, float strength, int seed) {
+        float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+        float rm = rad * 1.3f;
+        for (int i = 0; i < 4; i++) {
+            float x = px + ((i & 1) == 0 ? -rm : rm), z = pz + ((i & 2) == 0 ? -rm : rm);
+            if (depth(x, py, z) < 0.3f) return;
+            project(x, py, z, rw);
+            minX = Math.min(minX, rw[0]);
+            maxX = Math.max(maxX, rw[0]);
+            minY = Math.min(minY, rw[1]);
+            maxY = Math.max(maxY, rw[1]);
+        }
+        int x0 = Math.max(0, (int) minX), x1 = Math.min(w - 1, (int) maxX + 1);
+        int y0 = Math.max(0, (int) minY), y1 = Math.min(h - 1, (int) maxY + 1);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) {
+                int k = y * w + x;
+                viewToWorld((x + 0.5f - cx) / f, (cy - y - 0.5f) / f, 1f, sd);
+                if (Math.abs(sd[1]) < 1e-4f) continue;
+                float t = (py - camY) / sd[1];
+                if (t <= 0f || Math.abs(zb[k] * t - 1f) > 0.02f) continue;
+                float dx = camX + sd[0] * t - px, dz = camZ + sd[2] * t - pz;
+                float d = (float) Math.sqrt(dx * dx + dz * dz);
+                float ang = (float) Math.atan2(dz, dx);
+                float edge = rad * (0.82f + 0.12f * (float) Math.sin(ang * 3f + seed) + 0.08f * (float) Math.sin(ang * 7f + seed * 2.3f));
+                if (d > edge) continue;
+                float a = strength * Math.min(1f, (edge - d) / (rad * 0.12f));
+                int c = col[k];
+                int wet = Backdrop.scale(c, 0.6f);
+                wet = Backdrop.mix(wet, 0xFF9FC2E2, 0.28f);
+                if (Backdrop.hash((int) (dx * 9f) + seed, (int) (dz * 9f)) > 250) wet = 0xFFF4F8FF;    // a glint
+                col[k] = Backdrop.mix(c, wet, a);
+            }
+    }
+
+    /**
+     * Water running down a wall that faces the street (the plane z = zc): a wet band
+     * from yTop downward, ragged where the drips end.
+     */
+    void wetWall(float xc, float zc, float yTop, float halfW, float len, float strength, int seed) {
+        float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
+        for (int i = 0; i < 4; i++) {
+            float x = xc + ((i & 1) == 0 ? -halfW : halfW), y = (i & 2) == 0 ? yTop : yTop - len;
+            if (depth(x, y, zc) < 0.3f) return;
+            project(x, y, zc, rw);
+            minX = Math.min(minX, rw[0]);
+            maxX = Math.max(maxX, rw[0]);
+            minY = Math.min(minY, rw[1]);
+            maxY = Math.max(maxY, rw[1]);
+        }
+        int x0 = Math.max(0, (int) minX), x1 = Math.min(w - 1, (int) maxX + 1);
+        int y0 = Math.max(0, (int) minY), y1 = Math.min(h - 1, (int) maxY + 1);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) {
+                int k = y * w + x;
+                viewToWorld((x + 0.5f - cx) / f, (cy - y - 0.5f) / f, 1f, sd);
+                if (Math.abs(sd[2]) < 1e-4f) continue;
+                float t = (zc - camZ) / sd[2];
+                if (t <= 0f || Math.abs(zb[k] * t - 1f) > 0.02f) continue;
+                float wxp = camX + sd[0] * t - xc, wyp = camY + sd[1] * t;
+                float u = wxp / halfW;
+                if (u < -1f || u > 1f || wyp > yTop) continue;
+                // drips: each narrow column runs down its own length
+                int col2 = (int) Math.floor((wxp + 40f) * 7f);
+                float reach = len * (0.35f + 0.65f * (((col2 * 73 + seed * 31) & 255) / 255f)) * (1f - u * u * 0.7f);
+                float down = yTop - wyp;
+                if (down > reach) continue;
+                float a = strength * (1f - down / reach * 0.5f);
+                col[k] = Backdrop.mix(col[k], Backdrop.scale(col[k], 0.62f), a);
             }
     }
 

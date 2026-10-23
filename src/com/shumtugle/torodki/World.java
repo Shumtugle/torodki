@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.6";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.7";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -199,7 +199,7 @@ final class World implements Physics.Listener {
     float onPlinth() {
         float m = 0f;
         for (Body b : pieces)
-            if (Math.abs(b.px) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.CZ) < Builder.PHZ + 0.05f
+            if (!b.gone && Math.abs(b.px) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.CZ) < Builder.PHZ + 0.05f
                     && b.py > Builder.TOP - 0.05f) m += b.mass;
         return totalMass > 0f ? m / totalMass : 0f;
     }
@@ -309,6 +309,7 @@ final class World implements Physics.Listener {
         float dx = out[0], dy = out[1], dz = out[2];
         float best = 1e9f;
         for (Body b : pieces) {
+            if (b.gone) continue;
             float t = rayBox(b, CAM_X, CAM_Y, 0f, dx, dy, dz);
             if (t > 0f && t < best) best = t;
         }
@@ -377,9 +378,11 @@ final class World implements Physics.Listener {
             acc -= 1f / 60f;
             steps++;
             if (state != BUILD && state != VANISH) phys.step(1f / 60f);
+            bursts();
         }
         if (acc > 1f / 30f) acc = 0f;
         particles(dt);
+        puddles(dt);
         life.update(dt);
         trail();
 
@@ -508,6 +511,7 @@ final class World implements Physics.Listener {
 
     private void vanish() {
         for (Body b : pieces) {
+            if (b.gone) continue;
             for (int i = 0; i < 3; i++) spawn(b.px, b.py, b.pz, true, 0xFFF4EFE4, 0.6f);
         }
         setState(VANISH);
@@ -541,6 +545,10 @@ final class World implements Physics.Listener {
     public void knock(Body a, Body b, float speed, float x, float y, float z) {
         boolean hammerHit = a == hammer || b == hammer;
         Body other = a == hammer ? b : a;
+        // water bottles burst at a hard blow, or a hard landing
+        if (a.material == Body.WATER && (speed > 4.2f || hammerHit && speed > 2.4f)) burst(a);
+        if (b != null && b.material == Body.WATER && (speed > 4.2f || hammerHit && speed > 2.4f)) burst(b);
+        boolean plastic = a.material == Body.WATER || (b != null && b.material == Body.WATER);
         float gain = Math.min(1f, (speed - 1f) / 5f);
         if (hammerHit) gain = Math.min(1.3f, gain * 1.4f + 0.2f);
         if (b == null || other == null) {
@@ -549,10 +557,10 @@ final class World implements Physics.Listener {
             boolean stone = a.material == Body.STONE || b.material == Body.STONE || other.material == Body.PLINTH;
             float size = Math.max(other.hx, Math.max(other.hy, other.hz));
             float rate = Math.max(0.6f, Math.min(1.5f, 0.32f / size)) * (0.92f + fx.nextFloat() * 0.16f);
-            host.sound(stone ? Synth.STONE : Synth.WOOD, gain, rate);
+            host.sound(plastic ? Synth.PLASTIC : stone ? Synth.STONE : Synth.WOOD, gain, plastic ? 0.9f + fx.nextFloat() * 0.2f : rate);
         }
         if (hammerHit) host.buzz((int) Math.min(60f, 10f + speed * 3f));
-        if (speed > 2.2f && other != null) {
+        if (speed > 2.2f && other != null && other.material != Body.WATER) {
             int n = (int) Math.min(14f, speed * 1.2f);
             boolean dusty = other.material == Body.STONE || other.material == Body.PLINTH;
             for (int i = 0; i < n; i++)
@@ -560,6 +568,108 @@ final class World implements Physics.Listener {
         } else if (speed > 3f && b == null) {
             for (int i = 0; i < 4; i++) spawn(x, 0.02f, z, true, 0xFFD8CFC0, 1f);
         }
+    }
+
+    // ---- water ----
+
+    private final ArrayList<Body> toBurst = new ArrayList<Body>();
+    private static final int PUDDLES = 24;
+    private final float[] pdX = new float[PUDDLES], pdY = new float[PUDDLES], pdZ = new float[PUDDLES];
+    private final float[] pdR = new float[PUDDLES], pdAge = new float[PUDDLES];
+    private final int[] pdSeed = new int[PUDDLES];
+    private final boolean[] pdWall = new boolean[PUDDLES];
+    private int pdN;
+
+    private void burst(Body b) {
+        if (b.gone || toBurst.contains(b)) return;
+        toBurst.add(b);
+    }
+
+    /** Bottles hit hard enough this step: gone in a splash, leaving a puddle. */
+    private void bursts() {
+        if (toBurst.isEmpty()) return;
+        for (Body b : toBurst) {
+            b.gone = true;
+            b.ghost = true;
+            // whatever leaned on it must notice it is gone
+            float e = 0.05f;
+            for (Body o : pieces)
+                if (o.asleep && !(o.maxX + e < b.minX || b.maxX + e < o.minX || o.maxY + e < b.minY
+                        || b.maxY + e < o.minY || o.maxZ + e < b.minZ || b.maxZ + e < o.minZ)) phys.wake(o);
+            for (int i = 0; i < 120; i++) spawnWater(b.px, b.py, b.pz, b.vx, b.vy, b.vz);
+            for (int i = 0; i < 6; i++) spawn(b.px, b.py, b.pz, true, 0xFFF2F8FF, 1.6f);
+            boolean onTop = Math.abs(b.px) < Builder.PHX && Math.abs(b.pz - Builder.CZ) < Builder.PHZ
+                    && b.py > Builder.TOP - 0.2f;
+            int top = addPuddle(b.px, onTop ? Builder.TOP : 0.002f, b.pz, 1.5f + fx.nextFloat() * 0.6f);
+            if (onTop) {
+                // it pours over the front edge, runs down the face and pools at its foot
+                pdWall[top] = true;
+                int foot = addPuddle(b.px + (fx.nextFloat() - 0.5f) * 0.6f, 0.002f, Builder.CZ - Builder.PHZ - 0.7f,
+                        1.3f + fx.nextFloat() * 0.5f);
+                pdAge[foot] = -0.5f;
+            }
+            host.sound(Synth.SPLASH, 1.1f, 0.9f + fx.nextFloat() * 0.2f);
+            host.buzz(40);
+        }
+        toBurst.clear();
+    }
+
+    private int addPuddle(float x, float y, float z, float r) {
+        int i = pdN < PUDDLES ? pdN++ : fx.nextInt(PUDDLES);
+        pdX[i] = x;
+        pdY[i] = y;
+        pdZ[i] = z;
+        pdR[i] = r;
+        pdAge[i] = 0f;
+        pdSeed[i] = fx.nextInt(1000);
+        pdWall[i] = false;
+        return i;
+    }
+
+    private void puddles(float dt) {
+        for (int i = 0; i < pdN; i++) {
+            pdAge[i] += dt;
+            if (pdAge[i] > 32f) {
+                pdN--;
+                pdX[i] = pdX[pdN];
+                pdY[i] = pdY[pdN];
+                pdZ[i] = pdZ[pdN];
+                pdR[i] = pdR[pdN];
+                pdAge[i] = pdAge[pdN];
+                pdSeed[i] = pdSeed[pdN];
+                pdWall[i] = pdWall[pdN];
+                i--;
+            }
+        }
+    }
+
+    private void drawPuddles() {
+        for (int i = 0; i < pdN; i++) {
+            if (pdAge[i] < 0f) continue;
+            float grow = Math.min(1f, pdAge[i] / 0.6f);
+            grow = 1f - (1f - grow) * (1f - grow);
+            float fade = pdAge[i] < 22f ? 1f : 1f - (pdAge[i] - 22f) / 10f;
+            ras.puddle(pdX[i], pdY[i], pdZ[i], pdR[i] * (0.3f + 0.7f * grow), 0.9f * fade, pdSeed[i]);
+            if (pdWall[i]) ras.wetWall(pdX[i], Builder.CZ - Builder.PHZ - 0.001f, Builder.TOP, pdR[i] * 0.55f,
+                    Builder.TOP * Math.min(1f, pdAge[i] / 0.8f), 0.85f * fade, pdSeed[i]);
+        }
+    }
+
+    private void spawnWater(float x, float y, float z, float vx, float vy, float vz) {
+        if (pN >= MAXP) return;
+        int i = pN++;
+        float a = (float) (fx.nextFloat() * Math.PI * 2);
+        float s = 1.5f + fx.nextFloat() * 4.2f;
+        pX[i] = x + (float) Math.cos(a) * 0.15f;
+        pY[i] = y;
+        pZ[i] = z + (float) Math.sin(a) * 0.15f;
+        pVx[i] = (float) Math.cos(a) * s + vx * 0.4f;
+        pVz[i] = (float) Math.sin(a) * s + vz * 0.4f;
+        pVy[i] = 1.8f + fx.nextFloat() * 4.6f + vy * 0.3f;
+        pLife[i] = 0.7f + fx.nextFloat() * 0.7f;
+        pAge[i] = 0f;
+        pCol[i] = fx.nextInt(4) == 0 ? 0xFFFFFFFF : 0xFFBFE2F7;
+        pDust[i] = false;
     }
 
     // ---- particles ----
@@ -647,10 +757,13 @@ final class World implements Physics.Listener {
                 scale = (1f - k) * (1f - k);
                 if (scale < 0.02f) continue;
             }
-            drawBody(b, scale, drop, i + 2);
+            if (b.gone) continue;
+            if (b.material == Body.WATER) drawBottle(b, scale, drop, i + 2);
+            else drawBody(b, scale, drop, i + 2);
             ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
                     b.hx * scale, b.hy * scale, b.hz * scale);
         }
+        drawPuddles();
         life.draw(ras);
         drawTrail();
         drawHammer();
@@ -678,6 +791,102 @@ final class World implements Physics.Listener {
         for (int k = 0; k < 1; k++)
             ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
                     b.hx * scale, b.hy * scale, b.hz * scale, tint, pat, id << 3);
+    }
+
+    // ---- a water bottle: see-through plastic round a column of water ----
+
+    private static final int SIDES = 12;
+    private static final float[] COS = new float[SIDES + 1], SIN = new float[SIDES + 1];
+
+    static {
+        for (int i = 0; i <= SIDES; i++) {
+            COS[i] = (float) Math.cos(i * Math.PI * 2 / SIDES);
+            SIN[i] = (float) Math.sin(i * Math.PI * 2 / SIDES);
+        }
+    }
+
+    private final float[] qx = new float[SIDES], qy = new float[SIDES], qz = new float[SIDES];
+    private final float[] fLx = new float[4], fLy = new float[4], fLz = new float[4];
+    private static final float[] BY = {-1f, -0.92f, 0.42f, 0.74f, 0.78f, 0.9f, 1f};
+    private static final float[] BR = {0.92f, 1f, 1f, 0.38f, 0.36f, 0.42f, 0.42f};
+    private static final int[] BCOL = {0xFF7FB9E6, 0xFF8CC6EE, 0xFF9FD0F0, 0xFFA8D6F2, 0xFF2F7FD0, 0xFF2F7FD0};
+    private static final int[] BALPHA = {150, 105, 120, 130, 255, 255};
+
+    private void drawBottle(Body b, float scale, float drop, int id) {
+        float r = b.hx * scale, hh = b.hy * scale;
+        // the profile: (height as a share of the half-height, radius as a share of r)
+        float[] ys = BY, rs = BR;
+        int[] cols = BCOL, alpha = BALPHA;
+        float px = b.px, py = b.py + drop, pz = b.pz;
+        for (int pass = 0; pass < 2; pass++) {
+            for (int seg = 0; seg < ys.length - 1; seg++) {
+                for (int i = 0; i < SIDES; i++) {
+                    float ca = COS[i], sa = SIN[i], cb = COS[i + 1], sb = SIN[i + 1];
+                    float y0 = ys[seg] * hh, y1 = ys[seg + 1] * hh, r0 = rs[seg] * r, r1 = rs[seg + 1] * r;
+                    // the outward normal at the middle of the facet, in the body frame
+                    float mc = (ca + cb) * 0.5f, ms = (sa + sb) * 0.5f;
+                    float slope = (r0 - r1) / Math.max(1e-4f, y1 - y0);
+                    float nlx = mc, nly = slope * 0.7f, nlz = ms;
+                    float nl = (float) Math.sqrt(nlx * nlx + nly * nly + nlz * nlz);
+                    nlx /= nl;
+                    nly /= nl;
+                    nlz /= nl;
+                    float nx = b.r00 * nlx + b.r01 * nly + b.r02 * nlz;
+                    float ny = b.r10 * nlx + b.r11 * nly + b.r12 * nlz;
+                    float nz = b.r20 * nlx + b.r21 * nly + b.r22 * nlz;
+                    float fxw = px + b.r00 * (mc * r0) + b.r01 * y0 + b.r02 * (ms * r0);
+                    float fyw = py + b.r10 * (mc * r0) + b.r11 * y0 + b.r12 * (ms * r0);
+                    float fzw = pz + b.r20 * (mc * r0) + b.r21 * y0 + b.r22 * (ms * r0);
+                    float vx = ras.camX - fxw, vy = ras.camY - fyw, vz = ras.camZ - fzw;
+                    boolean front = vx * nx + vy * ny + vz * nz > 0f;
+                    // back facets first, through the plastic; then the near ones on top
+                    if (front != (pass == 1)) continue;
+                    float ndl = nx * Raster.sunX() + ny * Raster.sunY() + nz * Raster.sunZ();
+                    int c = Raster.light(cols[seg], nx, ny, nz, ndl);
+                    // a glossy streak where the sun glances off toward the eye
+                    float vl = (float) Math.sqrt(vx * vx + vy * vy + vz * vz);
+                    float hx2 = Raster.sunX() + vx / vl, hy2 = Raster.sunY() + vy / vl, hz2 = Raster.sunZ() + vz / vl;
+                    float hl = (float) Math.sqrt(hx2 * hx2 + hy2 * hy2 + hz2 * hz2);
+                    float spec = Math.max(0f, (nx * hx2 + ny * hy2 + nz * hz2) / hl);
+                    spec = spec * spec * spec * spec * spec * spec * spec * spec;
+                    c = Backdrop.mix(c, 0xFFFFFFFF, spec * 0.85f);
+                    // ribs on the body: a little darker every few centimeters
+                    if (seg == 2 && (i & 1) == 0) c = Backdrop.scale(c, 0.94f);
+                    float[] lx = fLx, ly = fLy, lz = fLz;
+                    lx[0] = ca * r0;
+                    lx[1] = cb * r0;
+                    lx[2] = cb * r1;
+                    lx[3] = ca * r1;
+                    ly[0] = y0;
+                    ly[1] = y0;
+                    ly[2] = y1;
+                    ly[3] = y1;
+                    lz[0] = sa * r0;
+                    lz[1] = sb * r0;
+                    lz[2] = sb * r1;
+                    lz[3] = sa * r1;
+                    for (int k = 0; k < 4; k++) {
+                        qx[k] = px + b.r00 * lx[k] + b.r01 * ly[k] + b.r02 * lz[k];
+                        qy[k] = py + b.r10 * lx[k] + b.r11 * ly[k] + b.r12 * lz[k];
+                        qz[k] = pz + b.r20 * lx[k] + b.r21 * ly[k] + b.r22 * lz[k];
+                    }
+                    ras.alpha = front ? alpha[seg] : alpha[seg] * 3 / 4;
+                    ras.depthWrite = front;
+                    ras.poly(qx, qy, qz, null, null, 4, c, Raster.PAT_FLAT, id << 3, false);
+                }
+            }
+        }
+        // the cap's top
+        ras.alpha = 255;
+        ras.depthWrite = true;
+        float yTop = hh, rc = 0.42f * r;
+        for (int i = 0; i < SIDES; i++) {
+            qx[i] = px + b.r00 * COS[i] * rc + b.r01 * yTop + b.r02 * SIN[i] * rc;
+            qy[i] = py + b.r10 * COS[i] * rc + b.r11 * yTop + b.r12 * SIN[i] * rc;
+            qz[i] = pz + b.r20 * COS[i] * rc + b.r21 * yTop + b.r22 * SIN[i] * rc;
+        }
+        ras.poly(qx, qy, qz, null, null, SIDES, Raster.light(0xFF3C8AD8, b.r01, b.r11, b.r21,
+                b.r01 * Raster.sunX() + b.r11 * Raster.sunY() + b.r21 * Raster.sunZ()), Raster.PAT_FLAT, id << 3, false);
     }
 
     // hammer parts in the hammer's own frame: center, half sizes, color, pattern

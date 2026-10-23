@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7
+- Big water bottles: see-through blue plastic with ribs and a blue cap, glossy in the sun.
+  They stand in towers, crown the seesaw's loads, sit under arches and on the summits.
+- A new kind of building: a rack of shelves lined with bottles.
+- A bottle bursts at a hard blow or a hard landing: a wet slap, a fan of glittering spray,
+  a puff of mist. A burst bottle counts as knocked off.
+- Water stays: a puddle spreads where it burst; on the plinth it pours over the front
+  edge, runs down the stone in streaks and pools at the foot. Puddles dry in half a minute.
+
 ## 0.6
 - People are round now: shaded heads, tapered limbs, shorts, trousers or skirts, long
   hair, hats and bags.

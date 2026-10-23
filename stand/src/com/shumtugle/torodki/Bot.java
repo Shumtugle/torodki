@@ -86,7 +86,7 @@ public final class Bot implements World.Host {
             float[] pick = null;
             ArrayList<float[]> cands = new ArrayList<float[]>();
             for (Body p : now.pieces) {
-                if (Math.abs(p.px) > Builder.PHX + 0.05f || p.py < Builder.TOP) continue;
+                if (p.gone || Math.abs(p.px) > Builder.PHX + 0.05f || p.py < Builder.TOP) continue;
                 float[] s = now.screenOf(p.px, p.py, p.pz - p.hz);
                 for (float sp : SPEEDS) cands.add(new float[]{s[0], s[1], sp});
             }

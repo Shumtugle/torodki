@@ -9,11 +9,12 @@ Every throw puts out one of the five stars in the corner. Knock three quarters o
 building's weight off the plinth and the next one rises. Run out of stars and the same
 building stands up again at once, so you can try the throw you now know.
 
-- Seven kinds of buildings (tower, seesaw, wall, well, gate, press, steps), grown from
+- Eight kinds of buildings (tower, seesaw, rack, wall, well, gate, press, steps), grown from
   the level number and a seed. Each one is held still for a second before you see it,
   and a building that moves is thrown away and grown again.
 - The street lives in the background: people stroll by, cars come and turn back,
   all as soft silhouettes with long shadows.
+- Big water bottles that burst in a splash and leave puddles behind.
 - Rigid-body physics written for the game: boxes solved on positions in small
   substeps, with friction that holds a stack still and sleep for what does not move.
 - 3D drawn in software into a small pixel frame, with sun shadows and outlines.

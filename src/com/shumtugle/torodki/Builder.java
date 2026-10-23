@@ -17,7 +17,7 @@ final class Builder {
     static final float PHX = 1.42f * S, PHZ = 0.78f * S;
 
     // in the order they first appear: the first ones fall easily, the pyramid is the stubborn one
-    static final String[] KINDS = {"TOWER", "SEESAW", "WALL", "WELL", "GATE", "PRESS", "STEPS"};
+    static final String[] KINDS = {"TOWER", "SEESAW", "RACK", "WALL", "WELL", "GATE", "PRESS", "STEPS"};
 
     static final int[] WOODS = {0xFFE3B47C, 0xFFD39E62, 0xFFC4864F, 0xFFE8C08C};
     static final int[] PAINT = {0xFF8FCBB2, 0xFFEE9272, 0xFFF2D06A, 0xFF8EBDE3, 0xFFF0A9B9};
@@ -41,6 +41,7 @@ final class Builder {
         else if (k.equals("PRESS")) press(size);
         else if (k.equals("WELL")) well(size);
         else if (k.equals("STEPS")) steps(size);
+        else if (k.equals("RACK")) rack(size);
         else gate(size);
         return new ArrayList<Body>(out);
     }
@@ -64,6 +65,21 @@ final class Builder {
         b.homeZ = z;
         out.add(b);
         return b;
+    }
+
+    // a big water bottle, in recipe units: it bursts when hit hard
+    static final float BOTTLE_D = 0.3f, BOTTLE_H = 0.5f;
+
+    /** A water bottle standing at a bottom-center point; returns the height of its top. */
+    private float bottle(float x, float bottom, float z) {
+        float wxp = x * S, wyp = TOP + (bottom + BOTTLE_H * 0.5f) * S, wzp = CZ + z * S;
+        Body b = new Body(BOTTLE_D * 0.5f * S, BOTTLE_H * 0.5f * S, BOTTLE_D * 0.5f * S, Body.WATER, 0xFF8FC4EE);
+        b.setPose(wxp, wyp, wzp, 1, 0, 0, 0);
+        b.homeX = wxp;
+        b.homeY = wyp;
+        b.homeZ = wzp;
+        out.add(b);
+        return bottom + BOTTLE_H;
     }
 
     /** A piece by its bottom-center point, in recipe units above the plinth top. */
@@ -107,11 +123,13 @@ final class Builder {
             float o = w / 2 - post / 2;
             for (int i = 0; i < 4; i++)
                 put((i & 1) == 0 ? -o : o, y, (i & 2) == 0 ? -o : o, post, ph, post, false);
+            if (ph > BOTTLE_H + 0.03f && rnd.nextInt(3) != 0) bottle(0, y, 0);
             y += ph;
             y = put(0, y, 0, w + 0.1f, 0.1f, w + 0.1f, rnd.nextFloat() < 0.5f);
             w *= 0.84f;
         }
-        put(0, y, 0, 0.3f, 0.3f, 0.3f, false);
+        if (rnd.nextBoolean()) bottle(0, y, 0);
+        else put(0, y, 0, 0.3f, 0.3f, 0.3f, false);
     }
 
     /** A pillar with a long beam balanced on it and loads at both ends. */
@@ -125,6 +143,7 @@ final class Builder {
         for (int side = -1; side <= 1; side += 2) {
             float yy = y;
             for (int i = 0; i < load; i++) yy = put(side * (len / 2 - 0.2f), yy, 0, 0.3f, 0.3f, 0.3f, i == 0 && rnd.nextBoolean());
+            if (rnd.nextInt(3) != 0) bottle(side * (len / 2 - 0.2f), yy, 0);
         }
         put(0, y, 0, 0.3f, 0.3f, 0.3f, false);
     }
@@ -143,6 +162,7 @@ final class Builder {
                     put((i - 1) * c, y, (j - 1) * c, c, c, c, false);
             y += c;
         }
+        bottle(0, y, 0);
     }
 
     /** A well: crossed logs, layer on layer. */
@@ -175,6 +195,24 @@ final class Builder {
             }
             y += bh;
         }
+        bottle(0, y, 0);
+    }
+
+    /** Shelves on posts, tier on tier, every shelf lined with water bottles. */
+    private void rack(int size) {
+        int tiers = 2 + Math.min(1, size) + (size > 2 ? 1 : 0);
+        int perShelf = 3 + Math.min(1, size);
+        float width = perShelf * 0.38f + 0.2f, depth = 0.5f, post = 0.12f, gapH = BOTTLE_H + 0.06f;
+        float y = 0f;
+        float ox = width / 2 - post / 2, oz = depth / 2 - post / 2;
+        for (int t = 0; t < tiers; t++) {
+            // bottles stand on the shelf below (or on the plinth), between the posts
+            for (int i = 0; i < perShelf; i++) bottle((i - (perShelf - 1) / 2f) * 0.38f, y, 0f);
+            for (int i = 0; i < 4; i++) put((i & 1) == 0 ? -ox : ox, y, (i & 2) == 0 ? -oz : oz, post, gapH, post, false);
+            y += gapH;
+            y = put(0, y, 0, width + 0.06f, 0.08f, depth + 0.06f, t == 0 && rnd.nextBoolean());
+        }
+        put(0, y, 0, 0.3f, 0.3f, 0.3f, false);
     }
 
     /** Two columns, a lintel, and a little roof of blocks on top. */
@@ -187,6 +225,7 @@ final class Builder {
             put(gap / 2 + c / 2, y, 0, c, c, c, i == 0);
             y += c;
         }
+        if (h * c > BOTTLE_H + 0.05f) bottle(0, 0f, 0);
         float span = gap + 2 * c + 0.2f;
         y = put(0, y, 0, span, 0.14f, 0.4f, rnd.nextBoolean());
         int n = 4;

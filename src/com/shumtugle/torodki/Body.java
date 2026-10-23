@@ -6,9 +6,9 @@ package com.shumtugle.torodki;
  * the hot loops; the rotation matrix is kept in step with the quaternion.
  */
 final class Body {
-    static final int WOOD = 0, STONE = 1, HAMMER = 2, PLINTH = 3, GLASS = 4;
-    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f};
-    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f};
+    static final int WOOD = 0, STONE = 1, HAMMER = 2, PLINTH = 3, GLASS = 4, WATER = 5;
+    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f, 760f};
+    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f, 0.55f};
 
     static final float INERTIA = 3f;
 
@@ -35,6 +35,7 @@ final class Body {
     boolean asleep;
     float still;                    // seconds spent nearly motionless
     boolean ghost;                  // collides with nothing
+    boolean gone;                   // burst: no longer part of the building
     float lastHit;                  // game time of the last sound it made
     float homeX, homeY, homeZ;      // where the generator put it
 

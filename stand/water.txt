@@ -1,0 +1,18 @@
+# A rack of water bottles: one throw, the splash, the puddles.
+screen 1096 2560
+level 2
+wait 0.5
+shot w1_rack
+state
+down 150 600
+move 145 500
+move 140 420
+move 139 373
+up 139 373
+wait 0.62
+shot w2_splash
+wait 0.25
+shot w3_spray
+wait 1.5
+shot w4_puddles
+state

@@ -12,8 +12,9 @@ import java.util.Random;
 final class Synth {
     static final int RATE = 22050;
     static final int WOOD = 0, STONE = 1, GROUND = 2, WHOOSH = 3, THUNDER = 4, CATCH = 5, TOCK = 6, GLASS = 7;
+    static final int SPLASH = 8, PLASTIC = 9;
 
-    final float[][] bank = new float[8][];
+    final float[][] bank = new float[10][];
 
     Synth() {
         Random r = new Random(7);
@@ -26,8 +27,40 @@ final class Synth {
         bank[THUNDER] = thunder(r);
         bank[CATCH] = slap(r);
         bank[TOCK] = knock(r, 0.12f, new float[]{760f, 1640f}, new float[]{0.8f, 0.3f}, new float[]{40f, 55f}, 0.15f, 0.12f);
+        bank[SPLASH] = splash(r);
+        bank[PLASTIC] = knock(r, 0.18f, new float[]{190f, 455f, 780f}, new float[]{1f, 0.45f, 0.2f},
+                new float[]{30f, 42f, 60f}, 0.25f, 0.2f);
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
+    }
+
+    /** A burst of water: a wet slap, a sheet of spray, then a few gulping bubbles. */
+    private static float[] splash(Random r) {
+        int n = (int) (1.1f * RATE);
+        float[] s = new float[n];
+        float lp = 0f, lp2 = 0f;
+        float[] bt = new float[7], bf = new float[7];
+        for (int i = 0; i < bt.length; i++) {
+            bt[i] = 0.06f + r.nextFloat() * 0.5f;
+            bf[i] = 380f + r.nextFloat() * 700f;
+        }
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float nz = r.nextFloat() * 2f - 1f;
+            float cut = 0.5f * (float) Math.exp(-6f * t) + 0.04f;
+            lp += (nz - lp) * cut;
+            lp2 += (lp - lp2) * 0.5f;
+            float v = lp2 * 1.6f * (float) Math.exp(-5f * t) * Math.min(1f, t * 600f);
+            v += (nz - lp) * 0.35f * (float) Math.exp(-14f * t);
+            for (int k = 0; k < bt.length; k++) {
+                float u = t - bt[k];
+                if (u < 0f || u > 0.07f) continue;
+                float f = bf[k] * (1f + 2.5f * u);
+                v += 0.35f * (float) Math.sin(2 * Math.PI * f * u) * (float) Math.exp(-50f * u);
+            }
+            s[i] = v * 0.8f;
+        }
+        return s;
     }
 
     /** Decaying partials with a short burst of filtered noise at the strike. */
