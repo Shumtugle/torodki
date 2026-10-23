@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.26
+- The five newest likenesses have their reactions now: the elder laughs, the thunderer
+  laughs and glowers, the goddess smiles and dozes, the idler grins and yawns, the
+  thinker raises a brow. They come on any visit to the sky where that face is wanted.
+
 ## 0.25
 - Five more likenesses of the gods, seen from below. These have one face each, at rest,
   so they come on visits when that god is to keep his face; a god who is to laugh, frown

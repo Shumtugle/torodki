@@ -203,9 +203,13 @@ final class Sky {
             int[][] frames = new int[m][];
             for (int e = 0; e < m; e++) {
                 int[] img = new int[ww * hh];
-                for (int k = 0; k < img.length; k++, p += 4)
+                boolean any = false;
+                for (int k = 0; k < img.length; k++, p += 4) {
                     img[k] = ((b[p + 3] & 0xFF) << 24) | ((b[p] & 0xFF) << 16) | ((b[p + 1] & 0xFF) << 8) | (b[p + 2] & 0xFF);
-                frames[e] = img;
+                    if (img[k] != 0) any = true;
+                }
+                // an empty face is one the painter has not drawn yet
+                frames[e] = any ? img : null;
             }
             if (who >= GODS || m == 0 || pictures == MAX_PICTURES) continue;
             int e = pictures++;
@@ -314,14 +318,18 @@ final class Sky {
         // each god comes in one of his pictures: one that has the face he is to change to
         for (int g = 0; g < GODS; g++) {
             int n = 0;
-            for (int e = 0; e < pictures; e++) if (role[e] == g && face[e].length > faceTo[g]) n++;
+            for (int e = 0; e < pictures; e++) if (role[e] == g && has(e, faceTo[g])) n++;
             if (n == 0) continue;
             int k = rnd.nextInt(n);
             for (int e = 0; e < pictures; e++)
-                if (role[e] == g && face[e].length > faceTo[g] && k-- == 0) pick[g] = e;
+                if (role[e] == g && has(e, faceTo[g]) && k-- == 0) pick[g] = e;
         }
         time = 0f;
         boltIdx = -1;
+    }
+
+    private boolean has(int e, int f) {
+        return face[e].length > f && face[e][f] != null;
     }
 
     void update(float dt) {
@@ -380,7 +388,7 @@ final class Sky {
             float scale = 0.94f + 0.06f * emerge;
             int[] rest = face[e][0];
             int to = faceTo[g];
-            if (to >= face[e].length) to = 0;
+            if (!has(e, to)) to = 0;
             float tc = CHANGE[g];
             float swap = to == 0 ? 0f : smooth(tc - 0.12f, tc + 0.12f, t);
             int[] a, b;

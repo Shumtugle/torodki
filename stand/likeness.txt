@@ -2,7 +2,7 @@
 screen 1096 2560
 level 3
 wait 0.5
-win 6
+win 1
 wait 5.6
 shot r0
 wait 4.5
@@ -18,11 +18,19 @@ win 6
 wait 5.6
 shot r3
 wait 4.5
-win 2
+win 1
 wait 5.6
 shot r4
 wait 4.5
-win 6
+win 2
 wait 5.6
 shot r5
+wait 4.5
+lose
+wait 5.6
+shot r6
+wait 4.5
+win 2
+wait 5.6
+shot r7
 wait 4.5
