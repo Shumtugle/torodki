@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.32
+- The farthest level reached is kept when you go back to an earlier one. In 0.31 it
+  was saved only when a new level was passed, so going back from far ahead lost it.
+- Inside the booth is a telephone now: a green display, a keypad with its own tones,
+  CALL and C. Dial the level and call it; a level not yet reached shows NO SUCH LEVEL.
+  Below the keypad, the red button calls the golem; HANG UP leads back to the street.
+
 ## 0.31
 - A call box on the lamp post to the right: a grey case with a red button. Each press
   rings the dispatcher. Press three times and a phone booth opens: inside, a button for

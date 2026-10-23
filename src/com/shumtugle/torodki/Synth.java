@@ -12,9 +12,9 @@ import java.util.Random;
 final class Synth {
     static final int RATE = 22050;
     static final int WOOD = 0, STONE = 1, GROUND = 2, WHOOSH = 3, THUNDER = 4, CATCH = 5, TOCK = 6, GLASS = 7;
-    static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11, POP = 12, ROAR = 13, BEAT = 14, RING = 15, DOOR = 16;
+    static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11, POP = 12, ROAR = 13, BEAT = 14, RING = 15, DOOR = 16, DTMF = 17;
 
-    final float[][] bank = new float[17][];
+    final float[][] bank = new float[DTMF + 12][];
 
     Synth() {
         Random r = new Random(7);
@@ -39,6 +39,9 @@ final class Synth {
         bank[BEAT] = beat();
         bank[RING] = ring(r);
         bank[DOOR] = door(r);
+        // the keypad's tones, in the order of its keys: 1 2 3, 4 5 6, 7 8 9, C 0 CALL
+        float[] lo = {697f, 770f, 852f, 941f}, hi = {1209f, 1336f, 1477f};
+        for (int k = 0; k < 12; k++) bank[DTMF + k] = tone(lo[k / 3], hi[k % 3]);
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
     }
@@ -108,6 +111,18 @@ final class Synth {
                 v += (tone * 0.5f + lp * 0.08f) * env;
             }
             s[i] = v * 0.55f;
+        }
+        return s;
+    }
+
+    /** A key of the telephone: two tones together, briefly. */
+    private static float[] tone(float a, float b) {
+        int n = (int) (0.13f * RATE);
+        float[] s = new float[n];
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float env = Math.min(1f, t * 300f) * Math.min(1f, (0.13f - t) * 300f);
+            s[i] = ((float) Math.sin(2 * Math.PI * a * t) + (float) Math.sin(2 * Math.PI * b * t)) * 0.25f * env;
         }
         return s;
     }
