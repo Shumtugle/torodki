@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.2";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.3";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -96,8 +96,11 @@ final class World implements Physics.Listener {
 
     private final float[] tmp = new float[3], scr = new float[2], dirA = new float[3];
 
+    private final Life life;
+
     World(Host host) {
         this.host = host;
+        life = new Life(host, CAM_X, 0f);
         level = Math.max(0, host.loadLevel());
         phys.listener = this;
     }
@@ -297,6 +300,7 @@ final class World implements Physics.Listener {
         hs = FLY;
         hsTime = 0f;
         host.sound(Synth.WHOOSH, 0.9f, 0.9f + speed / 60f);
+        life.onThrow();
         host.buzz(12);
     }
 
@@ -377,6 +381,8 @@ final class World implements Physics.Listener {
         }
         if (acc > 1f / 30f) acc = 0f;
         particles(dt);
+        life.damage = cleared ? 1f : 1f - onPlinth();
+        life.update(dt);
 
         hammerMoves(dt);
         switch (state) {
@@ -451,6 +457,7 @@ final class World implements Physics.Listener {
             thundered = true;
             host.sound(Synth.THUNDER, 1.1f, 1f);
             host.buzz(160);
+            life.onCrash(1f);
         }
         if (off >= CLEAR && state != WON) {
             if (!thundered && throwsMade == 1) {
@@ -458,6 +465,7 @@ final class World implements Physics.Listener {
                 host.sound(Synth.THUNDER, 1.1f, 1f);
                 host.buzz(160);
             }
+            life.onCrash(1f);
             wonAt = stars;
             cleared = true;
             setState(WON);
@@ -513,6 +521,8 @@ final class World implements Physics.Listener {
             host.sound(stone ? Synth.STONE : Synth.WOOD, gain, rate);
         }
         if (hammerHit) host.buzz((int) Math.min(60f, 10f + speed * 3f));
+        if (hammerHit && speed > 4f) life.onCrash(Math.min(1f, speed / 10f));
+        else if (b == null && speed > 4f) life.onCrash(0.4f);
         if (speed > 2.2f && other != null) {
             int n = (int) Math.min(14f, speed * 1.2f);
             boolean dusty = other.material == Body.STONE || other.material == Body.PLINTH;
@@ -612,6 +622,7 @@ final class World implements Physics.Listener {
             ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
                     b.hx * scale, b.hy * scale, b.hz * scale);
         }
+        life.draw(ras);
         drawHammer();
         drawParticles();
         // shadows fall only near the plinth: work on that part of the screen

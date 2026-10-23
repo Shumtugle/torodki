@@ -12,8 +12,9 @@ import java.util.Random;
 final class Synth {
     static final int RATE = 22050;
     static final int WOOD = 0, STONE = 1, GROUND = 2, WHOOSH = 3, THUNDER = 4, CATCH = 5, TOCK = 6, GLASS = 7;
+    static final int SQUEAL = 8, REV = 9, HONK = 10;
 
-    final float[][] bank = new float[8][];
+    final float[][] bank = new float[11][];
 
     Synth() {
         Random r = new Random(7);
@@ -28,6 +29,65 @@ final class Synth {
         bank[TOCK] = knock(r, 0.12f, new float[]{760f, 1640f}, new float[]{0.8f, 0.3f}, new float[]{40f, 55f}, 0.15f, 0.12f);
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
+        bank[SQUEAL] = squeal(r);
+        bank[REV] = rev(r);
+        bank[HONK] = honk();
+    }
+
+    /** Tyres skidding: a hard whistle of band noise that wavers and fades. */
+    private static float[] squeal(Random r) {
+        int n = (int) (1.1f * RATE);
+        float[] s = new float[n];
+        float lp1 = 0, lp2 = 0, ph = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float nz = r.nextFloat() * 2f - 1f;
+            lp1 += (nz - lp1) * 0.45f;
+            lp2 += (lp1 - lp2) * 0.45f;
+            float f = 1350f + 180f * (float) Math.sin(2 * Math.PI * 7f * t) - 300f * t;
+            ph += f / RATE;
+            float tone = (float) Math.sin(2 * Math.PI * ph);
+            float env = Math.min(1f, t * 30f) * (float) Math.exp(-1.6f * t);
+            s[i] = (tone * 0.55f + (lp1 - lp2) * 1.4f) * env * 0.5f;
+        }
+        return s;
+    }
+
+    /** An engine floored: a buzzing saw rising through two gears. */
+    private static float[] rev(Random r) {
+        int n = (int) (1.8f * RATE);
+        float[] s = new float[n];
+        float ph = 0, ph2 = 0, lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float gear = t < 0.9f ? t / 0.9f : (t - 0.9f) / 0.9f * 0.8f + 0.25f;
+            float f = 55f + 120f * gear;
+            ph += f / RATE;
+            ph -= (float) Math.floor(ph);
+            ph2 += f * 0.5f / RATE;
+            ph2 -= (float) Math.floor(ph2);
+            float e = (ph < 0.3f ? 1f : -0.4f) + (ph2 * 2f - 1f) * 0.5f + (r.nextFloat() - 0.5f) * 0.3f;
+            lp += (e - lp) * 0.25f;
+            float env = Math.min(1f, t * 8f) * (t > 1.4f ? (1.8f - t) / 0.4f : 1f);
+            s[i] = lp * env * 0.55f;
+        }
+        return s;
+    }
+
+    /** Two short honks. */
+    private static float[] honk() {
+        int n = (int) (0.55f * RATE);
+        float[] s = new float[n];
+        float lp = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            boolean on = t < 0.16f || (t > 0.24f && t < 0.5f);
+            float a = (float) Math.sin(2 * Math.PI * 392f * t) > 0 ? 1f : -1f;
+            float b = (float) Math.sin(2 * Math.PI * 494f * t) > 0 ? 1f : -1f;
+            lp += ((on ? (a + b) * 0.5f : 0f) - lp) * 0.2f;
+            s[i] = lp * 0.45f;
+        }
+        return s;
     }
 
     /** Decaying partials with a short burst of filtered noise at the strike. */

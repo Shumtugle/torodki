@@ -1,0 +1,22 @@
+# Street life: people walk, a car comes and stops to look; a throw brings the tower down
+# and the street reacts.
+screen 1096 2560
+wait 3
+shot l1_calm
+wait 10.5
+shot l2_car_looks
+state
+down 150 600
+move 145 500
+move 140 420
+move 140 394
+up 140 394
+wait 0.6
+shot l3_crash
+wait 0.5
+shot l4_jump
+wait 1.0
+shot l5_turn
+wait 1.2
+shot l6_flee
+state
