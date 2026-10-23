@@ -1,0 +1,41 @@
+# The level plate ripens from green to red as the same building keeps standing; at the
+# tenth the golden hammer comes down, glowing, and glows in the hand.
+screen 1096 2560
+level 38
+wait 1.0
+shot r0
+lose
+wait 7.5
+lose
+wait 7.5
+shot r2
+lose
+wait 7.5
+lose
+wait 7.5
+shot r4
+lose
+wait 7.5
+lose
+wait 7.5
+shot r6
+lose
+wait 7.5
+lose
+wait 7.5
+shot r8
+lose
+wait 7.5
+shot r9
+lose
+wait 3.9
+shot o1_gold_gift
+wait 5.5
+shot o2_gold_in_hand
+state
+down 140 430
+wait 0.5
+shot o3_aim
+up 140 430
+wait 0.35
+shot o4_flight

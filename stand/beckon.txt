@@ -1,0 +1,14 @@
+# The hundredth level: the button on the post blinks and the dispatcher's line rings,
+# again and again, until it is pressed.
+screen 1096 2560
+level 99
+wait 1.05
+shot b1
+wait 0.06
+shot b2
+wait 3.4
+press
+wait 1.4
+shot b3
+wait 6
+state

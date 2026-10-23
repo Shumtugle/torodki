@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.36";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.37";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -759,7 +759,23 @@ final class World implements Physics.Listener {
         return Math.hypot(x - scr[0], y - scr[1]) < 11f;
     }
 
+    // on the hundredth level the call box calls the player: the button blinks and the
+    // dispatcher's line rings, again and again, until someone presses it
+    static final int BECKON_LEVEL = 99;
+    private float ringAt = -9f;
+    private int hushedOn = -1;
+
+    private void beckon() {
+        if (level != BECKON_LEVEL || hushedOn == level || golem != null || booth >= 0f) return;
+        if (state != PLAY && state != WON && state != LOST) return;
+        if (clock - ringAt > 3.4f) {
+            ringAt = clock;
+            host.sound(Synth.RING, 0.6f, 1f);
+        }
+    }
+
     private void call() {
+        hushedOn = level;
         if (clock - callAt > 6f) calls = 0;
         calls++;
         callAt = clock;
@@ -782,11 +798,15 @@ final class World implements Physics.Listener {
     private void drawCallButton() {
         float vz = ras.project(CALL_X, CALL_Y, CALL_Z, scr);
         if (vz < 0.5f) return;
-        boolean lit = clock - callAt < 1.1f && ((int) ((clock - callAt) * 8f) & 1) == 0;
+        boolean lit = clock - callAt < 1.1f && ((int) ((clock - callAt) * 8f) & 1) == 0
+                || clock - ringAt < 1.1f && hushedOn != level && ((int) ((clock - ringAt) * 8f) & 1) == 0;
         float r = Math.max(1.6f, 0.1f * ras.f / vz);
         ras.disc(scr[0], scr[1], r + 0.6f, 1f / (vz - 0.25f), 0xFF3A3C40, 990 << 3);
         ras.disc(scr[0], scr[1], r, 1f / (vz - 0.3f), lit ? 0xFFFF6A4A : 0xFFC8231E, 990 << 3);
         ras.disc(scr[0] - r * 0.3f, scr[1] - r * 0.35f, Math.max(0.6f, r * 0.3f), 1f / (vz - 0.32f), 0xFFFFB0A0, 990 << 3);
+        // calling the player: the light spills round the button with every flash
+        if (lit && hushedOn != level && level == BECKON_LEVEL)
+            ras.haze(scr[0], scr[1], r * 3.2f, 1f / (vz - 0.35f), 0xFFFF5A30, 150);
     }
 
     // the booth on screen: doors, glass, and a telephone inside. The level is dialled on
@@ -1539,14 +1559,22 @@ final class World implements Physics.Listener {
         levelPlate(f, W - 6, y + 14);
     }
 
-    /** The level number on a plate of its own, framed like the bar, so the sky never swallows it. */
+    /**
+     * The level number on a plate of its own, framed like the bar, so the sky never swallows
+     * it. The plate warns without a word: pale green while all is well, and with every
+     * building in a row that would not fall it ripens through amber to red, as the count
+     * nears the tenth, which brings the golden hammer or the golem.
+     */
     private void levelPlate(Px f, int right, int top) {
         String lv = String.valueOf(level + 1);
+        float risk = Math.min(1f, fails / (float) GOLD_AFTER);
+        int bg = risk < 0.5f ? Backdrop.mix(0xFFCFEBB4, 0xFFF2B640, risk * 2f) : Backdrop.mix(0xFFF2B640, 0xFFD02A20, (risk - 0.5f) * 2f);
+        int ink = risk < 0.4f ? 0xFF2E3A12 : risk < 0.8f ? 0xFFFFFFFF : 0xFFFFE45A;
         int tw = PixelFont.width(lv, 1), px0 = right - tw - 6, py1 = top + 11;
-        f.rect(px0, top, right, py1, 0xFF8A5A12);
-        f.rect(px0 + 1, top + 1, right - 1, py1 - 1, 0xFFF3E9D2);
-        f.rect(px0 + 1, py1 - 2, right - 1, py1 - 1, 0xFFDCCBA8);
-        PixelFont.draw(f, lv, px0 + 3, top + 2, 1, 0xFF4A2E0A);
+        f.rect(px0, top, right, py1, risk < 0.8f ? 0xFF8A5A12 : 0xFF5A1208);
+        f.rect(px0 + 1, top + 1, right - 1, py1 - 1, bg);
+        f.rect(px0 + 1, py1 - 2, right - 1, py1 - 1, Backdrop.scale(bg, 0.86f));
+        PixelFont.draw(f, lv, px0 + 3, top + 2, 1, ink);
     }
 
     private void shield(Px f, int x, int y, boolean on) {
@@ -1772,6 +1800,7 @@ final class World implements Physics.Listener {
         puddles(dt);
         life.update(dt);
         fliers.update(dt, golem == null && (state == PLAY || state == WON || state == LOST || state == BUILD));
+        beckon();
         trail();
 
         windUp(dt);
@@ -2510,6 +2539,7 @@ final class World implements Physics.Listener {
 
     void draw(Px f) {
         if (ras == null) return;
+        glowN = 0;
         System.arraycopy(zoomed ? zCol : bgCol, 0, ras.col, 0, bgCol.length);
         System.arraycopy(zoomed ? zZ : bgZ, 0, ras.zb, 0, bgZ.length);
         System.arraycopy(zoomed ? zLit : bgLit, 0, ras.lit, 0, bgLit.length);
@@ -2578,12 +2608,18 @@ final class World implements Physics.Listener {
         ras.shadowApply((int) minX, (int) minY, (int) maxX + 1, (int) maxY + 1);
         ras.outlines(0, (int) Math.max(0, minY - 40), W - 1, h - 1, 1);
         if (golem == null) fliers.draw(ras);
+        for (int i = 0; i < glowN; i++) glow(ras.col, h, glowX[i], glowY[i], glowR[i], i * 3, glowLo[i], glowHi[i]);
+        glowN = 0;
         if (aiming) drawAim();
         int off = tilt();
         if (off > 0) {
             sky.compose(ras.col, f.a, h, off);
             sky.drawClouds(f, off - h);
-            if (giftShown >= 0f && state == SKY_HOLD && stateTime > 0.9f) drawGift(f, stateTime - 0.9f);
+            if (giftShown >= 0f && state == SKY_HOLD && stateTime > 0.9f) {
+                drawGift(f, stateTime - 0.9f);
+                for (int i = 0; i < glowN; i++) glow(f.a, h, glowX[i], glowY[i], glowR[i], 7 + i, -1, -1);
+                glowN = 0;
+            }
             grade(f, off);
             if (off < h / 8) {
                 if (golem != null && state == BOSS) drawFightHud(f);
@@ -2768,6 +2804,8 @@ final class World implements Physics.Listener {
 
     private void drawBody(Body b, float scale, float drop, int id) {
         if (b.material == Body.GOLD) {
+            float gz = ras.project(b.px, b.py + drop, b.pz, scr);
+            if (gz > 0.3f && scale > 0.5f) glowAt(scr[0], scr[1], b.hx * 2.2f * scale * ras.f / gz, id << 3, (id + 1) << 3);
             ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
                     b.hx * scale, b.hy * scale, b.hz * scale, b.tint, Raster.PAT_FLAT, id << 3);
             // a glint that wanders over it
@@ -3298,6 +3336,148 @@ final class World implements Physics.Listener {
         }
     }
 
+    // ---- the glow of gold ----
+    // Golden things are not merely yellow: the hammer and the cube shine with a warm halo
+    // that breathes, and sparks twinkle round them. Each frame collects where they are on
+    // screen, and the halo is laid over the picture once everything else is drawn.
+
+    private static final int GLOWS = 4;
+    private final float[] glowX = new float[GLOWS], glowY = new float[GLOWS], glowR = new float[GLOWS];
+    private final int[] glowLo = new int[GLOWS], glowHi = new int[GLOWS];
+    private int glowN;
+
+    /** A halo round (x, y); the object's own pixels, ids lo to hi, take only a little of it. */
+    private void glowAt(float x, float y, float r, int lo, int hi) {
+        if (glowN < GLOWS && r > 0.5f) {
+            glowX[glowN] = x;
+            glowY[glowN] = y;
+            glowR[glowN] = r;
+            glowLo[glowN] = lo;
+            glowHi[glowN] = hi;
+            glowN++;
+        }
+    }
+
+    private float[] glowD = new float[0];
+
+    /**
+     * A warm halo added over a picture W wide and rows tall. For an object on the street
+     * (ids lo to hi) the halo hugs its outline, however near or far it is: a few pixels of
+     * light all round it, fading outward, and a sheen on the object itself. Without ids it
+     * is a round halo about (x, y). Sparks drift round it either way.
+     */
+    private void glow(int[] buf, int rows, float x, float y, float r, int seed, int lo, int hi) {
+        float breathe = 0.62f + 0.18f * (float) Math.sin(clock * 3.6f + seed);
+        if (lo < 0) {
+            float R = Math.min(34f, r) * 2.1f;
+            int x0 = Math.max(0, (int) (x - R)), x1 = Math.min(W - 1, (int) (x + R));
+            int y0 = Math.max(0, (int) (y - R)), y1 = Math.min(rows - 1, (int) (y + R));
+            for (int py = y0; py <= y1; py++)
+                for (int px = x0; px <= x1; px++) {
+                    float dx = px + 0.5f - x, dy = py + 0.5f - y;
+                    float d = (float) Math.sqrt(dx * dx + dy * dy) / R;
+                    if (d < 1f) addLight(buf, py * W + px, (1f - d) * (1f - d) * breathe);
+                }
+        } else {
+            int[] id = ras.idb;
+            int bx0 = W, by0 = rows, bx1 = -1, by1 = -1;
+            for (int py = 0; py < rows; py++)
+                for (int px = 0, i = py * W; px < W; px++, i++)
+                    if (id[i] >= lo && id[i] < hi) {
+                        if (px < bx0) bx0 = px;
+                        if (px > bx1) bx1 = px;
+                        if (py < by0) by0 = py;
+                        if (py > by1) by1 = py;
+                    }
+            if (bx1 < 0) return;
+            // how far the light reaches past the outline: more for what is near and big
+            float reach = Math.max(4f, Math.min(14f, r * 0.8f));
+            int g = (int) Math.ceil(reach);
+            int x0 = Math.max(0, bx0 - g), x1 = Math.min(W - 1, bx1 + g);
+            int y0 = Math.max(0, by0 - g), y1 = Math.min(rows - 1, by1 + g);
+            int bw = x1 - x0 + 1, bh = y1 - y0 + 1;
+            if (glowD.length < bw * bh) glowD = new float[bw * bh];
+            float[] d = glowD;
+            // distance to the object, two chamfer passes over the box round it
+            for (int py = 0; py < bh; py++)
+                for (int px = 0; px < bw; px++) {
+                    int i = (y0 + py) * W + x0 + px;
+                    d[py * bw + px] = id[i] >= lo && id[i] < hi ? 0f : 1e6f;
+                }
+            for (int py = 0; py < bh; py++)
+                for (int px = 0; px < bw; px++) {
+                    int k = py * bw + px;
+                    float v = d[k];
+                    if (px > 0) v = Math.min(v, d[k - 1] + 1f);
+                    if (py > 0) {
+                        v = Math.min(v, d[k - bw] + 1f);
+                        if (px > 0) v = Math.min(v, d[k - bw - 1] + 1.414f);
+                        if (px < bw - 1) v = Math.min(v, d[k - bw + 1] + 1.414f);
+                    }
+                    d[k] = v;
+                }
+            for (int py = bh - 1; py >= 0; py--)
+                for (int px = bw - 1; px >= 0; px--) {
+                    int k = py * bw + px;
+                    float v = d[k];
+                    if (px < bw - 1) v = Math.min(v, d[k + 1] + 1f);
+                    if (py < bh - 1) {
+                        v = Math.min(v, d[k + bw] + 1f);
+                        if (px < bw - 1) v = Math.min(v, d[k + bw + 1] + 1.414f);
+                        if (px > 0) v = Math.min(v, d[k + bw - 1] + 1.414f);
+                    }
+                    d[k] = v;
+                }
+            // a sheen that sweeps across the gold itself
+            float sweep = (clock * 0.7f + seed) % 2.2f;
+            for (int py = 0; py < bh; py++)
+                for (int px = 0; px < bw; px++) {
+                    float dist = d[py * bw + px];
+                    int i = (y0 + py) * W + x0 + px;
+                    if (dist == 0f) {
+                        float u = (px + py * 0.6f) / (float) Math.max(1, bw + bh * 0.6f);
+                        float band = 1f - Math.min(1f, Math.abs(u - sweep + 0.6f) * 9f);
+                        addLight(buf, i, 0.1f + 0.35f * Math.max(0f, band));
+                    } else if (dist < reach) {
+                        float k = 1f - dist / reach;
+                        addLight(buf, i, k * k * (breathe + 0.15f));
+                    }
+                }
+            x = (bx0 + bx1) * 0.5f;
+            y = (by0 + by1) * 0.5f;
+            r = Math.max(bx1 - bx0, by1 - by0) * 0.5f + reach * 0.5f;
+        }
+        // sparks drift round it, each flaring and fading in its own time
+        for (int s = 0; s < 5; s++) {
+            float tw = (float) Math.sin(clock * 6.3f + s * 2.1f + seed);
+            if (tw < 0.2f) continue;
+            float a = clock * 0.9f + s * 1.2566f + seed;
+            float dist = r * (1.05f + 0.35f * (float) Math.sin(clock * 1.7f + s * 3.1f));
+            int sx = Math.round(x + (float) Math.cos(a) * dist), sy = Math.round(y + (float) Math.sin(a) * dist * 0.8f);
+            int arm = tw > 0.75f ? 2 : 1;
+            spark(buf, rows, sx, sy, 0xFFFFFFFF);
+            for (int k = 1; k <= arm; k++) {
+                int c = k == 1 ? 0xFFFFF2B0 : 0xFFF2C64A;
+                spark(buf, rows, sx - k, sy, c);
+                spark(buf, rows, sx + k, sy, c);
+                spark(buf, rows, sx, sy - k, c);
+                spark(buf, rows, sx, sy + k, c);
+            }
+        }
+    }
+
+    private void addLight(int[] buf, int i, float k) {
+        int c = buf[i];
+        int cr = Math.min(255, ((c >> 16) & 0xFF) + (int) (255f * k));
+        int cg = Math.min(255, ((c >> 8) & 0xFF) + (int) (205f * k));
+        int cb = Math.min(255, (c & 0xFF) + (int) (95f * k));
+        buf[i] = 0xFF000000 | (cr << 16) | (cg << 8) | cb;
+    }
+
+    private void spark(int[] buf, int rows, int x, int y, int c) {
+        if (x >= 0 && y >= 0 && x < W && y < rows) buf[y * W + x] = c;
+    }
+
     private static final int[] GOLD_COL = {0xFF8A5A32, 0xFF5A3418, 0xFFF2C64A, 0xFFFFF0B0, 0xFFFFF0B0};
     private static final int[] GOLD_PAT = {Raster.PAT_GRAIN, Raster.PAT_FLAT, Raster.PAT_FLAT, Raster.PAT_FLAT, Raster.PAT_FLAT};
 
@@ -3320,6 +3500,10 @@ final class World implements Physics.Listener {
             float cz = pz + r20 * ox + r21 * oy + r22 * oz;
             ras.box(cx, cy, cz, r00, r01, r02, r10, r11, r12, r20, r21, r22, p[3] * scale, p[4] * scale, p[5] * scale,
                     cols[i], pats[i], (id + (i == 2 ? 1 : i > 2 ? 2 + i : 0)) << 3);
+            if (gold && !diamond && i == 2) {
+                float vz = ras.project(cx, cy, cz, scr);
+                if (vz > 0.05f) glowAt(scr[0], scr[1], 0.2f * scale * ras.f / vz, id << 3, (id + 10) << 3);
+            }
         }
     }
 
@@ -3486,6 +3670,10 @@ final class World implements Physics.Listener {
         float cx = W * 0.5f - 30f * fall, cy = h * 0.24f + 40f * fall + 230f * fall * fall;
         if (cy > h + 30) return;
         float ang = 0.6f + t * 5.2f, s = 24f;
+        if (goldGift) {
+            float ca0 = (float) Math.cos(ang), sa0 = (float) Math.sin(ang);
+            glowAt(cx + ca0 * s * 0.41f, cy + sa0 * s * 0.41f, s * 0.5f, -1, -1);
+        }
         float ca = (float) Math.cos(ang), sa = (float) Math.sin(ang);
         int r = (int) (s * 1.1f) + 2;
         for (int y = -r; y <= r; y++)

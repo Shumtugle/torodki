@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.37
+- The level plate warns without a word: pale green while buildings fall, and with every
+  one in a row that will not, it ripens through amber to red, the number turning white
+  and then yellow, as the count nears the tenth that brings the golden hammer or the golem.
+- Gold shines now. The golden hammer, in the hand, in flight and as it tumbles from the
+  sky, and the golden cube on a building glow with a warm light that hugs their outline
+  and breathes, a sheen sweeps across them and sparks twinkle round: no plain yellow
+  block looks like that.
+- On the hundredth level the button on the lamp post calls the player: it flashes, the
+  light spilling round it, and the dispatcher's line rings every few seconds until it is
+  pressed.
+
 ## 0.36
 - No god ever yawns now. When the stars run out the thunderer glowers, the goddess dozes,
   the thinker doubts, and the elder and the idler simply look on.
