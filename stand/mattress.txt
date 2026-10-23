@@ -1,0 +1,14 @@
+# A mattress between concrete slabs: the hammer tears its ticking and the springs jump out.
+screen 1096 2560
+luggage 2
+level 12
+wait 1.2
+shot m0
+throwat 0 2.6 11.5 9
+wait 1.2
+shot m1
+wait 0.4
+shot m2
+wait 1.5
+shot m3
+state

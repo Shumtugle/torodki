@@ -1,0 +1,13 @@
+# Torn mattresses and open suitcases, close up and at rest.
+screen 1096 2560
+luggage 3
+level 11
+wait 1.2
+tear
+wait 0.6
+shot torn1
+level 12
+wait 1.2
+tear
+wait 0.6
+shot torn2

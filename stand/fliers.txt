@@ -1,0 +1,16 @@
+# Far away over the street: a flock of birds, an airliner and its trail.
+screen 1096 2560
+level 5
+wait 1.0
+fliers 1
+fliers 2
+wait 3
+shot fl1
+wait 3
+shot fl2
+wait 3
+shot fl3
+wait 3
+shot fl4
+wait 10
+shot fl5

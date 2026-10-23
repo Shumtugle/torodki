@@ -1,0 +1,28 @@
+# Suitcases and mattresses in grown buildings, then a hammer into them.
+screen 1096 2560
+luggage 1
+level 12
+wait 1.2
+shot c13
+level 15
+wait 1.2
+shot c16
+luggage 2
+level 18
+wait 1.2
+shot m19
+level 21
+wait 1.2
+shot m22
+luggage 3
+level 24
+wait 1.2
+shot b25
+throwat 0 2.6 14.5 16
+wait 0.5
+shot hit1
+wait 0.6
+shot hit2
+wait 1.5
+shot hit3
+state

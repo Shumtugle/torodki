@@ -21,7 +21,8 @@ final class Builder {
      * the very first stands close, as the first plinth of the game did; from the 21st on,
      * three meters at once, then two more every five levels, ten meters at most; from the
      * 40th, twelve meters and again two more every five levels, twenty at most; from the
-     * 50th, twenty-four, and two more every five levels, thirty at most.
+     * 50th, twenty-four, and two more every five levels, thirty at most; from the 80th,
+     * thirty-six, and two more every five levels, forty-six at most.
      */
     static float farther(int level) {
         int n = level + 1;
@@ -29,7 +30,8 @@ final class Builder {
         if (n < 21) return 0f;
         if (n < 40) return Math.min(10f, 3f + 2f * ((n - 21) / 5));
         if (n < 50) return Math.min(20f, 12f + 2f * ((n - 40) / 5));
-        return Math.min(30f, 24f + 2f * ((n - 50) / 5));
+        if (n < 80) return Math.min(30f, 24f + 2f * ((n - 50) / 5));
+        return Math.min(46f, 36f + 2f * ((n - 80) / 5));
     }
     static final float PHX = 1.42f * S, PHZ = 0.78f * S;
 
@@ -40,6 +42,9 @@ final class Builder {
     static final int FIRST_KINDS = 8, RECIPES = 11, GROWN = 11;
     static final int BALLS_FROM = 14;        // level, counted from 0
     static final int STREET_FROM = 9;        // drums, tyres, cones and sandbags, counted from 0
+    static final int LUGGAGE_FROM = 11;      // suitcases and mattresses, counted from 0
+    // the stand may ask for things to be grown into every building: 1 suitcases, 2 mattresses
+    static volatile int force;
     // the recipes after the first eight: every other one carries balls
     private static final int[] LATE = {8, 0, 9, 1, 10, 2, 8, 3, 9, 4, 10, 5, 8, 6, 9, 7, 10};
 
@@ -144,6 +149,11 @@ final class Builder {
     static final int[] DRUM_COLORS = {0xFF2F5D8C, 0xFFB23A2E, 0xFF3F6B45, 0xFFD9A62B, 0xFF6B6E72, 0xFF2B2F36};
     static final int[] BAG_COLORS = {0xFFC9AE7C, 0xFFBFA06A, 0xFFD2BA8A, 0xFF9C9A6A};
     static final int TYRE_COLOR = 0xFF2E2D2F;
+    // old suitcases: browns, mustard, burgundy
+    static final int[] CASE_COLORS = {0xFF7A4A2A, 0xFF8E5A34, 0xFF6A3E24, 0xFFC79A2E, 0xFFB08424, 0xFF7A2430, 0xFF8C2F3A};
+    static final float CASE_H = 0.14f, MAT_H = 0.17f, SLAB_H = 0.08f;
+    static final int[] CONCRETE = {0xFFB8B4AA, 0xFFAEAAA2, 0xFFC2BEB4};
+    static final int MAT_COLOR = 0xFFE9E6DC;
 
     /** Any body by its bottom-center point; returns the height of its top. */
     private float thing(float x, float bottom, float z, float sx, float sy, float sz, int material, int tint) {
@@ -171,6 +181,33 @@ final class Builder {
     /** A road cone on its square foot. */
     private float cone(float x, float bottom, float z) {
         return thing(x, bottom, z, CONE_W, CONE_H, CONE_W, Body.CONE, 0xFFF0641E);
+    }
+
+    /**
+     * Old suitcases lying flat, one on another, each a little different in size and set a
+     * little askew; the biggest at the bottom. Returns the height of the top one.
+     */
+    private float cases(float x, float bottom, float z, int n, float maxW) {
+        float w = Math.min(maxW, 0.4f + rnd.nextFloat() * 0.06f);
+        for (int i = 0; i < n; i++) {
+            float cw = w * (1f - 0.07f * i - rnd.nextFloat() * 0.05f);
+            float h = CASE_H * (0.9f + rnd.nextFloat() * 0.2f);
+            float dz = 0.26f + rnd.nextFloat() * 0.04f;
+            float off = (rnd.nextFloat() - 0.5f) * 0.04f;
+            bottom = thing(x + off, bottom, z, cw, h, dz, Body.SUITCASE, CASE_COLORS[rnd.nextInt(CASE_COLORS.length)]);
+        }
+        return bottom;
+    }
+
+    /**
+     * A spring mattress pressed between two concrete slabs: the slab above sinks into it,
+     * and whatever stands on top sways on it instead of falling straight.
+     */
+    private float padded(float cx, float hw, float y, float d) {
+        int c = CONCRETE[rnd.nextInt(CONCRETE.length)];
+        y = thing(cx, y, 0, 2f * hw + 0.04f, SLAB_H, d + 0.04f, Body.STONE, c);
+        y = thing(cx, y, 0, 2f * hw + 0.02f, MAT_H, d + 0.06f, Body.MATTRESS, MAT_COLOR);
+        return thing(cx, y, 0, 2f * hw + 0.06f, SLAB_H, d + 0.04f, Body.STONE, c);
     }
 
     /** Sandbags laid like bricks, two or three courses: heavy, dead, hard to shift. */
@@ -228,7 +265,7 @@ final class Builder {
     private int budget;
     private float maxH;
     private boolean useBottles, useBalls, useBalloons;
-    private boolean useDrums, useTyres, useBags, useCones;
+    private boolean useDrums, useTyres, useBags, useCones, useCases, useMats;
     private static final int[] BALLOON_COLORS = {0xFFE8483C, 0xFFF2C230, 0xFF3F8FD8, 0xFF5DBE6A, 0xFFE87AB0, 0xFFF29A3A};
 
     private void grown(int level) {
@@ -242,6 +279,9 @@ final class Builder {
         useTyres = street && rnd.nextFloat() < 0.4f;
         useBags = street && rnd.nextFloat() < 0.35f;
         useCones = street && rnd.nextFloat() < 0.4f;
+        boolean luggage = level >= LUGGAGE_FROM;
+        useCases = luggage && rnd.nextFloat() < 0.4f || (force & 1) != 0;
+        useMats = luggage && rnd.nextFloat() < 0.5f || (force & 2) != 0;
         float hw = 0.95f + rnd.nextFloat() * 0.35f;
         float d = 0.34f + rnd.nextInt(3) * 0.08f;
         if (useBalls || useBalloons) d = Math.max(d, 0.46f);
@@ -280,9 +320,14 @@ final class Builder {
             float wBottle = useBottles ? 1.4f : 0f, wSteps = storey == 0 && hw > 0.6f ? 0.5f : 0f;
             float wWall = 1.1f, wPortal = 1.6f, wFence = hw > 0.45f ? 0.9f : 0f, wDeck = storey > 0 && hw > 0.5f ? 0.5f : 0f;
             float wDrum = useDrums ? 1.3f : 0f, wTyre = useTyres ? 1.2f : 0f, wBags = useBags && storey < 2 ? 1.2f : 0f;
+            // suitcases ride the upper storeys; a mattress may lie anywhere but the very top
+            float wCases = useCases && storey >= 1 ? ((force & 1) != 0 ? 6f : 1.4f) : 0f;
+            float wMat = useMats && storey < 3 && y < maxH - 0.5f ? ((force & 2) != 0 ? 6f : 2.6f) : 0f;
             float r = rnd.nextFloat() * (wBalloon + wBall + wBottle + wSteps + wWall + wPortal + wFence + wDeck
-                    + wDrum + wTyre + wBags);
-            if ((r -= wDrum) < 0f) top = carried(cx, hw, y, d, 3);
+                    + wDrum + wTyre + wBags + wCases + wMat);
+            if ((r -= wCases) < 0f) top = carried(cx, hw, y, d, 5);
+            else if ((r -= wMat) < 0f) top = padded(cx, hw, y, d);
+            else if ((r -= wDrum) < 0f) top = carried(cx, hw, y, d, 3);
             else if ((r -= wTyre) < 0f) top = carried(cx, hw, y, d, 4);
             else if ((r -= wBags) < 0f) top = bags(cx, hw, y, d);
             else if ((r -= wBalloon) < 0f) top = carried(cx, hw, y, d, 2);
@@ -384,8 +429,9 @@ final class Builder {
         return y;
     }
 
-    /** Cubes stacked into a little column; or a stack of tyres, or a drum. */
+    /** Cubes stacked into a little column; or a stack of tyres, a drum, or suitcases. */
     private float column(float cx, float hw, float y, boolean stone) {
+        if (useCases && rnd.nextFloat() < 0.3f) return cases(cx, y, 0, 2 + rnd.nextInt(2), Math.max(0.3f, 2f * hw + 0.1f));
         if (useTyres && rnd.nextFloat() < 0.4f) return tyres(cx, y, 0, 2 + rnd.nextInt(3));
         if (useDrums && rnd.nextFloat() < 0.35f) return drum(cx, y, 0);
         float c = Math.min(2f * hw, 0.34f);
@@ -410,7 +456,8 @@ final class Builder {
     /**
      * A slab carried by something that gives way: water bottles (0) that burst, polished
      * balls on pads (1) that roll out, balloons (2) that pop and fly off, empty steel
-     * drums (3) that ring and roll, or stacks of old tyres (4) that bounce away.
+     * drums (3) that ring and roll, stacks of old tyres (4) that bounce away, or stacks of
+     * old suitcases (5) that soak up a blow.
      */
     private float carried(float cx, float hw, float y, float d, int what) {
         float top;
@@ -422,6 +469,23 @@ final class Builder {
                 float x = cx - o + 2f * o * i / (n - 1);
                 top = Math.max(top, what == 0 ? bottle(x, y, 0) : drum(x, y, 0));
             }
+        } else if (what == 5) {
+            top = y;
+            float cw = Math.min(0.44f, Math.max(0.3f, hw - 0.05f));
+            float co = Math.max(0.16f, hw - cw / 2f);
+            int n = 2 + rnd.nextInt(2);
+            // every stack from the same draw, so they come out one height and the slab lies flat
+            long seed = rnd.nextLong();
+            Random keep = rnd;
+            for (int i = -1; i <= 1; i += 2) {
+                rnd = new Random(seed);
+                top = Math.max(top, cases(cx + i * co, y, 0, n, cw));
+            }
+            if (hw > 0.85f) {
+                rnd = new Random(seed);
+                top = Math.max(top, cases(cx, y, 0, n, cw));
+            }
+            rnd = keep;
         } else if (what == 4) {
             int n = 3 + rnd.nextInt(2);
             boolean four = d >= 0.5f;
@@ -453,6 +517,14 @@ final class Builder {
     private void cap(float cx, float hw, float y, float d) {
         float r = rnd.nextFloat();
         if (out.size() >= budget + 4 || r < 0.15f) return;
+        if (useCases && hw >= 0.18f && rnd.nextFloat() < 0.45f) {
+            int n = 2 + rnd.nextInt(2);
+            if (hw >= 0.6f) {
+                cases(cx - hw * 0.5f, y, 0, n, hw * 0.9f);
+                cases(cx + hw * 0.5f, y, 0, 2 + rnd.nextInt(2), hw * 0.9f);
+            } else cases(cx, y, 0, n, Math.max(0.3f, 2f * hw + 0.12f));
+            return;
+        }
         if (useCones && rnd.nextFloat() < 0.5f) {
             int n = hw >= 0.5f ? 2 + rnd.nextInt(2) : 1;
             float step = Math.min(0.34f, 2f * hw / n);

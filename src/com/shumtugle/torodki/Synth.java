@@ -15,8 +15,10 @@ final class Synth {
     static final int SPLASH = 8, PLASTIC = 9, CRASH = 10, ALARM = 11, POP = 12, ROAR = 13, BEAT = 14, RING = 15, DOOR = 16, DTMF = 17;
     // after the twelve keypad tones
     static final int CLANG = DTMF + 12, SAND = DTMF + 13, RUBBER = DTMF + 14, BUSY = DTMF + 15;
+    // luggage: a leather slap, brass latches snapping, a mattress groaning, ticking torn open
+    static final int LEATHER = DTMF + 16, LATCH = DTMF + 17, MATTRESS = DTMF + 18, TEAR = DTMF + 19;
 
-    final float[][] bank = new float[DTMF + 16][];
+    final float[][] bank = new float[DTMF + 20][];
 
     Synth() {
         Random r = new Random(7);
@@ -50,6 +52,10 @@ final class Synth {
         bank[SAND] = sand(r);
         bank[RUBBER] = rubber(r);
         bank[BUSY] = busy();
+        bank[LEATHER] = leather(r);
+        bank[LATCH] = latch(r);
+        bank[MATTRESS] = mattress(r);
+        bank[TEAR] = tear(r);
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
     }
@@ -147,6 +153,93 @@ final class Synth {
             lp2 += (lp - lp2) * 0.3f;
             v += (lp - lp2) * 1.6f * (float) Math.exp(-14f * t);
             s[i] = v * Math.min(1f, t * 600f) * 0.75f;
+        }
+        return s;
+    }
+
+    /** A suitcase struck: a dull flat slap of leather over cloth, no ring in it. */
+    private static float[] leather(Random r) {
+        int n = (int) (0.22f * RATE);
+        float[] s = new float[n];
+        float lp = 0f, lp2 = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float v = (float) Math.sin(2 * Math.PI * (118f - 70f * t) * t) * (float) Math.exp(-30f * t);
+            lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.45f;
+            lp2 += (lp - lp2) * 0.35f;
+            v += lp2 * 1.5f * (float) Math.exp(-55f * t);
+            s[i] = v * Math.min(1f, t * 3000f) * 0.8f;
+        }
+        return s;
+    }
+
+    /** Brass latches torn open: two thin bright dings close together. */
+    private static float[] latch(Random r) {
+        int n = (int) (0.4f * RATE);
+        float[] s = new float[n];
+        float[] at = {0f, 0.045f};
+        float[] hz = {3150f, 3420f};
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float v = 0f;
+            for (int k = 0; k < 2; k++) {
+                float u = t - at[k];
+                if (u < 0f) continue;
+                v += (float) Math.sin(2 * Math.PI * hz[k] * u) * (float) Math.exp(-14f * u) * 0.4f;
+                v += (float) Math.sin(2 * Math.PI * hz[k] * 2.37f * u) * (float) Math.exp(-30f * u) * 0.15f;
+                if (u < 0.004f) v += (r.nextFloat() * 2f - 1f) * 0.5f;
+            }
+            s[i] = v;
+        }
+        return s;
+    }
+
+    /**
+     * A spring mattress hit: a deep muffled whump, then the steel wire inside complains,
+     * a long creak that sags and wavers as the springs settle.
+     */
+    private static float[] mattress(Random r) {
+        int n = (int) (1.3f * RATE);
+        float[] s = new float[n];
+        float lp = 0f, lp2 = 0f, ph = 0f, ph2 = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float v = (float) Math.sin(2 * Math.PI * (62f - 22f * t) * t) * (float) Math.exp(-11f * t) * 1.1f;
+            lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.06f;
+            v += lp * 2.4f * (float) Math.exp(-20f * t);
+            // the creak: a thin rasping tone, sliding down, rocking with the springs
+            float u = t - 0.07f;
+            if (u > 0f) {
+                float f = 780f - 210f * u + 60f * (float) Math.sin(u * 2 * Math.PI * 2.6f);
+                ph += f / RATE;
+                ph2 += f * 1.5f / RATE;
+                float rasp = ((ph % 1f) < 0.5f ? 1f : -1f) * 0.5f + ((ph2 % 1f) * 2f - 1f) * 0.3f;
+                lp2 += (rasp - lp2) * 0.35f;
+                float grain = 0.6f + 0.4f * (float) Math.sin(u * 2 * Math.PI * 31f);
+                float env = Math.min(1f, u * 12f) * (float) Math.exp(-2.4f * u);
+                v += lp2 * grain * env * 0.3f;
+            }
+            s[i] = v * Math.min(1f, t * 900f) * 0.7f;
+        }
+        return s;
+    }
+
+    /** Ticking torn open: a ripping hiss, then a spring jumping out with a twang. */
+    private static float[] tear(Random r) {
+        int n = (int) (0.75f * RATE);
+        float[] s = new float[n];
+        float lp = 0f, lp2 = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float nz = r.nextFloat() * 2f - 1f;
+            lp += (nz - lp) * 0.5f;
+            lp2 += (lp - lp2) * 0.2f;
+            float rip = (lp - lp2) * (0.5f + 0.5f * (float) Math.sin(t * 2 * Math.PI * 47f)) * Math.min(1f, t * 60f)
+                    * (t < 0.22f ? 1f : (float) Math.exp(-30f * (t - 0.22f))) * 1.4f;
+            float u = t - 0.2f;
+            float twang = u > 0f ? (float) Math.sin(2 * Math.PI * (330f + 90f * (float) Math.exp(-6f * u)) * u)
+                    * (float) Math.exp(-5f * u) * 0.4f : 0f;
+            s[i] = rip + twang;
         }
         return s;
     }

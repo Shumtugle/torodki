@@ -122,6 +122,9 @@ final class Raster {
     // ---- polygons ----
 
     static final int PAT_FLAT = 0, PAT_GRAIN = 1, PAT_WINDOWS = 2, PAT_STONE = 3, PAT_BANDS = 4, PAT_FACADE = 5, PAT_BRICK = 6;
+    // patterns that bring colors of their own, lit like a facade: striped mattress ticking,
+    // a leather suitcase with straps, latches and hotel stickers, a loud flowered shirt
+    static final int PAT_TICK = 7, PAT_CASE = 8, PAT_ALOHA = 9;
 
     private final float[] vx = new float[16], vy = new float[16], vz = new float[16], vu = new float[16], vv = new float[16];
     private final float[] cxs = new float[16], cys = new float[16], czs = new float[16], cus = new float[16], cvs = new float[16];
@@ -227,6 +230,12 @@ final class Raster {
                 float iq = 1f / z;
                 float uu = (w0 * u0 + w1 * u1 + w2 * u2) * iq;
                 float vv2 = (w0 * v0 + w1 * v1 + w2 * v2) * iq;
+                if (pat >= PAT_TICK) {
+                    int fc = paint(pat, uu, vv2);
+                    int r = (int) (((fc >> 16) & 0xFF) * fk[0]), g = (int) (((fc >> 8) & 0xFF) * fk[1]), bl = (int) ((fc & 0xFF) * fk[2]);
+                    col[k] = 0xFF000000 | (Math.min(255, r) << 16) | (Math.min(255, g) << 8) | Math.min(255, bl);
+                    continue;
+                }
                 if (pat == PAT_FACADE) {
                     int fc = facade(uu, vv2, facadeBase, facadeSeed);
                     int r = (int) (((fc >> 16) & 0xFF) * fk[0]), g = (int) (((fc >> 8) & 0xFF) * fk[1]), bl = (int) ((fc & 0xFF) * fk[2]);
@@ -314,6 +323,88 @@ final class Raster {
         if (fv > 2.7f && fv < 2.95f && fu > 0.85f && fu < 2.05f) return Backdrop.scale(wall, 1.1f); // lintel
         return wall;
     }
+
+    // the face being painted with a colored pattern: its base color, its half sizes along
+    // u and v, which axis it faces along, and a seed of the thing it belongs to
+    private int patBase, patAxis;
+    private float patU, patV;
+    int patSeed;
+
+    /** The unlit color of a colored pattern at (u, v), meters from the middle of the face. */
+    private int paint(int pat, float u, float v) {
+        if (pat == PAT_TICK) {
+            // blue stripes along the mattress, a pair of thin ones between the wide ones
+            // on the top they run the length of it; round the border they run along it too
+            float sp = (patAxis == 1 ? u : v) / 0.07f;
+            float fu = sp - (float) Math.floor(sp);
+            int c = fu < 0.32f ? 0xFF5A82AE : fu > 0.62f && fu < 0.7f ? 0xFF9DB4CF : patBase;
+            // the piping round the edges of the side
+            if (patAxis != 1 && Math.abs(v) > patV - 0.018f) c = 0xFFC9C6BC;
+            // tufts on the top
+            if (patAxis == 1) {
+                float gu = u / 0.2f - (float) Math.floor(u / 0.2f), gv = v / 0.2f - (float) Math.floor(v / 0.2f);
+                if (Math.abs(gu - 0.5f) < 0.09f && Math.abs(gv - 0.5f) < 0.09f) c = Backdrop.scale(c, 0.78f);
+            }
+            // rust from the springs, soaked through in brown blots
+            int a = nz((int) Math.floor(u * 7f), (int) Math.floor(v * 7f), patSeed + patAxis * 5);
+            int b = nz((int) Math.floor(u * 15f), (int) Math.floor(v * 15f), patSeed + 3);
+            if (a > 236 || (a > 214 && b > 120)) c = Backdrop.mix(c, 0xFF9A5A30, a > 236 ? 0.55f : 0.3f);
+            return c;
+        }
+        if (pat == PAT_CASE) {
+            int c = patBase;
+            float au = Math.abs(u), av = Math.abs(v);
+            // worn corners and edges: the leather rubbed pale
+            boolean edgeU = au > patU - 0.03f, edgeV = av > patV - 0.025f;
+            if (edgeU && edgeV) return Backdrop.mix(c, 0xFFE6D2A6, 0.55f);
+            if (edgeU || edgeV) c = Backdrop.mix(c, 0xFFD9C29A, 0.18f);
+            // two straps round it, dark leather with a brass buckle at the front
+            float su = Math.abs(au - patU * 0.52f);
+            if (patAxis != 0 && su < 0.032f) {
+                if (patAxis == 2 && Math.abs(v + patV * 0.1f) < 0.03f && su < 0.03f)
+                    return su < 0.012f ? 0xFF6A4A1A : 0xFFE0B64A;
+                return su > 0.026f ? 0xFF2A1A10 : Backdrop.mix(Backdrop.scale(c, 0.55f), 0xFF3A2414, 0.5f);
+            }
+            if (patAxis != 1) {
+                // the line where the lid closes
+                float seam = patV * 0.25f;
+                if (Math.abs(v - seam) < 0.011f) return Backdrop.scale(c, 0.62f);
+                // brass latches on the front
+                if (patAxis == 2 && Math.abs(au - patU * 0.8f) < 0.022f && Math.abs(v - seam) < 0.032f)
+                    return Math.abs(v - seam) < 0.012f ? 0xFFFFE08A : 0xFFC9962E;
+            }
+            // hotel stickers, round and square, here and there
+            int cu = (int) Math.floor(u / 0.1f), cv = (int) Math.floor(v / 0.1f);
+            int h = nz(cu, cv, patSeed * 7 + patAxis);
+            if (h < 40) {
+                float ox = (cu + 0.5f) * 0.1f + (nz(cu, cv, patSeed + 11) - 128) / 4000f;
+                float oy = (cv + 0.5f) * 0.1f + (nz(cu, cv, patSeed + 13) - 128) / 4000f;
+                float dx = u - ox, dy = v - oy;
+                boolean round = (h & 1) == 0;
+                float r = 0.032f + (h & 6) * 0.003f;
+                float d = round ? (float) Math.sqrt(dx * dx + dy * dy) : Math.max(Math.abs(dx) * 0.8f, Math.abs(dy) * 1.2f);
+                if (d < r) {
+                    int k = (h >> 3) % STICKERS.length;
+                    if (d > r * 0.62f) return STICKERS[k];
+                    return d < r * 0.3f ? 0xFFF4EEE2 : STICKERS[(k + 3) % STICKERS.length];
+                }
+            }
+            // the grain of old leather
+            int g = nz((int) Math.floor(u * 40f), (int) Math.floor(v * 40f), patSeed);
+            return Backdrop.scale(c, 0.94f + g / 2300f);
+        }
+        // a loud shirt: big pale flowers and leaves on a bright ground
+        int c = patBase;
+        int cu = (int) Math.floor(u / 0.07f), cv = (int) Math.floor(v / 0.07f);
+        int h = nz(cu, cv, patSeed);
+        float dx = u - (cu + 0.5f) * 0.07f, dy = v - (cv + 0.5f) * 0.07f;
+        float d = dx * dx + dy * dy;
+        if (h < 110 && d < 0.0006f) return d < 0.00012f ? 0xFFF2C230 : 0xFFF8F1E2;
+        if (h > 200 && d < 0.0004f) return 0xFF2F7A4A;
+        return c;
+    }
+
+    static final int[] STICKERS = {0xFFE8483C, 0xFFF2C230, 0xFF3FA6A0, 0xFF3F6FB8, 0xFFE87AB0, 0xFF5DBE6A, 0xFFF4EEE2};
 
     /** Brightness multiplier in 1/256 for a surface pattern at (u, v). */
     private static int shade(int pat, float u, float v) {
@@ -538,6 +629,14 @@ final class Raster {
                 lightK(nz, ny, ndl, fk);
                 facadeBase = color;
             }
+            if (pat >= PAT_TICK) {
+                if (flat) fk[0] = fk[1] = fk[2] = 1f;
+                else lightK(nz, ny, ndl, fk);
+                patBase = color;
+                patAxis = axis;
+                patU = axis == 0 ? hz : hx;
+                patV = axis == 1 ? hz : hy;
+            }
             for (int k = 0; k < 4; k++) {
                 int ci = fc[k];
                 bx[k] = cor[3 * ci];
@@ -564,7 +663,7 @@ final class Raster {
                     bu[k] = axis == 0 ? lz + ly * 0.3f : axis == 1 ? lx + lz * 0.3f : lx + ly * 0.3f;
                     bv[k] = axis == 1 ? lz : ly;
                 }
-                if (pat == PAT_BRICK) {
+                if (pat == PAT_BRICK || pat >= PAT_TICK) {
                     bu[k] = axis == 0 ? lz : lx;
                     bv[k] = axis == 1 ? lz : ly;
                 }

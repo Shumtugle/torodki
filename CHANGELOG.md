@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.35
+- The level number in the corner sits on a framed plate of its own, in the street and
+  in the fight, so the sky behind it never swallows it.
+- From the 80th level the plinth stands farther still: thirty-six meters back, then two
+  more every five levels, forty-six at most. The view closes in deeper for the throw, and
+  the arm puts more into a throw that long.
+- New parts for grown buildings, from the 12th level: old suitcases in brown, mustard and
+  burgundy, worn pale at the corners, strapped, with brass latches and loud hotel stickers,
+  stacked two or three high on the upper storeys. They soak up a blow and answer with a
+  dull leather slap; one sent flying snaps its latches with a thin ding, gapes open and
+  lets out a swarm of bright flowered shirts and white postcards that flutter down over
+  the street and lie where they fall.
+- Spring mattresses in blue-and-white striped ticking with rust stains, pressed between
+  two concrete slabs: whatever stands on one sinks into it a little and rocks back upright
+  instead of simply tipping over. Struck, a mattress gives a deep whump and a long
+  complaining creak of wire; struck hard, its ticking tears, twisted springs jump out of
+  the hole and grey wadding puffs out.
+- Far away over the street, seldom, a small flock of birds crosses the sky; more seldom
+  still an airliner passes high up, leaving a white trail that spreads and fades.
+
 ## 0.34
 - New parts for grown buildings, from the 10th level: empty steel drums in faded paint
   with rust, that ring when struck; old car tyres stacked into columns, that bounce

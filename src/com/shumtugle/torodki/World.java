@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.34";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.35";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -160,7 +160,11 @@ final class World implements Physics.Listener {
     private final float[] pLife = new float[MAXP], pAge = new float[MAXP];
     private final int[] pCol = new int[MAXP];
     private final boolean[] pDust = new boolean[MAXP];
+    // what a particle is: a speck, a shirt or a postcard fluttering down, a spring
+    private static final int SPECK = 0, SHIRT = 1, CARD = 2, SPRING = 3;
+    private final int[] pKind = new int[MAXP];
     private int pN;
+    private final Fliers fliers = new Fliers();
     private final Random fx = new Random(99);
 
     private final float[] tmp = new float[3], scr = new float[2], dirA = new float[3];
@@ -600,6 +604,15 @@ final class World implements Physics.Listener {
      * Throw speed in m/s from the wind-up: a quick release lobs, a full one flies flat.
      * The heavy hammer leaves the hand slower and tops out lower, but carries far more weight.
      */
+    /**
+     * Seconds in the air over a distance: beyond forty-two meters the arm puts more into it,
+     * so the farthest plinths are not reached by a lob that hangs in the sky for ages.
+     */
+    private static float flight(float dist, float speed) {
+        float reach = dist > 42f ? (float) Math.sqrt(dist / 42f) : 1f;
+        return Math.max(0.18f, dist / (speed * reach));
+    }
+
     private float throwSpeed() {
         if (forcedSpeed > 0f) return forcedSpeed;
         return heavyOn ? 7.5f + power * 4.5f : 8f + power * 5.5f;
@@ -621,7 +634,7 @@ final class World implements Physics.Listener {
         float lookY = Builder.TOP + 1.4f, dx = -CAM_X, dz = Builder.CZ;
         float dist = (float) Math.sqrt(dx * dx + dz * dz);
         float yaw = (float) Math.atan2(dx, dz), pitch = (float) Math.atan2(lookY - CAM_Y, dist);
-        zoomZ = Math.max(1.25f, Math.min(3.4f, Builder.CZ / Builder.BASE_CZ * 0.92f));
+        zoomZ = Math.max(1.25f, Math.min(4.6f, Builder.CZ / Builder.BASE_CZ * 0.92f));
         if (zoomRas == null) zoomRas = new Raster(W, h);
         zoomRas.camera(CAM_X, CAM_Y, 0f, yaw, pitch, focal * zoomZ, h * 0.5f);
         backdrop.paint(zoomRas, 11L);
@@ -1523,8 +1536,17 @@ final class World implements Physics.Listener {
             f.rect(cx, y + 1, cx + 9, y + 10, 0xFF5A3A0E);
             f.rect(cx + 1, y + 2, cx + 8, y + 9, whole ? (i < 2 ? 0xFFFFB13A : 0xFFFFE07A) : 0xFF3A3236);
         }
+        levelPlate(f, W - 6, y + 14);
+    }
+
+    /** The level number on a plate of its own, framed like the bar, so the sky never swallows it. */
+    private void levelPlate(Px f, int right, int top) {
         String lv = String.valueOf(level + 1);
-        PixelFont.draw(f, lv, W - 7 - PixelFont.width(lv, 1), y + 15, 1, 0xFF6A4A1A);
+        int tw = PixelFont.width(lv, 1), px0 = right - tw - 6, py1 = top + 11;
+        f.rect(px0, top, right, py1, 0xFF8A5A12);
+        f.rect(px0 + 1, top + 1, right - 1, py1 - 1, 0xFFF3E9D2);
+        f.rect(px0 + 1, py1 - 2, right - 1, py1 - 1, 0xFFDCCBA8);
+        PixelFont.draw(f, lv, px0 + 3, top + 2, 1, 0xFF4A2E0A);
     }
 
     private void shield(Px f, int x, int y, boolean on) {
@@ -1572,6 +1594,34 @@ final class World implements Physics.Listener {
     }
 
     /** For the desktop stand: drops a bowling ball at a point of the street. */
+    /** For the stand: every mattress torn at the middle of its front, every suitcase burst. */
+    void standTear() {
+        for (Body b : pieces) {
+            if (b.material == Body.MATTRESS) tearMattress(b, b.px + b.hx * 0.3f, b.py, b.pz - b.hz);
+            if (b.material == Body.SUITCASE) b.broke = clock;
+        }
+    }
+
+    /** For the stand: a flock (1) or a plane (2) right now. */
+    void standFliers(int what) {
+        if (what == 1) fliers.startFlock();
+        else fliers.startPlane();
+    }
+
+    /** For the stand: forget the building grown ahead, so the next one grows as asked. */
+    void standForget() {
+        if (preparing != null) {
+            try {
+                preparing.join();
+            } catch (InterruptedException e) {
+                // nothing to do: it is dropped either way
+            }
+        }
+        preparing = null;
+        prepared = null;
+        preparedFor = -1;
+    }
+
     void standBall(float x, float y, float z) {
         Body b = Body.ball(Builder.BALL_R * Builder.S, Builder.BALL_COLORS[0]);
         b.setPose(x, y, z, 1, 0, 0, 0);
@@ -1602,7 +1652,7 @@ final class World implements Physics.Listener {
         float sx = tmp[0], sy = tmp[1], sz = tmp[2];
         float dx = tx - sx, dy = ty - sy, dz = tz - sz;
         float dist = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        float t = Math.max(0.18f, dist / speed);
+        float t = flight(dist, speed);
         hammer.ghost = false;
         hammer.asleep = false;
         float yaw = YAW + (fx.nextFloat() - 0.5f) * 0.6f;
@@ -1711,6 +1761,7 @@ final class World implements Physics.Listener {
             acc -= 1f / 60f;
             steps++;
             if (state != BUILD && state != VANISH) phys.step(1f / 60f);
+            flyingCases();
             bursts();
             keepGold();
             pops();
@@ -1720,6 +1771,7 @@ final class World implements Physics.Listener {
         particles(dt);
         puddles(dt);
         life.update(dt);
+        fliers.update(dt, golem == null && (state == PLAY || state == WON || state == LOST || state == BUILD));
         trail();
 
         windUp(dt);
@@ -1806,7 +1858,7 @@ final class World implements Physics.Listener {
             if (hsTime > flightTime + 0.35f || hammer.py < 0.25f || hammer.pz > golem.z + 4f) beginReturn();
         } else if (hs == FLY) {
             if (hsTime > flightTime + 0.6f && (hammer.speed2() < 4f || hammer.py < 0.4f
-                    || hammer.pz > Builder.CZ + 4f) || hsTime > flightTime + 2.2f || hammer.pz > 60f)
+                    || hammer.pz > Builder.CZ + 4f) || hsTime > flightTime + 2.2f || hammer.pz > Math.max(60f, Builder.CZ + 16f))
                 beginReturn();
         } else if (hs == BACK) {
             float k = Math.min(1f, hsTime / (golem != null ? 0.4f : 0.6f));
@@ -2059,6 +2111,12 @@ final class World implements Physics.Listener {
         // water bottles burst at a hard blow, or a hard landing
         if (a.material == Body.WATER && (speed > 4.2f || hammerHit && speed > 2.4f)) burst(a);
         if (b != null && b.material == Body.WATER && (speed > 4.2f || hammerHit && speed > 2.4f)) burst(b);
+        // a suitcase that lands hard bursts its latches (one sent flying opens in the air, see
+        // flyingCases); a mattress tears under the hammer or a heavy fall
+        if (a.material == Body.SUITCASE && !hammerHit && speed > 4.5f) openCase(a);
+        if (b != null && b.material == Body.SUITCASE && !hammerHit && speed > 4.5f) openCase(b);
+        if (a.material == Body.MATTRESS && (hammerHit && speed > 4.5f || speed > 7f)) tearMattress(a, x, y, z);
+        if (b != null && b.material == Body.MATTRESS && (hammerHit && speed > 4.5f || speed > 7f)) tearMattress(b, x, y, z);
         boolean plastic = a.material == Body.WATER || (b != null && b.material == Body.WATER);
         float gain = Math.min(1f, (speed - 1f) / 5f);
         if (hammerHit) gain = Math.min(1.3f, gain * 1.4f + 0.2f);
@@ -2067,6 +2125,8 @@ final class World implements Physics.Listener {
         if (street >= 0) {
             if (speed > 1.2f || hammerHit) {
                 float rate = street == Synth.PLASTIC ? 1.35f : street == Synth.CLANG ? 0.9f : 1f;
+                // a light knock on a mattress is only the whump: the creak needs a real blow
+                if (street == Synth.MATTRESS && speed < 3f && !hammerHit) street = Synth.SAND;
                 host.sound(street, gain * (street == Synth.CLANG ? 0.85f : 1f), rate * (0.92f + fx.nextFloat() * 0.16f));
             }
         } else if (b == null || other == null) {
@@ -2079,7 +2139,12 @@ final class World implements Physics.Listener {
             host.sound(plastic ? Synth.PLASTIC : stone ? Synth.STONE : Synth.WOOD, gain, plastic ? 0.9f + fx.nextFloat() * 0.2f : rate);
         }
         if (hammerHit) host.buzz((int) Math.min(60f, 10f + speed * 3f));
-        if (speed > 2.2f && other != null && other.material != Body.WATER) {
+        boolean soft = other != null && (other.material == Body.SUITCASE || other.material == Body.MATTRESS);
+        if (soft && speed > 2.2f) {
+            // no chips off cloth: a little grey fluff from a mattress, nothing from leather
+            if (other.material == Body.MATTRESS)
+                for (int i = 0; i < 3; i++) spawn(x, y, z, true, 0xFFC9C5BC, 0.8f);
+        } else if (speed > 2.2f && other != null && other.material != Body.WATER) {
             int n = (int) Math.min(14f, speed * 1.2f);
             boolean dusty = other.material == Body.STONE || other.material == Body.PLINTH || other.material == Body.SANDBAG;
             int dust = other.material == Body.SANDBAG ? 0xFFDCC79C : 0xFFE6DCC8;
@@ -2097,6 +2162,8 @@ final class World implements Physics.Listener {
             case Body.TYRE: return Synth.RUBBER;
             case Body.SANDBAG: return Synth.SAND;
             case Body.CONE: return Synth.PLASTIC;
+            case Body.SUITCASE: return Synth.LEATHER;
+            case Body.MATTRESS: return Synth.MATTRESS;
             default: return -1;
         }
     }
@@ -2285,6 +2352,7 @@ final class World implements Physics.Listener {
         pAge[i] = 0f;
         pCol[i] = fx.nextInt(4) == 0 ? 0xFFFFFFFF : 0xFFBFE2F7;
         pDust[i] = false;
+        pKind[i] = SPECK;
     }
 
     // ---- particles ----
@@ -2304,6 +2372,69 @@ final class World implements Physics.Listener {
         pAge[i] = 0f;
         pCol[i] = color;
         pDust[i] = dust;
+        pKind[i] = SPECK;
+    }
+
+    // the shirts packed in old suitcases: loud prints on bright grounds
+    private static final int[] SHIRTS = {0xFFE8483C, 0xFF2FB0A6, 0xFFF2C230, 0xFFF27A3A, 0xFFE87AB0, 0xFF3F8FD8, 0xFF5DBE6A};
+
+    /** Something light thrown up into the air to flutter down: a shirt, a postcard, or a spring. */
+    private void spawnLight(float x, float y, float z, float vx, float vy, float vz, int kind) {
+        if (pN >= MAXP) return;
+        int i = pN++;
+        pX[i] = x;
+        pY[i] = y;
+        pZ[i] = z;
+        float a = (float) (fx.nextFloat() * Math.PI * 2);
+        float sp = kind == SPRING ? 1.5f + fx.nextFloat() * 2.5f : 0.8f + fx.nextFloat() * 2.2f;
+        pVx[i] = (float) Math.cos(a) * sp + vx * 0.4f;
+        pVz[i] = (float) Math.sin(a) * sp + vz * 0.4f;
+        pVy[i] = (kind == SPRING ? 2.5f : 4f) + fx.nextFloat() * 4f + Math.max(0f, vy) * 0.3f;
+        pLife[i] = kind == SPRING ? 2.5f + fx.nextFloat() : 5.5f + fx.nextFloat() * 3f;
+        pAge[i] = 0f;
+        pCol[i] = kind == SHIRT ? SHIRTS[fx.nextInt(SHIRTS.length)] : kind == CARD ? 0xFFF6F3EA : 0xFFB8BAC0;
+        pDust[i] = false;
+        pKind[i] = kind;
+    }
+
+    /** A suitcase thrown through the air faster than a brisk walk gapes open in flight. */
+    private void flyingCases() {
+        for (Body b : pieces)
+            if (b.material == Body.SUITCASE && b.broke < 0f && !b.gone && !b.asleep && b.speed2() > 3.2f * 3.2f) openCase(b);
+    }
+
+    /** A suitcase bursts open: the latches snap, the lid gapes, shirts and postcards fly. */
+    private void openCase(Body b) {
+        if (b.broke >= 0f) return;
+        b.broke = clock;
+        int shirts = 5 + fx.nextInt(4), cards = 4 + fx.nextInt(5);
+        for (int i = 0; i < shirts; i++) spawnLight(b.px, b.py + b.hy, b.pz, b.vx, b.vy, b.vz, SHIRT);
+        for (int i = 0; i < cards; i++) spawnLight(b.px, b.py + b.hy, b.pz, b.vx, b.vy, b.vz, CARD);
+        host.sound(Synth.LATCH, 0.9f, 0.94f + fx.nextFloat() * 0.12f);
+    }
+
+    /** A mattress torn where it was struck: springs jump out of the ticking, grey wadding puffs. */
+    private void tearMattress(Body b, float x, float y, float z) {
+        if (b.broke >= 0f) return;
+        b.broke = clock;
+        float dx = x - b.px, dy = y - b.py, dz = z - b.pz;
+        float lx = b.r00 * dx + b.r10 * dy + b.r20 * dz;
+        float ly = b.r01 * dx + b.r11 * dy + b.r21 * dz;
+        float lz = b.r02 * dx + b.r12 * dy + b.r22 * dz;
+        // onto the face it is nearest to; the thin sides read best, so the front wins ties
+        float ax = Math.abs(lx) / b.hx, ay = Math.abs(ly) / b.hy * 0.7f, az = Math.abs(lz) / b.hz;
+        int axis = az >= ax && az >= ay ? 2 : ax >= ay ? 0 : 1;
+        float[] l = {lx, ly, lz}, hh = {b.hx, b.hy, b.hz};
+        boolean neg = l[axis] < 0f;
+        l[axis] = neg ? -hh[axis] : hh[axis];
+        for (int k = 0; k < 3; k++) if (k != axis) l[k] = Math.max(-hh[k] * 0.75f, Math.min(hh[k] * 0.75f, l[k]));
+        b.markX = l[0];
+        b.markY = l[1];
+        b.markZ = l[2];
+        b.markAxis = axis + (neg ? 3 : 0);
+        for (int i = 0; i < 4; i++) spawnLight(x, y, z, b.vx, b.vy, b.vz, SPRING);
+        for (int i = 0; i < 10; i++) spawn(x, y, z, true, (i & 1) == 0 ? 0xFFB9B5AD : 0xFFD6D2C8, 1.4f);
+        host.sound(Synth.TEAR, 1f, 0.95f + fx.nextFloat() * 0.1f);
     }
 
     private void particles(float dt) {
@@ -2321,7 +2452,12 @@ final class World implements Physics.Listener {
                 pAge[i] = pAge[pN];
                 pCol[i] = pCol[pN];
                 pDust[i] = pDust[pN];
+                pKind[i] = pKind[pN];
                 i--;
+                continue;
+            }
+            if (pKind[i] == SHIRT || pKind[i] == CARD) {
+                flutter(i, dt);
                 continue;
             }
             if (pDust[i]) {
@@ -2342,6 +2478,32 @@ final class World implements Physics.Listener {
                 pVz[i] *= 0.6f;
             }
         }
+    }
+
+    /**
+     * Cloth and paper in the air: thrown up, caught by the air at once, then sinking slowly,
+     * swinging from side to side; once down they lie where they fell.
+     */
+    private void flutter(int i, float dt) {
+        float floor = Math.abs(pX[i]) < Builder.PHX && Math.abs(pZ[i] - Builder.CZ) < Builder.PHZ ? Builder.TOP : 0f;
+        if (pY[i] <= floor + 0.01f && pVy[i] <= 0f) {
+            pY[i] = floor + 0.01f;
+            pVx[i] = pVy[i] = pVz[i] = 0f;
+            return;
+        }
+        float drag = pKind[i] == SHIRT ? 2.6f : 2.2f;
+        pVy[i] += Physics.G * 0.4f * dt;
+        float k = Math.max(0f, 1f - drag * dt);
+        pVx[i] *= k;
+        pVy[i] *= k;
+        pVz[i] *= k;
+        // the swing: a card side-slips like a leaf, a shirt billows more lazily
+        float ph = pAge[i] * (pKind[i] == CARD ? 4.2f : 2.6f) + i * 1.7f;
+        float sw = pKind[i] == CARD ? 1.1f : 0.7f;
+        pX[i] += (pVx[i] + (float) Math.cos(ph) * sw) * dt;
+        pY[i] += pVy[i] * dt;
+        pZ[i] += (pVz[i] + (float) Math.sin(ph * 0.7f) * sw * 0.5f) * dt;
+        if (pY[i] < floor) pY[i] = floor;
     }
 
     // ---- drawing ----
@@ -2390,6 +2552,8 @@ final class World implements Physics.Listener {
             else if (b.material == Body.CONE) drawCone(b, scale, drop, i + 2);
             else if (b.material == Body.TYRE) drawTyre(b, scale, drop, i + 2);
             else if (b.material == Body.SANDBAG) drawBag(b, scale, drop, i + 2);
+            else if (b.material == Body.SUITCASE) drawCase(b, scale, drop, i + 2);
+            else if (b.material == Body.MATTRESS) drawMattress(b, scale, drop, i + 2);
             else drawBody(b, scale, drop, i + 2);
             if (b.radius > 0f) ras.shadowBall(b.px, b.py + drop, b.pz, b.radius * scale);
             else ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
@@ -2413,6 +2577,7 @@ final class World implements Physics.Listener {
         }
         ras.shadowApply((int) minX, (int) minY, (int) maxX + 1, (int) maxY + 1);
         ras.outlines(0, (int) Math.max(0, minY - 40), W - 1, h - 1, 1);
+        if (golem == null) fliers.draw(ras);
         if (aiming) drawAim();
         int off = tilt();
         if (off > 0) {
@@ -2899,6 +3064,134 @@ final class World implements Physics.Listener {
                 Backdrop.scale(c, 0.7f), Raster.PAT_FLAT, id << 3);
     }
 
+    // ---- luggage ----
+
+    /** A point in a body's own frame, out into the world. */
+    private static void toWorld(Body b, float lx, float ly, float lz, float drop, float[] out) {
+        out[0] = b.px + b.r00 * lx + b.r01 * ly + b.r02 * lz;
+        out[1] = b.py + drop + b.r10 * lx + b.r11 * ly + b.r12 * lz;
+        out[2] = b.pz + b.r20 * lx + b.r21 * ly + b.r22 * lz;
+    }
+
+    private final float[] lid = new float[9], wp = new float[3];
+
+    /**
+     * An old suitcase: leather with straps, latches and stickers, a handle at the front.
+     * Burst open, its lid swings up on the hinge at the back and the shirts inside show.
+     */
+    private void drawCase(Body b, float scale, float drop, int id) {
+        float hx = b.hx * scale, hy = b.hy * scale, hz = b.hz * scale;
+        ras.patSeed = id * 7 + 3;
+        if (b.broke < 0f) {
+            ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                    hx, hy, hz, b.tint, Raster.PAT_CASE, id << 3);
+            toWorld(b, 0f, hy * 0.18f, -hz - 0.025f, drop, wp);
+            ras.box(wp[0], wp[1], wp[2], b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                    hx * 0.17f, hy * 0.16f, 0.025f, 0xFF2A1A10, Raster.PAT_FLAT, id << 3);
+            return;
+        }
+        // the lower half, and the clothes heaped in it
+        toWorld(b, 0f, -hy * 0.5f, 0f, drop, wp);
+        ras.box(wp[0], wp[1], wp[2], b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                hx, hy * 0.5f, hz, b.tint, Raster.PAT_CASE, id << 3);
+        toWorld(b, 0f, 0.012f, 0f, drop, wp);
+        ras.patSeed = id * 5 + 1;
+        ras.box(wp[0], wp[1], wp[2], b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                hx * 0.9f, 0.014f, hz * 0.86f, SHIRTS[id % SHIRTS.length], Raster.PAT_ALOHA, id << 3);
+        // the lid, turned about the hinge along the back edge
+        float a = Math.min(1.95f, (clock - b.broke) * 10f);
+        float c = (float) Math.cos(a), sn = (float) Math.sin(a);
+        float oy = hy * 0.5f * c + hz * sn, oz = hy * 0.5f * sn - hz * c;
+        toWorld(b, 0f, oy, hz + oz, drop, wp);
+        lid[0] = b.r00;
+        lid[3] = b.r10;
+        lid[6] = b.r20;
+        lid[1] = b.r01 * c + b.r02 * sn;
+        lid[4] = b.r11 * c + b.r12 * sn;
+        lid[7] = b.r21 * c + b.r22 * sn;
+        lid[2] = -b.r01 * sn + b.r02 * c;
+        lid[5] = -b.r11 * sn + b.r12 * c;
+        lid[8] = -b.r21 * sn + b.r22 * c;
+        ras.patSeed = id * 7 + 3;
+        ras.box(wp[0], wp[1], wp[2], lid[0], lid[1], lid[2], lid[3], lid[4], lid[5], lid[6], lid[7], lid[8],
+                hx, hy * 0.5f, hz, b.tint, Raster.PAT_CASE, id << 3);
+        // the lining of the lid, a shirt still caught in it
+        float ly = -hy * 0.5f - 0.01f;
+        float wx = wp[0] + lid[1] * ly, wy = wp[1] + lid[4] * ly, wz = wp[2] + lid[7] * ly;
+        ras.patSeed = id * 5 + 2;
+        ras.box(wx, wy, wz, lid[0], lid[1], lid[2], lid[3], lid[4], lid[5], lid[6], lid[7], lid[8],
+                hx * 0.88f, 0.01f, hz * 0.84f, SHIRTS[(id + 3) % SHIRTS.length], Raster.PAT_ALOHA, id << 3);
+    }
+
+    /**
+     * A spring mattress in striped ticking. Torn, it shows a ragged hole with grey wadding
+     * round it and twisted springs jumping out of it.
+     */
+    private void drawMattress(Body b, float scale, float drop, int id) {
+        float hx = b.hx * scale, hy = b.hy * scale, hz = b.hz * scale;
+        ras.patSeed = id * 11 + 5;
+        // a full core and a rounded border round it: the edges of a mattress bulge
+        ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                hx, hy * 0.74f, hz, b.tint, Raster.PAT_TICK, id << 3);
+        ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                hx * 0.975f, hy, hz * 0.95f, b.tint, Raster.PAT_TICK, id << 3);
+        if (b.broke < 0f || scale < 1f) return;
+        int axis = b.markAxis % 3;
+        float sg = b.markAxis >= 3 ? -1f : 1f;
+        // the face's normal and two directions along it, in the body's frame
+        float[] n = {0f, 0f, 0f}, e1 = {0f, 0f, 0f}, e2 = {0f, 0f, 0f};
+        n[axis] = sg;
+        e1[(axis + 1) % 3] = 1f;
+        e2[(axis + 2) % 3] = 1f;
+        float out = 0.006f;
+        float mx = b.markX + n[0] * out, my = b.markY + n[1] * out, mz = b.markZ + n[2] * out;
+        // the hole and the wadding round it
+        float hole = Math.min(0.12f, Math.min(axis == 1 ? hx : hy, axis == 2 ? hx : hz) * 0.95f);
+        toWorld(b, mx, my, mz, drop, wp);
+        float vz = ras.project(wp[0], wp[1], wp[2], scr);
+        if (vz < 0.3f) return;
+        float px = ras.f / vz;
+        ras.disc(scr[0], scr[1], Math.max(1.5f, hole * px), 1f / (vz - 0.01f), 0xFF26221F, id << 3);
+        for (int k = 0; k < 6; k++) {
+            float ang = k * 1.047f + id;
+            float r = hole * (0.85f + 0.25f * ((k * 7 + id) % 3));
+            float lx = mx + (e1[0] * (float) Math.cos(ang) + e2[0] * (float) Math.sin(ang)) * r + n[0] * 0.02f;
+            float ly = my + (e1[1] * (float) Math.cos(ang) + e2[1] * (float) Math.sin(ang)) * r + n[1] * 0.02f;
+            float lz = mz + (e1[2] * (float) Math.cos(ang) + e2[2] * (float) Math.sin(ang)) * r + n[2] * 0.02f;
+            toWorld(b, lx, ly, lz, drop, wp);
+            float z2 = ras.project(wp[0], wp[1], wp[2], scr);
+            if (z2 < 0.3f) continue;
+            ras.disc(scr[0], scr[1], Math.max(0.8f, 0.04f * ras.f / z2), 1f / (z2 - 0.02f),
+                    (k & 1) == 0 ? 0xFFBDB9B1 : 0xFFD9D5CD, id << 3);
+        }
+        // the springs: coils of wire leaning out of the hole, out to full length in a blink
+        float grow = Math.min(1f, (clock - b.broke) / 0.18f);
+        for (int sp = 0; sp < 3; sp++) {
+            float ang = sp * 2.1f + id * 0.7f, off = hole * 0.45f;
+            float bx = mx + (e1[0] * (float) Math.cos(ang) + e2[0] * (float) Math.sin(ang)) * off;
+            float by = my + (e1[1] * (float) Math.cos(ang) + e2[1] * (float) Math.sin(ang)) * off;
+            float bz = mz + (e1[2] * (float) Math.cos(ang) + e2[2] * (float) Math.sin(ang)) * off;
+            // the axis leans out from the normal toward its own side
+            float lean = 0.45f + 0.15f * sp;
+            float ax = n[0] + (e1[0] * (float) Math.cos(ang) + e2[0] * (float) Math.sin(ang)) * lean;
+            float ay = n[1] + (e1[1] * (float) Math.cos(ang) + e2[1] * (float) Math.sin(ang)) * lean;
+            float az = n[2] + (e1[2] * (float) Math.cos(ang) + e2[2] * (float) Math.sin(ang)) * lean;
+            float len = (0.24f + 0.06f * sp) * grow, rc = 0.055f;
+            for (int k = 0; k <= 22; k++) {
+                float t = k / 22f, th = t * 2.6f * 6.2832f + sp;
+                float cs = (float) Math.cos(th), sn = (float) Math.sin(th);
+                float lx = bx + ax * len * t + (e1[0] * cs + e2[0] * sn) * rc;
+                float ly = by + ay * len * t + (e1[1] * cs + e2[1] * sn) * rc;
+                float lz = bz + az * len * t + (e1[2] * cs + e2[2] * sn) * rc;
+                toWorld(b, lx, ly, lz, drop, wp);
+                float z2 = ras.project(wp[0], wp[1], wp[2], scr);
+                if (z2 < 0.3f) continue;
+                ras.disc(scr[0], scr[1], Math.max(0.7f, 0.016f * ras.f / z2), 1f / (z2 - 0.06f),
+                        sn > 0f ? 0xFFE8EAEE : 0xFF5E5C60, id << 3);
+            }
+        }
+    }
+
     // hammer parts in the hammer's own frame: center, half sizes, color, pattern
     private static final float[][] PARTS = {
             {-0.1f, 0f, 0f, 0.31f, 0.03f, 0.03f},       // handle
@@ -3035,6 +3328,10 @@ final class World implements Physics.Listener {
             float vz = ras.project(pX[i], pY[i], pZ[i], scr);
             if (vz < 0.3f) continue;
             float k = pAge[i] / pLife[i];
+            if (pKind[i] != SPECK) {
+                drawLight(i, vz);
+                continue;
+            }
             if (pDust[i]) {
                 float r = (0.12f + 0.5f * k) * ras.f / vz;
                 ras.haze(scr[0], scr[1], r, 1f / vz, pCol[i], (int) (150 * (1f - k)));
@@ -3043,6 +3340,56 @@ final class World implements Physics.Listener {
                 ras.disc(scr[0], scr[1], r, 1f / vz, pCol[i], 950 << 3);
             }
         }
+    }
+
+    /**
+     * A shirt, a postcard or a spring on screen. Shirts and cards turn as they fall: seen
+     * edge on they narrow to a sliver, and a card shows its cream back between its faces.
+     */
+    private void drawLight(int i, float vz) {
+        float iz = 1f / vz;
+        int kind = pKind[i];
+        float ph = (float) Math.sin(pAge[i] * (kind == CARD ? 7f : 4.5f) + i * 2.3f);
+        float lying = pVx[i] == 0f && pVy[i] == 0f && pVz[i] == 0f ? 1f : Math.abs(ph);
+        int sx = Math.round(scr[0]), sy = Math.round(scr[1]);
+        if (kind == SPRING) {
+            int n = Math.max(2, Math.round(0.12f * ras.f / vz));
+            for (int y = 0; y < n; y++) {
+                int x = sx + ((y & 1) == 0 ? 0 : 1);
+                lightPx(x, sy - y, iz, (y & 1) == 0 ? 0xFFE2E4E8 : 0xFF6E6C70);
+            }
+            return;
+        }
+        float size = (kind == SHIRT ? 0.2f : 0.12f) * ras.f / vz;
+        int w = Math.max(1, Math.round(size * Math.max(0.2f, lying)));
+        int hgt = Math.max(1, Math.round(size * (kind == SHIRT ? 0.85f : 0.7f)));
+        int c = pCol[i];
+        if (kind == CARD && ph < 0f && lying < 1f) c = 0xFFDCD3BE;
+        for (int y = 0; y < hgt; y++)
+            for (int x = 0; x < w; x++) {
+                int cc = c;
+                if (kind == SHIRT && w >= 4) {
+                    // a shirt's outline: an open collar, sleeves out at the shoulders, a narrower body
+                    boolean mid = x == w / 2 || (w % 2 == 0 && x == w / 2 - 1);
+                    if (y == 0 && mid) continue;
+                    if (y >= hgt / 2 && hgt > 3 && (x == 0 || x == w - 1)) continue;
+                    // the print: pale flowers scattered on the ground color
+                    int hsh = ((x * 73856093) ^ (y * 19349663) ^ (i * 83492791)) >>> 9 & 15;
+                    if (hsh == 3) cc = 0xFFF8F1E2;
+                    else if (hsh == 9) cc = 0xFFF2C230;
+                    else if (y == 0) cc = Backdrop.scale(c, 0.8f);
+                } else if (kind == SHIRT && ((x + y + i) % 3) == 0) cc = 0xFFF8F1E2;
+                if (kind == CARD && c != 0xFFDCD3BE && x == w - 1 && y == 0 && w > 1) cc = 0xFFD9505A;
+                lightPx(sx - w / 2 + x, sy - hgt / 2 + y, iz, cc);
+            }
+    }
+
+    private void lightPx(int x, int y, float iz, int c) {
+        if (x < 0 || y < 0 || x >= W || y >= h) return;
+        int k = y * W + x;
+        if (iz <= ras.zb[k]) return;
+        ras.zb[k] = iz;
+        ras.col[k] = c;
     }
 
     /** The aim: a ring where the hammer will land and the arc it will take. */
@@ -3054,7 +3401,7 @@ final class World implements Physics.Listener {
         float sx = tmp[0], sy = tmp[1], sz = tmp[2];
         float dx = tx - sx, dy = ty - sy, dz = tz - sz;
         float dist = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
-        float t = Math.max(0.18f, dist / speed);
+        float t = flight(dist, speed);
         float vx = dx / t, vy = dy / t - 0.5f * Physics.G * t, vzv = dz / t;
         for (int i = 3; i < 22; i++) {
             float q = t * i / 22f;
@@ -3114,8 +3461,7 @@ final class World implements Physics.Listener {
         f.rect(bx, by, bx + fill, by + 6, on <= 1f - CLEAR ? 0xFF6FBF5A : 0xFFE8963C);
         int mark = bx + Math.round(bw * (1f - CLEAR));
         f.rect(mark, by - 3, mark + 1, by + 9, 0xFF5A3A0E);
-        String lv = String.valueOf(level + 1);
-        PixelFont.draw(f, lv, bx + bw - PixelFont.width(lv, 1), by + 12, 1, 0xFF6A4A1A);
+        levelPlate(f, bx + bw + 1, by + 11);
         String v = VERSION;
         PixelFont.draw(f, v, W - PixelFont.width(v, 1) - 3, h - 10, 1, 0xFF8A8478);
     }

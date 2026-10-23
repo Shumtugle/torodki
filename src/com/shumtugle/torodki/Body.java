@@ -9,8 +9,17 @@ final class Body {
     static final int WOOD = 0, STONE = 1, HAMMER = 2, PLINTH = 3, GLASS = 4, WATER = 5, BALL = 6, CAR = 7, BALLOON = 8, GOLD = 9;
     // street things: an empty steel drum, a road cone, a car tyre, a bag of sand
     static final int BARREL = 10, CONE = 11, TYRE = 12, SANDBAG = 13;
-    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f, 760f, 1500f, 0f, 160f, 4000f, 380f, 220f, 320f, 1600f};
-    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f, 0.55f, 0.45f, 0.6f, 0.95f, 0.8f, 0.45f, 0.6f, 0.95f, 0.95f};
+    // an old suitcase full of clothes, a spring mattress
+    static final int SUITCASE = 14, MATTRESS = 15;
+    static final float[] DENSITY = {600f, 1200f, 8400f, 0f, 900f, 760f, 1500f, 0f, 160f, 4000f, 380f, 220f, 320f, 1600f,
+            300f, 140f};
+    static final float[] FRICTION = {0.65f, 0.75f, 0.5f, 0.7f, 0.35f, 0.55f, 0.45f, 0.6f, 0.95f, 0.8f, 0.45f, 0.6f, 0.95f, 0.95f,
+            0.9f, 0.9f};
+    // how far a contact gives under load, as XPBD compliance in m/N: only the mattress is soft
+    static final float[] GIVE = {0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 1e-5f};
+    // what soaks up a blow instead of bouncing it back
+    static final boolean[] DEAD = {false, false, false, false, false, false, false, false, false, false, false, false, false,
+            false, true, true};
 
     static final float INERTIA = 3f;
 
@@ -42,6 +51,10 @@ final class Body {
     boolean gone;                   // burst: no longer part of the building
     float lastHit;                  // game time of the last sound it made
     float homeX, homeY, homeZ;      // where the generator put it
+    // a suitcase burst open or a mattress torn: game time it happened, or below zero
+    float broke = -1f;
+    float markX, markY, markZ;      // where, in the body's own frame
+    int markAxis;                   // the face: 0, 1, 2 for x, y, z; plus 3 for the negative side
 
     Body(float hx, float hy, float hz, int material, int tint) {
         this.hx = hx;

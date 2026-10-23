@@ -301,6 +301,14 @@ public final class Stand implements World.Host {
             world.standBoss();
         } else if (c.equals("ball")) {
             world.standBall(f(p[1]), f(p[2]), f(p[3]));
+        } else if (c.equals("luggage")) {
+            // grow suitcases (1), mattresses (2) or both (3) into every building from now on
+            Builder.force = Integer.parseInt(p[1]);
+            world.standForget();
+        } else if (c.equals("tear")) {
+            world.standTear();
+        } else if (c.equals("fliers")) {
+            world.standFliers(Integer.parseInt(p[1]));
         } else if (c.equals("goldseen")) {
             world.goldSeen = true;
         } else if (c.equals("heavy")) {

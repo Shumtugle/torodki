@@ -1,0 +1,19 @@
+# From the 80th level the plinth stands farther still: 66th, 80th, 95th, and a throw at the 95th.
+screen 1096 2560
+level 65
+wait 1.0
+shot f66
+level 79
+wait 1.0
+shot f80
+level 94
+wait 1.0
+shot f95
+down 140 430
+wait 1.0
+shot f95aim
+up 140 430
+wait 2.0
+shot f95hit
+wait 3.0
+state

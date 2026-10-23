@@ -1,0 +1,18 @@
+# A close building of suitcases and a mattress: the hammer bursts a case and tears the mattress.
+screen 1096 2560
+luggage 3
+level 11
+wait 1.2
+shot s0
+throwat 0 2.3 11.5 15
+wait 0.3
+shot s1
+wait 0.25
+shot s2
+wait 0.4
+shot s3
+wait 1.2
+shot s4
+wait 3
+shot s5
+state

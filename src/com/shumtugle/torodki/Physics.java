@@ -44,8 +44,12 @@ final class Physics {
         bodies.clear();
     }
 
+    private float hNow = 1f / 600f;
+    static final float SOFT_DEPTH = 0.04f;   // how deep a soft contact gives before it holds hard
+
     void step(float dt) {
         float h = dt / SUBSTEPS;
+        hNow = h;
         for (int s = 0; s < SUBSTEPS; s++) substep(h);
         time += dt;
         if (sleeping) updateSleep(dt);
@@ -90,7 +94,51 @@ final class Physics {
             b.wy = dy * k;
             b.wz = dz * k;
         }
+        springs(h);
         solveVelocities(h);
+    }
+
+    // a mattress pushes back: whatever lies on one is turned back toward lying flat on it,
+    // so a tower on a mattress rocks and settles instead of simply tipping over
+    static final float SPRING = 55f, SPRING_DAMP = 1.1f, SPRING_LIMIT = 0.3f;
+    private Body[] restsOn = new Body[64];
+
+    /** What the mattress turns upright: boxes laid on it, not balls that roll or the hammer. */
+    private boolean rights(Body b) {
+        return moving(b) && b.material != Body.MATTRESS && b.material != Body.HAMMER && b.radius == 0f;
+    }
+
+    private void springs(float h) {
+        int n = bodies.size();
+        if (restsOn.length < n) restsOn = new Body[n * 2];
+        boolean any = false;
+        for (int c = 0; c < cn; c++) {
+            if (cb[c] < 0) continue;
+            Body a = bodies.get(ca[c]), b = bodies.get(cb[c]);
+            float ny = cnr[3 * c + 1];
+            if (b.material == Body.MATTRESS && rights(a) && ny > 0.7f) {
+                restsOn[a.id] = b;
+                any = true;
+            } else if (a.material == Body.MATTRESS && rights(b) && ny < -0.7f) {
+                restsOn[b.id] = a;
+                any = true;
+            }
+        }
+        if (!any) return;
+        for (int i = 0; i < n; i++) {
+            Body b = bodies.get(i), m = restsOn[i];
+            if (m == null) continue;
+            restsOn[i] = null;
+            // the axis and angle between its up and the mattress's up
+            float ax = b.r11 * m.r21 - b.r21 * m.r11;
+            float ay = b.r21 * m.r01 - b.r01 * m.r21;
+            float az = b.r01 * m.r11 - b.r11 * m.r01;
+            float s = (float) Math.sqrt(ax * ax + ay * ay + az * az);
+            if (s > SPRING_LIMIT) continue;
+            b.wx += (SPRING * ax - SPRING_DAMP * b.wx) * h;
+            b.wy += -SPRING_DAMP * b.wy * h;
+            b.wz += (SPRING * az - SPRING_DAMP * b.wz) * h;
+        }
     }
 
     // ---- contacts ----
@@ -407,7 +455,14 @@ final class Physics {
                 rbz = bz - b.pz;
                 w += wOf(b, rbx, rby, rbz, nx, ny, nz);
             }
-            float lam = d / w;
+            // a soft contact gives like a spring: XPBD compliance over the substep squared
+            // only the first few centimeters give: past them the mattress is as hard as the rest
+            float give = Body.GIVE[a.material] + (b == null ? 0f : Body.GIVE[b.material]);
+            float lam;
+            if (give > 0f) {
+                float soft = Math.min(d, SOFT_DEPTH);
+                lam = soft / (w + give / (hNow * hNow)) + (d - soft) / w;
+            } else lam = d / w;
             cln[c] += lam;
             if (am) push(a, rax, ray, raz, nx * lam, ny * lam, nz * lam);
             if (bm) push(b, rbx, rby, rbz, -nx * lam, -ny * lam, -nz * lam);
@@ -512,7 +567,8 @@ final class Physics {
             }
             // a little bounce for hard hits, none for resting contacts
             float pre = cvn[c];
-            float e = pre < -2.5f ? 0.15f : 0f;
+            boolean dead = Body.DEAD[a.material] || (b != null && Body.DEAD[b.material]);
+            float e = pre < -2.5f && !dead ? 0.15f : 0f;
             float want = Math.max(-e * pre, 0f);
             if (vn < want) {
                 dvx += nx * (want - vn);
