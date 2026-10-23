@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.28
+- From the 50th level the plinth goes farther again: twenty-four meters, two more every
+  five levels, thirty at most. The view closes in a little closer for it.
+- Whatever falls to the street casts a shadow there: a ball a long soft oval away from
+  the sun and a dark spot right under it, a block a patch as wide as it lies; higher up,
+  fainter.
+
 ## 0.27
 - The thinker's newest likeness smirks as well, so it comes on every kind of visit.
 

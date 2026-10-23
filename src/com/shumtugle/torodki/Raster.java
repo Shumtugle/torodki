@@ -707,6 +707,8 @@ final class Raster {
      * first end and rb at the other, its edge blurred and its tail fading. Only ground
      * the sun still reaches, and nothing standing in front, takes it.
      */
+    boolean anyLight;                    // soft shadows darken shaded ground too: contact shadows
+
     void softShadow(float ax, float az, float bx, float bz, float ra, float rb, float strength) {
         float minX = 1e9f, minY = 1e9f, maxX = -1e9f, maxY = -1e9f;
         float rm = Math.max(ra, rb);
@@ -727,7 +729,7 @@ final class Raster {
         for (int y = y0; y <= y1; y++)
             for (int x = x0; x <= x1; x++) {
                 int k = y * w + x;
-                if (lit[k] != 1) continue;
+                if (lit[k] != 1 && !(anyLight && lit[k] != 3)) continue;
                 viewToWorld((x + 0.5f - cx) / f, (cy - y - 0.5f) / f, 1f, sd);
                 if (sd[1] >= -1e-3f) continue;
                 float t = -camY / sd[1];
@@ -747,7 +749,8 @@ final class Raster {
                 int sr = cr * SH_R >> 8, sg = cg * SH_G >> 8, sb = cb * SH_B >> 8;
                 col[k] = 0xFF000000 | ((int) (cr + (sr - cr) * a) << 16) | ((int) (cg + (sg - cg) * a) << 8)
                         | (int) (cb + (sb - cb) * a);
-                if (a > 0.55f) lit[k] = 2;
+                if (anyLight) lit[k] = 3;
+                else if (a > 0.55f) lit[k] = 2;
             }
     }
 

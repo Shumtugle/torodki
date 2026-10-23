@@ -22,6 +22,7 @@ import javax.imageio.ImageIO;
  *   state                   print the game state
  *   aim                     print where the aim ring is
  *   heavy                   give the heavy hammer, as the gods do
+ *   ball x y z              drop a bowling ball at a world point
  *   throwat x y z speed     throw at a world point, as the bot does
  *   win n                   count the building as cleared after n throws
  *   lose                    put out every star
@@ -217,6 +218,8 @@ public final class Stand implements World.Host {
             float[] o = world.screenOf(f(p[1]), f(p[2]), f(p[3]));
             world.throwAt(o[0], o[1], f(p[4]));
             step();
+        } else if (c.equals("ball")) {
+            world.standBall(f(p[1]), f(p[2]), f(p[3]));
         } else if (c.equals("goldseen")) {
             world.goldSeen = true;
         } else if (c.equals("heavy")) {

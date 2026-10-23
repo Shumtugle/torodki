@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.27";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.28";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -575,7 +575,7 @@ final class World implements Physics.Listener {
         float lookY = Builder.TOP + 1.4f, dx = -CAM_X, dz = Builder.CZ;
         float dist = (float) Math.sqrt(dx * dx + dz * dz);
         float yaw = (float) Math.atan2(dx, dz), pitch = (float) Math.atan2(lookY - CAM_Y, dist);
-        zoomZ = Math.max(1.25f, Math.min(2.8f, Builder.CZ / Builder.BASE_CZ * 0.92f));
+        zoomZ = Math.max(1.25f, Math.min(3.4f, Builder.CZ / Builder.BASE_CZ * 0.92f));
         if (zoomRas == null) zoomRas = new Raster(W, h);
         zoomRas.camera(CAM_X, CAM_Y, 0f, yaw, pitch, focal * zoomZ, h * 0.5f);
         backdrop.paint(zoomRas, 11L);
@@ -677,6 +677,17 @@ final class World implements Physics.Listener {
         int n = 0;
         for (int i = 0; i < life.damage.length; i++) n += life.damage[i];
         return n;
+    }
+
+    /** For the desktop stand: drops a bowling ball at a point of the street. */
+    void standBall(float x, float y, float z) {
+        Body b = Body.ball(Builder.BALL_R * Builder.S, Builder.BALL_COLORS[0]);
+        b.setPose(x, y, z, 1, 0, 0, 0);
+        b.homeX = x;
+        b.homeY = y;
+        b.homeZ = z;
+        phys.add(b);
+        pieces.add(b);
     }
 
     /** Where the ring is now, for the desktop stand. */
@@ -1427,6 +1438,7 @@ final class World implements Physics.Listener {
             else ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
                     b.hx * scale, b.hy * scale, b.hz * scale);
         }
+        streetShadows();
         drawPuddles();
         life.draw(ras);
         drawTrail();
@@ -1455,6 +1467,44 @@ final class World implements Physics.Listener {
             if (!zoomed && zoomK > 0f) closingIn(f);
             else System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
             drawHud(f);
+        }
+    }
+
+    // the way shadows fall on the street: away from the sun, this long for each meter of height
+    private static final float SHX, SHZ, SH_LEN;
+
+    static {
+        float hx = -Raster.sunX(), hz = -Raster.sunZ();
+        float l = (float) Math.sqrt(hx * hx + hz * hz);
+        SHX = hx / l;
+        SHZ = hz / l;
+        SH_LEN = l / Raster.sunY();
+    }
+
+    /**
+     * Soft shadows on the street for whatever has fallen off the plinth: the shadow map
+     * only covers the plinth and its foot. A ball casts a long soft oval, a block a patch
+     * as wide as it lies; the higher it is, the farther and fainter.
+     */
+    private void streetShadows() {
+        for (Body b : pieces) {
+            if (b.gone || b.material == Body.BALLOON) continue;
+            boolean overPlinth = Math.abs(b.px) < Builder.PHX + 0.3f && Math.abs(b.pz - Builder.CZ) < Builder.PHZ + 0.3f;
+            if (overPlinth || b.minY > 2.5f) continue;
+            float r = b.radius > 0f ? b.radius : Math.max(0.08f, Math.min(b.hx, Math.min(b.hz, b.hy)) * 1.1f);
+            float lo = Math.max(0f, b.minY), hi = b.maxY;
+            float ax = b.px + SHX * lo * SH_LEN, az = b.pz + SHZ * lo * SH_LEN;
+            float bx = b.px + SHX * hi * SH_LEN, bz = b.pz + SHZ * hi * SH_LEN;
+            float fade = 1f - Math.min(1f, lo / 2.5f);
+            ras.softShadow(ax, az, bx, bz, r * 1.05f, r * 0.8f, 0.8f * fade);
+            // and the dark spot right under it, in sun or in shade
+            if (lo < 0.4f) {
+                ras.anyLight = true;
+                float k = 1f - lo / 0.4f;
+                ras.softShadow(b.px - SHX * r * 0.2f, b.pz - SHZ * r * 0.2f, b.px + SHX * r * 0.4f, b.pz + SHZ * r * 0.4f,
+                        r * 0.95f, r * 0.8f, 0.55f * k);
+                ras.anyLight = false;
+            }
         }
     }
 

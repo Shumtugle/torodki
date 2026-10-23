@@ -1,0 +1,26 @@
+# Balls and pieces that end up on the street cast soft shadows; the 50th level stands farther.
+screen 1096 2560
+level 5
+wait 2.0
+ball -1.2 0.4 7.0
+ball 0.6 1.6 7.5
+ball 1.6 0.4 9.0
+wait 0.25
+shot w1_balls_falling
+wait 1.5
+shot w1_balls
+level 48
+wait 1.0
+shot w2_49
+level 49
+wait 1.0
+shot w3_50
+level 59
+wait 1.0
+shot w4_60
+down 140 430
+wait 0.6
+shot w5_60_zoom
+up 140 430
+wait 2.5
+state
