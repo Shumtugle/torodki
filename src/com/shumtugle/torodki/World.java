@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.42";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.43";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -187,6 +187,8 @@ final class World implements Physics.Listener {
         heavyLeft = Math.max(0, Math.min(HEAVY_MAX, host.loadGifts()));
         fails = Math.max(0, host.loadFails());
         goldSeen = host.loadGoldSeen();
+        cubes = Math.max(0, host.loadInt("cubes"));
+        cubesDue = Math.max(0, host.loadInt("cubesDue"));
         phys.listener = this;
     }
 
@@ -507,6 +509,26 @@ final class World implements Physics.Listener {
             return;
         }
         if (alley != null) {
+            if (alley.phase == Alley.CUBES) {
+                if (type == DOWN && alley.signsReady()) {
+                    // the cube under the finger, or the nearest to it
+                    int best = -1;
+                    float bd = 1e9f;
+                    for (int k = 0; k < 5; k++) {
+                        Body b = alley.sign[k];
+                        if (b == null || b.gone) continue;
+                        float vz = alleyRas.project(b.px, b.py, b.pz, scr);
+                        float r = Alley.SIGN * alleyRas.f / vz * 1.6f + 6f;
+                        float d = (float) Math.hypot(x - scr[0], y - scr[1]);
+                        if (d < r && d < bd) {
+                            bd = d;
+                            best = k;
+                        }
+                    }
+                    if (best >= 0) alley.strike(best);
+                }
+                return;
+            }
             alley.touch(type, x, y, clock);
             return;
         }
@@ -1806,6 +1828,15 @@ final class World implements Physics.Listener {
             shore.traffic = alley.traffic;
             shore.update(dt);
             particles(dt);
+            if (alley != null && alley.phase == Alley.CUBES && alley.next == Alley.MIDDLE && alley.phaseT > 0f
+                    && alley.signsReadyToLeave()) {
+                // another game: a fresh golem comes round the corner, the view stays where it is
+                Alley a = new Alley(host, seed ^ clock2long());
+                a.phys.listener = this;
+                a.again();
+                alley = a;
+                pN = 0;
+            }
             if (alley.done()) endAlley();
             return;
         }
@@ -2010,6 +2041,7 @@ final class World implements Physics.Listener {
             }
             wonAt = stars;
             cleared = true;
+            earnCube();
             setState(WON);
         }
     }
@@ -2026,7 +2058,16 @@ final class World implements Physics.Listener {
     }
 
     /** For the desktop stand: the building counts as cleared after this many throws. */
+    /** A building that wore the golden cube earns it, once a level; the gods keep it for now. */
+    private void earnCube() {
+        if (goldCube == null || host.loadInt("cube" + (level + 1)) != 0) return;
+        host.saveInt("cube" + (level + 1), 1);
+        cubesDue++;
+        host.saveInt("cubesDue", cubesDue);
+    }
+
     void standWin(int throwsCount) {
+        earnCube();
         throwsMade = throwsCount;
         cleared = true;
         setState(WON);
@@ -2605,7 +2646,12 @@ final class World implements Physics.Listener {
             sky.compose(turnA.a, f.a, h, off);
             sky.drawClouds(f, off - h);
             float held = alley.phaseT - Alley.TILT_T;
-            if (alley.verdict == Sky.OVATION && held > 0.9f && held < alley.godsHold()) drawGift(f, held - 0.9f);
+            if (cubesFalling > 0 && alley.verdict != Sky.GLOOM && held > 0.9f && held < alley.godsHold()) {
+                glowN = 0;
+                drawCubeGift(f, held - 0.9f, cubesFalling);
+                for (int i = 0; i < glowN; i++) glow(f.a, h, glowX[i], glowY[i], glowR[i], 9 + i, -1, -1);
+                glowN = 0;
+            }
             if (off < h / 8) drawAlleyHud(f);
             return;
         }
@@ -3917,14 +3963,20 @@ final class World implements Physics.Listener {
         aiming = false;
     }
 
-    /** Heavy hammers from the gods, for bowling well. */
-    void giveHeavy(int n) {
-        if (n <= 0) return;
-        heavyLeft = Math.min(HEAVY_MAX, heavyLeft + n);
-        heavyOn = true;
-        host.saveGifts(heavyLeft);
-        host.buzz(40);
+    // golden cubes: those the gods have handed over, and those earned and not yet handed
+    int cubes, cubesDue;
+    private int cubesFalling;           // how many are coming down in the gods' hands right now
+
+    /** The gods hand over the golden cubes earned on the street. */
+    void giveCubes() {
+        cubesFalling = cubesDue;
+        if (cubesDue <= 0) return;
+        cubes += cubesDue;
+        cubesDue = 0;
+        host.saveInt("cubes", cubes);
+        host.saveInt("cubesDue", 0);
     }
+
 
     /**
      * The golem's shell bursting off it: pieces of its stone, brick, planks and iron thrown
@@ -3988,6 +4040,28 @@ final class World implements Physics.Listener {
         boltsHeard = sky.bolts;
     }
 
+    /** A stone cube of the alley broken by the hammer: chips of it everywhere, and dust. */
+    void burstCube(Body b) {
+        int[] stone = {0xFFE4DACA, 0xFFCFC3AE, 0xFFB0A592};
+        for (int n = 0; n < 40 && pN < MAXP; n++) {
+            int i = pN++;
+            float dx = (fx.nextFloat() - 0.5f) * 2f, dy = fx.nextFloat(), dz = (fx.nextFloat() - 0.5f) * 2f;
+            pX[i] = b.px + dx * b.hx;
+            pY[i] = b.py + (dy - 0.5f) * 2f * b.hy;
+            pZ[i] = b.pz + dz * b.hz;
+            float sp = 2.5f + fx.nextFloat() * 3.5f;
+            pVx[i] = dx * sp;
+            pVy[i] = 1.5f + dy * 4f;
+            pVz[i] = dz * sp;
+            pLife[i] = 1.2f + fx.nextFloat() * 0.8f;
+            pAge[i] = 0f;
+            pCol[i] = stone[fx.nextInt(stone.length)];
+            pDust[i] = false;
+            pKind[i] = CHIP;
+        }
+        for (int n = 0; n < 12; n++) spawn(b.px, b.py, b.pz, true, 0xFFDCD3C4, 2f);
+    }
+
     /** Sea water thrown up, for the alley. */
     void spray(float x, float y, float z) {
         spawnWater(x + (fx.nextFloat() - 0.5f) * 3f, y, z + (fx.nextFloat() - 0.5f) * 3f, 0f, 6f, 0f);
@@ -4029,6 +4103,13 @@ final class World implements Physics.Listener {
             ras.shadowBall(b.px, b.py, b.pz, b.radius);
         }
         if (!alley.golem.down) alley.golem.draw(ras, 700 << 3);
+        for (int k = 0; k < 5; k++) {
+            Body b = alley.sign[k];
+            if (b == null || b.gone || b.py < -b.hy * 0.95f) continue;
+            drawBody(b, 1f, 0f, 60 + k);
+            ras.shadowBox(b.px, b.py, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22, b.hx, b.hy, b.hz);
+        }
+        if (alley.phase == Alley.CUBES && alley.next < 0) alleyHammer();
         shore.draw(ras);
         if (alley.phase == Alley.AIM) {
             // the next ball, held low in front, following the finger
@@ -4055,8 +4136,80 @@ final class World implements Physics.Listener {
             float k = alley.flash * alley.flash * 0.6f;
             for (int i = 0; i < f.a.length; i++) f.a[i] = Backdrop.mix(f.a[i], 0xFFFFFFFF, k);
         }
+        if (alley.phase == Alley.CUBES || alley.next >= 0) signArrows(f);
         if (!noHud) drawAlleyHud(f);
         ras = keep;
+    }
+
+    /** The hammer in the alley: held ready, or flying at the cube it was thrown at. */
+    private void alleyHammer() {
+        heldPose(0.3f, -0.7f + (float) Math.sin(clock * 1.7f) * 0.008f, 1.35f, -0.42f, 0.86f, 0.28f, 0.94f, 0.2f, -0.28f);
+        // the hammer is held a little lower here: the player stands lower than on the street
+        pose[1] -= CAM_Y - Alley.CAM_Y;
+        if (alley.chosen >= 0 && alley.hammerT >= 0f) {
+            Body b = alley.sign[alley.chosen];
+            float k = Math.min(1f, alley.hammerT / Alley.HAMMER_T);
+            // to the middle of the face turned to the player, in a low arc, turning over
+            float tx = b.px - alley.fx() * b.hx, ty = b.py + b.hy * 0.4f, tz = b.pz - alley.fz() * b.hz;
+            float sx = pose[0], sy = pose[1], sz = pose[2];
+            pose[0] = sx + (tx - sx) * k;
+            pose[1] = sy + (ty - sy) * k + 0.6f * 4f * k * (1f - k);
+            pose[2] = sz + (tz - sz) * k;
+            float a = k * 9f, ax = alley.rx(), az = alley.rz();
+            for (int c = 0; c < 3; c++) {
+                // each axis of the hammer turned about the lane's right
+                float vx = pose[3 + c], vy = pose[6 + c], vz = pose[9 + c];
+                float cs = (float) Math.cos(a), sn = (float) Math.sin(a), d = vx * ax + vz * az;
+                // the axis crossed with the vector (the axis lies flat: no up part)
+                float cx = -az * vy, cy = az * vx - ax * vz, cz = ax * vy;
+                pose[3 + c] = vx * cs + cx * sn + ax * d * (1f - cs);
+                pose[6 + c] = vy * cs + cy * sn;
+                pose[9 + c] = vz * cs + cz * sn + az * d * (1f - cs);
+            }
+        }
+        drawParts(false, 1f, 900, false);
+    }
+
+    // arrows cut in the cubes' faces, pointing up, right, down, left as their way goes
+    private static final float[] ARROW_TURN = {0f, 0f, (float) Math.PI * 0.5f, (float) Math.PI, -(float) Math.PI * 0.5f};
+
+    /** On each cube's face: an arrow for the way it means; a ball on the middle one. */
+    private void signArrows(Px f) {
+        for (int k = 0; k < 5; k++) {
+            Body b = alley.sign[k];
+            if (b == null || b.gone || b.py < 0f) continue;
+            // the arrow sits high on the face, where it shows over the cube in front
+            float gy = b.py + b.hy - b.hx * 0.75f;
+            float vz = ras.project(b.px - alley.fx() * b.hx * 1.01f, gy, b.pz - alley.fz() * b.hz * 1.01f, scr);
+            if (vz < 0.5f) continue;
+            float iz = 1f / vz;
+            float s = b.hx * ras.f / vz * 0.6f;
+            int r = (int) Math.ceil(s) + 1;
+            float c = (float) Math.cos(ARROW_TURN[k]), sn = (float) Math.sin(ARROW_TURN[k]);
+            for (int y = -r; y <= r; y++)
+                for (int x = -r; x <= r; x++) {
+                    boolean in;
+                    if (k == Alley.MIDDLE) {
+                        // a ball with its finger holes
+                        float d = (float) Math.sqrt(x * x + y * y);
+                        in = d < s * 0.7f && !(Math.hypot(x + s * 0.2f, y + s * 0.25f) < s * 0.12f
+                                || Math.hypot(x - s * 0.15f, y + s * 0.3f) < s * 0.12f || Math.hypot(x + s * 0.02f, y + s * 0.02f) < s * 0.12f);
+                    } else {
+                        // into the arrow's own frame, pointing up
+                        float u = x * c + y * sn, v = -x * sn + y * c;
+                        boolean head = v >= -s && v <= -s * 0.15f && Math.abs(u) <= s * 0.62f * (v + s) / (s * 0.85f);
+                        boolean shaft = v > -s * 0.2f && v <= s * 0.8f && Math.abs(u) <= s * 0.2f;
+                        in = head || shaft;
+                    }
+                    if (!in) continue;
+                    int px = Math.round(scr[0]) + x, py = Math.round(scr[1]) + y;
+                    if (px < 0 || py < 0 || px >= W || py >= h) continue;
+                    // only where this face is what shows: not over a cube in front of it
+                    if (ras.zb[py * W + px] > iz * 1.03f) continue;
+                    // cut into the stone, dark
+                    f.a[py * W + px] = Backdrop.mix(f.a[py * W + px], 0xFF2E2A28, 0.75f);
+                }
+        }
     }
 
     /**
@@ -4106,6 +4259,13 @@ final class World implements Physics.Listener {
         }
         // the heavy throws left: small dark hammers under the stars, ringed in gold when in hand
         for (int i = 0; i < heavyLeft; i++) heavyMark(f, x + i * 13 + 1, y + 16, heavyOn);
+        // the golden cubes the gods have handed over, in the row beside the stars
+        int cx = x + STARS * 15 + 3;
+        if (cubes <= 6) for (int i = 0; i < cubes; i++) cubeMark(f, cx + i * 11, y + 2);
+        else {
+            cubeMark(f, cx, y + 2);
+            PixelFont.draw(f, String.valueOf(cubes), cx + 12, y + 3, 1, 0xFFFFE89A);
+        }
         // weight still on the plinth, with the line it has to fall below
         float on = onPlinth();
         int bw = 58, bx = W - bw - 7, by = 9;
@@ -4170,6 +4330,49 @@ final class World implements Physics.Listener {
             f.set(gx, gy - 1, 0xFFFFF0C0);
             f.set(gx, gy + 1, 0xFFFFF0C0);
         }
+    }
+
+    /**
+     * The golden cubes coming down from the thunderer's cloud, a fan of them, each turning
+     * over as it falls, glowing, a glint on it now and then.
+     */
+    private void drawCubeGift(Px f, float t, int n) {
+        int shown = Math.min(n, 9);
+        for (int k = 0; k < shown; k++) {
+            float tk = t - k * 0.12f;
+            if (tk <= 0f) continue;
+            float fall = Math.min(1.7f, tk);
+            float cx = W * 0.5f + (k - (shown - 1) * 0.5f) * 15f * (0.6f + fall), cy = h * 0.24f + 30f * fall + 220f * fall * fall;
+            if (cy > h + 20) continue;
+            float ang = 0.4f + tk * (3.5f + k * 0.4f), s = 7f;
+            float ca = (float) Math.cos(ang), sa = (float) Math.sin(ang);
+            int r = (int) (s * 1.5f) + 1;
+            for (int y = -r; y <= r; y++)
+                for (int x = -r; x <= r; x++) {
+                    float u = x * ca + y * sa, v = -x * sa + y * ca;
+                    if (Math.abs(u) > s || Math.abs(v) > s) continue;
+                    // light on the upper left of the face, an edge darker
+                    int c = u + v < -s * 0.6f ? 0xFFFFF0B0 : Math.abs(u) > s - 1.2f || Math.abs(v) > s - 1.2f ? 0xFFB8862A : 0xFFF2C64A;
+                    f.set(Math.round(cx) + x, Math.round(cy) + y, c);
+                }
+            glowAt(cx, cy, s * 1.2f, -1, -1);
+            if (((int) (tk * 9f) + k) % 4 == 0) {
+                int gx = Math.round(cx - s * 0.4f), gy = Math.round(cy - s * 0.4f);
+                f.set(gx, gy, 0xFFFFFFFF);
+                f.set(gx - 1, gy, 0xFFFFF4C8);
+                f.set(gx + 1, gy, 0xFFFFF4C8);
+                f.set(gx, gy - 1, 0xFFFFF4C8);
+                f.set(gx, gy + 1, 0xFFFFF4C8);
+            }
+        }
+    }
+
+    /** A golden cube for the corner, nine pixels: a lit top, a face, a shaded side. */
+    private static void cubeMark(Px f, int x, int y) {
+        f.rect(x, y, x + 9, y + 9, 0xFF8A5A12);
+        f.rect(x + 1, y + 1, x + 8, y + 3, 0xFFFFE89A);
+        f.rect(x + 1, y + 3, x + 6, y + 8, 0xFFF2C64A);
+        f.rect(x + 6, y + 3, x + 8, y + 8, 0xFFC0902C);
     }
 
     /** A five-pointed star; hollow when spent. */

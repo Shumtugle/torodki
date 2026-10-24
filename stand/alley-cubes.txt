@@ -1,0 +1,32 @@
+# The golem beaten: five stone cubes rise with arrows; the hammer at the right one rings off,
+# the middle one starts a new game; then the golden cubes come down from the gods.
+screen 1096 2560
+level 30
+cubesdue 3
+wait 1.0
+alley
+alleyneed 0
+bowl 0 10 0
+alleyuntil 11
+wait 2.4
+shot c1_cubes_gift
+alleystate
+bowl 0 10 0
+bowl 0 10 0
+bowl 0 10 0
+bowl 0 10 0
+alleyuntil 12
+wait 1.3
+shot c2_cubes_up
+cube 2
+wait 0.18
+shot c3_hammer_flying
+wait 0.4
+shot c4_rings_off
+cube 0
+wait 0.5
+shot c5_broken
+wait 1.5
+shot c6_again
+alleystate
+state

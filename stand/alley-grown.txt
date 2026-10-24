@@ -1,0 +1,50 @@
+# Grown figures: five rounds of one visit, and the first of two more.
+screen 1096 2560
+level 20
+wait 1.0
+alley
+alleyneed 0
+alleyuntil 3
+wait 0.3
+shot g0_0
+bowl 0 10 0
+alleyuntil 3
+wait 0.3
+shot g0_1
+bowl 0 10 0
+alleyuntil 3
+wait 0.3
+shot g0_2
+bowl 0 10 0
+alleyuntil 3
+wait 0.3
+shot g0_3
+bowl 0 10 0
+alleyuntil 3
+wait 0.3
+shot g0_4
+bowl 0 10 0
+level 27
+wait 1.0
+alley
+alleyneed 0
+alleyuntil 3
+wait 0.3
+shot g1_0
+bowl 0 10 0
+alleyuntil 3
+wait 0.3
+shot g1_1
+bowl 0 10 0
+level 34
+wait 1.0
+alley
+alleyneed 0
+alleyuntil 3
+wait 0.3
+shot g2_0
+bowl 0 10 0
+alleyuntil 3
+wait 0.3
+shot g2_1
+bowl 0 10 0

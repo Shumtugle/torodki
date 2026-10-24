@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.43
+- Every figure in the alley is grown fresh from the golem's stones, storey by storey:
+  ranks of pillars, courses of brick, portals with a lintel, towers of blocks, a bending
+  row of slabs, steps, a totem, a cap on a flat top. Each must stand by itself, and one
+  ball at its middle must bring some of it down but not all; the farther the round, the
+  stubborner. It grows in the background, one figure ahead.
+- No hammers are given in the alley. Instead: a building that wore the golden cube earns
+  that cube when it is cleared, once a level, and the gods keep it; when a figure falls in
+  the alley they hand over all the cubes earned so far, a fan of them tumbling out of the
+  thunderer's cloud, glowing. The cubes are kept, and shown in the row beside the stars.
+- With the golem driven into the sea, five stone cubes rise out of the road in a cross,
+  arrows cut in their faces, and a hammer is in hand. A tap on a cube throws it there:
+  the middle one, with a ball on it, brings the golem back round the corner for another
+  game; the one pointing back turns home to the buildings; the one pointing forward goes
+  down to the sea; left and right are not open yet, and the hammer rings off them.
+
 ## 0.42
 - In the alley a heavy hammer comes only for a figure felled with one ball, as on the
   street for a building felled with one throw; the gods drop it only then.

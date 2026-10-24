@@ -1,0 +1,20 @@
+# A building wearing the golden cube is cleared: the cube is earned, the gods keep it; in
+# the alley they hand it over with the first figure felled; it shows beside the stars.
+screen 1096 2560
+goldseen
+level 8
+wait 2.0
+shot k0_crowned
+win 1
+wait 8
+alleystate
+alley
+alleyneed 0
+bowl 0 10 0
+alleyuntil 11
+wait 2.3
+shot k1_handed
+alleystate
+level 9
+wait 1.5
+shot k2_beside_stars

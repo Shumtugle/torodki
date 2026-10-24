@@ -321,11 +321,19 @@ public final class Stand implements World.Host {
             int want = Integer.parseInt(p[1]);
             float t0 = time;
             while (world.alley != null && world.alley.phase != want && time - t0 < 30f) step();
+        } else if (c.equals("cube")) {
+            // throw the hammer at one of the five cubes: 0 middle, 1 forward, 2 right, 3 back, 4 left
+            float t0 = time;
+            while (world.alley != null && !world.alley.signsReady() && time - t0 < 30f) step();
+            if (world.alley != null) world.alley.strike(Integer.parseInt(p[1]));
+            step();
+        } else if (c.equals("cubesdue")) {
+            world.cubesDue = Integer.parseInt(p[1]);
         } else if (c.equals("alleyneed")) {
             if (world.alley != null) world.alley.need = f(p[1]);
         } else if (c.equals("alleystate")) {
             Alley a = world.alley;
-            if (a == null) System.out.println(String.format("%7.2fs  no alley; heavy %d", time, world.heavyLeft));
+            if (a == null) System.out.println(String.format("%7.2fs  no alley; heavy %d, golden cubes %d, due %d", time, world.heavyLeft, world.cubes, world.cubesDue));
             else System.out.println(String.format("%7.2fs  alley phase %d round %d ball %d won %d standing %.2f%s; heavy %d",
                     time, a.phase, a.round, a.ball, a.won, a.standing, a.lost ? " LOST" : "", world.heavyLeft));
         } else if (c.equals("tear")) {

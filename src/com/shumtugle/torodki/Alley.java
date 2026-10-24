@@ -13,15 +13,15 @@ import java.util.Random;
  * the golem, which falls back down the street and builds itself again, farther off. Five
  * times, and it is driven out of sight: back over the shore road, across the beach and into
  * the sea, and the player walks down to the water. A figure left standing after the third
- * ball sends the player back to the buildings. A figure felled with one ball is a heavy
- * hammer, as a building felled with one throw is on the street.
+ * ball sends the player back to the buildings. No hammers are given here; but a figure
+ * felled is when the gods hand over the golden cubes the player has earned on the street.
  *
  * Plain Java: the world feeds it time and touches, and draws what it holds.
  */
 final class Alley {
     // the phases, in the order they come
     static final int TURN_IN = 0, ENTER = 1, SCATTER = 2, AIM = 3, ROLL = 4, SETTLE = 5, GATHER = 6, HOLD = 7,
-            SEA = 8, TURN_OUT = 9, SWELL = 10, GODS = 11;
+            SEA = 8, TURN_OUT = 9, SWELL = 10, GODS = 11, CUBES = 12;
     // the burst: it sinks lower than a crouch, its seams open, it holds a moment, it bursts
     static final float SLUMP_T = 0.22f, SWELL_T = 0.14f, BURST_T = 0.42f;
     static final float FLY_T = 0.55f, BACK_T = 0.5f;
@@ -102,6 +102,8 @@ final class Alley {
             rest[j] = t;
         }
         for (int i = 1; i < ROUNDS; i++) order[i] = rest[i - 1];
+        // the first figure grows while the head turns and the golem comes
+        if (host != null) prepare(0);
         // it comes from the shore road, beyond the corner house: round the corner, up the street
         golem = new Golem(19f, Backdrop.CROSS_Z - 4f);
         golem.holding = true;
@@ -178,11 +180,7 @@ final class Alley {
                 break;
             case ENTER:
                 if (golem.down && then == THEN_SINK) {
-                    if (phaseT > 1.4f) {
-                        go(SEA);
-                        w.giveHeavy(2);
-                        host.sound(Synth.CATCH, 0.9f, 1.2f);
-                    }
+                    if (phaseT > 1.4f) raiseSigns();
                 } else if (golem.idle() && (hopAt == 0 && phaseT > 0.5f || hopAt > 0 && golem.actT > 0.2f)) {
                     if (hopAt < hops) {
                         golem.hop(hopX[hopAt], hopZ[hopAt]);
@@ -275,6 +273,9 @@ final class Alley {
             case GODS:
                 if (phaseT >= 2f * TILT_T + godsHold()) gather();
                 break;
+            case CUBES:
+                signs(dt, w);
+                break;
             default:
                 break;
         }
@@ -345,7 +346,10 @@ final class Alley {
     private void scatter() {
         blocks.clear();
         phys.clear();
-        build(order[round], figureV(round));
+        ArrayList<Body> grown = takeGrown(round);
+        if (grown != null) blocks.addAll(grown);
+        else build(order[round], figureV(round));
+        prepare(round + 1);
         int n = blocks.size();
         fromX = new float[n];
         fromY = new float[n];
@@ -428,13 +432,13 @@ final class Alley {
                 flash = 1f;
                 host.sound(Synth.thunder(1 + rnd.nextInt(Synth.THUNDERS - 1)), 1f, 1f);
                 host.buzz(90);
-                // as on the street: a heavy hammer only for a figure felled with one ball
-                w.giveHeavy(1);
             } else {
                 host.sound(Synth.thunder(rnd.nextInt(Synth.THUNDERS)), 0.7f, 1.2f);
                 host.buzz(50);
             }
-            // the gods look down on it: delight for one ball, smiles for two, a nod for three
+            // the gods look down on it: delight for one ball, smiles for two, a nod for three;
+            // and now they hand over the golden cubes the player has earned on the street
+            w.giveCubes();
             lookUp(w, ball == 0 ? Sky.OVATION : ball == 1 ? Sky.CHEER : Sky.POLITE);
             return;
         }
@@ -445,6 +449,139 @@ final class Alley {
         }
         lost = true;
         lookUp(w, Sky.GLOOM);
+    }
+
+    // ---- the way on: five stone cubes ----
+    // With the golem gone, five cubes of stone rise out of the road in a cross, arrows cut
+    // in their faces: forward, right, back, left, and the one in the middle without an arrow
+    // but with a ball. A hammer is in hand again; one throw picks the way. The middle one
+    // brings the golem back for another game; back goes home to the buildings; forward goes
+    // down to the sea. Right and left are not open yet: the hammer rings off them.
+
+    static final int MIDDLE = 0, FORWARD = 1, RIGHT = 2, BACK = 3, LEFT = 4;
+    static final float SIGN = 0.55f;                       // half the width of a cube
+    // where each stands (across, along) and how tall it is, half: the far ones taller, so
+    // every face shows over the one in front of it
+    private static final float[][] SIGN_AT = {{0f, 10f, 0.55f}, {0f, 12.8f, 0.95f}, {1.9f, 10f, 0.55f}, {0f, 7.5f, 0.34f},
+            {-1.9f, 10f, 0.55f}};
+    final Body[] sign = new Body[5];
+    final float[] signShake = new float[5];
+    int chosen = -1;                                       // the cube the hammer is flying at
+    float hammerT = -1f;                                   // seconds since the throw
+    static final float HAMMER_T = 0.45f;
+    private float riseT, leaveT;
+    private boolean riseHeard;
+    int next = -1;                                         // what the player chose, once it is settled
+
+    private void raiseSigns() {
+        for (int k = 0; k < 5; k++) {
+            float x = wx(SIGN_AT[k][0], SIGN_AT[k][1]), z = wz(SIGN_AT[k][0], SIGN_AT[k][1]);
+            float hh = SIGN_AT[k][2];
+            Body b = new Body(SIGN, hh, SIGN, Body.STONE, k == MIDDLE ? STONE2 : STONE);
+            q[0] = (float) Math.cos(YAW * 0.5f);
+            q[2] = (float) Math.sin(YAW * 0.5f);
+            b.setPose(x, -hh, z, q[0], 0f, q[2], 0f);
+            b.homeX = x;
+            b.homeY = hh;
+            b.homeZ = z;
+            sign[k] = b;
+        }
+        riseT = 0f;
+        riseHeard = false;
+        chosen = -1;
+        hammerT = -1f;
+        go(CUBES);
+    }
+
+    /** True once the cubes are up and the hammer may be thrown. */
+    boolean signsReady() {
+        return phase == CUBES && riseT > 1.1f && chosen < 0;
+    }
+
+    private void signs(float dt, World w) {
+        riseT += dt;
+        // up out of the asphalt, one after another, grinding
+        for (int k = 0; k < 5; k++) {
+            Body b = sign[k];
+            if (b == null || b.gone) continue;
+            float t = Math.max(0f, Math.min(1f, (riseT - k * 0.12f) / 0.7f));
+            float e = 1f - (1f - t) * (1f - t);
+            float shake = signShake[k] > 0f ? (float) Math.sin(signShake[k] * 70f) * 0.06f * signShake[k] : 0f;
+            b.setPose(b.homeX + shake, -b.hy + 2f * b.hy * e, b.homeZ, b.qw, b.qx, b.qy, b.qz);
+            signShake[k] = Math.max(0f, signShake[k] - dt * 2f);
+            if (t > 0f && t < 1f && ((int) (riseT * 30f) & 3) == 0) w.dust(b.px + (rnd.nextFloat() - 0.5f) * 1.2f, 0.05f, b.pz);
+        }
+        if (!riseHeard) {
+            riseHeard = true;
+            host.sound(Synth.ROAR, 0.6f, 0.6f);
+            host.sound(Synth.GROUND, 1f, 0.5f);
+        }
+        if (chosen >= 0 && hammerT >= 0f) {
+            hammerT += dt;
+            if (hammerT >= HAMMER_T && next < 0) {
+                Body b = sign[chosen];
+                if (chosen == LEFT || chosen == RIGHT) {
+                    // not open yet: the hammer rings off it, the cube shudders, nothing more
+                    host.sound(Synth.CLANG, 0.9f, 0.6f);
+                    host.buzz(30);
+                    signShake[chosen] = 1f;
+                    chosen = -1;
+                    hammerT = -1f;
+                } else {
+                    host.sound(Synth.CRASH, 0.9f, 0.6f);
+                    host.sound(Synth.STONE, 1f, 0.5f);
+                    host.buzz(70);
+                    w.burstCube(b);
+                    b.gone = true;
+                    next = chosen;
+                    hammerT = HAMMER_T;
+                    leaveT = 0f;
+                }
+            }
+        }
+        if (next >= 0) leaveT += dt;
+        if (next >= 0 && leaveT > 0.8f) {
+            if (next == BACK) go(TURN_OUT);
+            else if (next == FORWARD) go(SEA);
+            // the middle one: the world starts the game again from the corner
+        }
+    }
+
+    /** The middle cube has been broken and the dust has settled: time for another game. */
+    boolean signsReadyToLeave() {
+        return next == MIDDLE && leaveT > 0.8f;
+    }
+
+    /** The lane's forward and right, for the world drawing on it. */
+    float fx() {
+        return fX;
+    }
+
+    float fz() {
+        return fZ;
+    }
+
+    float rx() {
+        return rX;
+    }
+
+    float rz() {
+        return rZ;
+    }
+
+    /** The player threw the hammer at a cube. */
+    void strike(int k) {
+        if (!signsReady() || sign[k] == null || sign[k].gone) return;
+        chosen = k;
+        hammerT = 0f;
+        host.sound(Synth.WHOOSH, 0.9f, 1f);
+        host.buzz(12);
+    }
+
+    /** Back at the corner for another game: the golem comes round it again. */
+    void again() {
+        phase = ENTER;
+        phaseT = 0f;
     }
 
     // ---- the gods, between rounds ----
@@ -576,6 +713,251 @@ final class Alley {
         host.buzz(15);
         handX = 0f;
         go(ROLL);
+    }
+
+    // ---- the grower ----
+    // Every figure is grown fresh, from the golem's stones, storey by storey: ranks of
+    // pillars, courses of brick, portals with a lintel, towers of blocks, a bending row of
+    // slabs, steps, a totem. A flat top may carry another storey, narrower; some are capped
+    // with a block or a pillar. Each candidate must stand by itself, and one ball rolled at
+    // its middle must bring down some of it but not all: of six candidates the one nearest
+    // the share wanted is kept. It grows in the background, one figure ahead.
+
+    private Thread growing;
+    private volatile ArrayList<Body> grownFig;
+    private int grownFor = -1;
+
+    private void prepare(final int r) {
+        if (r >= ROUNDS || grownFor == r) return;
+        grownFor = r;
+        grownFig = null;
+        final long sd = rnd.nextLong();
+        growing = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                grownFig = new Alley(null, sd).growFigure(r, new Random(sd));
+            }
+        });
+        growing.setDaemon(true);
+        growing.start();
+    }
+
+    private ArrayList<Body> takeGrown(int r) {
+        if (grownFor != r || growing == null) return null;
+        try {
+            growing.join();
+        } catch (InterruptedException e) {
+            return null;
+        }
+        growing = null;
+        grownFor = -1;
+        return grownFig;
+    }
+
+    /** Six candidates, the one that stands and falls nearest the share wanted; null if none stood. */
+    ArrayList<Body> growFigure(int r, Random g) {
+        float want = 0.55f - 0.05f * r, bestGap = 9f;
+        ArrayList<Body> best = null;
+        for (int attempt = 0; attempt < 6; attempt++) {
+            blocks.clear();
+            grow(g, r, figureV(r));
+            if (blocks.size() < 6 || !standsAlone()) continue;
+            float s = probe();
+            if (s < 0.12f || s > 0.9f) continue;
+            float gap = Math.abs(s - want);
+            if (gap < bestGap) {
+                bestGap = gap;
+                best = new ArrayList<Body>(blocks);
+            }
+            if (gap < 0.1f) break;
+        }
+        return best;
+    }
+
+    /** Let it stand a second: nothing may slide or lean. It starts the game as it settled. */
+    private boolean standsAlone() {
+        Physics p = new Physics();
+        p.sleeping = false;
+        for (Body b : blocks) {
+            b.setPose(b.homeX, b.homeY, b.homeZ, b.homeQw, b.homeQx, b.homeQy, b.homeQz);
+            b.asleep = false;
+            b.savePrev();
+            p.add(b);
+        }
+        for (int i = 0; i < 60; i++) p.step(1f / 60f);
+        boolean ok = true;
+        for (Body b : blocks) {
+            float dx = b.px - b.homeX, dy = b.py - b.homeY, dz = b.pz - b.homeZ;
+            if (dx * dx + dy * dy + dz * dz > 0.06f * K * 0.06f * K || b.r11 < 0.98f) ok = false;
+        }
+        for (Body b : blocks) {
+            if (ok) {
+                b.homeX = b.px;
+                b.homeY = b.py;
+                b.homeZ = b.pz;
+            }
+            b.setPose(b.homeX, b.homeY, b.homeZ, b.homeQw, b.homeQx, b.homeQy, b.homeQz);
+            b.vx = b.vy = b.vz = b.wx = b.wy = b.wz = 0f;
+            b.id = 0;
+        }
+        return ok;
+    }
+
+    /** One ball, fair and square at the middle: the share it brings down. Everything put back after. */
+    private float probe() {
+        Physics p = new Physics();
+        p.sleeping = true;
+        for (Body b : blocks) {
+            b.asleep = true;
+            b.savePrev();
+            p.add(b);
+        }
+        Body ball = Body.ball(BALL_R, 0);
+        ball.scaleMass(BALL_MASS);
+        ball.setPose(wx(0f, 1.6f), BALL_R + 0.01f, wz(0f, 1.6f), 1, 0, 0, 0);
+        float speed = 10f;
+        ball.vx = fX * speed;
+        ball.vz = fZ * speed;
+        ball.wx = ball.vz / BALL_R;
+        ball.wz = -ball.vx / BALL_R;
+        ball.asleep = false;
+        ball.savePrev();
+        p.add(ball);
+        for (int i = 0; i < 60 * 4; i++) p.step(1f / 60f);
+        float s = knockedShare();
+        for (Body b : blocks) {
+            b.setPose(b.homeX, b.homeY, b.homeZ, b.homeQw, b.homeQx, b.homeQy, b.homeQz);
+            b.vx = b.vy = b.vz = b.wx = b.wy = b.wz = 0f;
+            b.asleep = true;
+            b.id = 0;
+        }
+        return s;
+    }
+
+    private static final int PINS = 0, WALL = 1, PORTAL = 2, TOWERS = 3, SLABS = 4, STEPS = 5, TOTEM = 6;
+
+    /** A figure grown storey by storey, in lane units, at a distance v. */
+    void grow(Random g, int r, float v) {
+        v0 = v;
+        float hw = 0.7f + g.nextFloat() * 0.4f + r * 0.04f;
+        float y = 0f;
+        int storeys = 2 + g.nextInt(2) + (r >= 2 && g.nextBoolean() ? 1 : 0);
+        boolean flat = false;
+        for (int s = 0; s < storeys; s++) {
+            boolean ground = s == 0;
+            // what may stand here: everything on the ground, on a flat top only what is narrow-footed
+            // flat tops come more often low down, so the figure has storeys to grow
+            boolean last = s == storeys - 1;
+            float[] w = {last ? 1.4f : 0.5f, 1.4f, 1.8f, last ? 1.0f : 0.3f, ground ? 0.5f : 0f, ground ? 0.5f : 0f, last ? 0.6f : 0.2f};
+            float sum = 0f;
+            for (float x : w) sum += x;
+            float pick = g.nextFloat() * sum;
+            int m = 0;
+            while (m < w.length - 1 && (pick -= w[m]) > 0f) m++;
+            int c = (s & 1) == 0 ? STONE : STONE2;
+            switch (m) {
+                case PINS: {
+                    int n = Math.max(2, Math.min(5, Math.round(2f * hw / 0.46f)));
+                    float gap = Math.min(0.56f, 2f * hw / n);
+                    int ranks = ground ? 1 + g.nextInt(3) : 1;
+                    for (int k = 0; k < ranks; k++) {
+                        int nk = n - (k & 1);
+                        for (int i = 0; i < nk; i++)
+                            block((i - (nk - 1) * 0.5f) * gap, k * 0.5f, y, 0.13f, 0.45f, 0.13f, PIN, 0f);
+                    }
+                    flat = false;
+                    s = storeys;
+                    break;
+                }
+                case WALL: {
+                    int n = Math.max(2, Math.round(2f * hw / 0.5f));
+                    float bw = 2f * hw / n, bh = 0.24f;
+                    int courses = 2 + g.nextInt(2);
+                    for (int k = 0; k < courses; k++) {
+                        if ((k & 1) == 0)
+                            for (int i = 0; i < n; i++)
+                                block(-hw + bw * (i + 0.5f), 0f, y, bw * 0.5f - 0.005f, bh * 0.5f, 0.15f, (i + k) % 3 == 0 ? BRICK2 : BRICK, 0f);
+                        else {
+                            block(-hw + bw * 0.25f, 0f, y, bw * 0.25f - 0.005f, bh * 0.5f, 0.15f, BRICK, 0f);
+                            for (int i = 0; i < n - 1; i++)
+                                block(-hw + bw * (i + 1f), 0f, y, bw * 0.5f - 0.005f, bh * 0.5f, 0.15f, (i + k) % 3 == 0 ? BRICK2 : BRICK, 0f);
+                            block(hw - bw * 0.25f, 0f, y, bw * 0.25f - 0.005f, bh * 0.5f, 0.15f, BRICK, 0f);
+                        }
+                        y += bh;
+                    }
+                    flat = true;
+                    break;
+                }
+                case PORTAL: {
+                    float cs = 0.17f;
+                    int high = 2 + g.nextInt(2);
+                    boolean three = hw > 0.75f;
+                    for (int k = 0; k < high; k++) {
+                        cube(-hw + cs, 0f, y + k * 2f * cs, cs, (k & 1) == 0 ? c : BRICK);
+                        cube(hw - cs, 0f, y + k * 2f * cs, cs, (k & 1) == 0 ? BRICK : c);
+                        if (three) cube(0f, 0f, y + k * 2f * cs, cs, c);
+                    }
+                    y += high * 2f * cs;
+                    block(0f, 0f, y, hw + 0.04f, 0.06f, 0.2f, STONE2, 0f);
+                    y += 0.12f;
+                    flat = true;
+                    break;
+                }
+                case TOWERS: {
+                    int n = 2 + (hw > 0.7f ? g.nextInt(2) : 0), high = 2 + g.nextInt(3);
+                    float cs = 0.15f + g.nextFloat() * 0.04f;
+                    for (int t = 0; t < n; t++) {
+                        float u = n == 1 ? 0f : -hw + cs + t * (2f * hw - 2f * cs) / (n - 1);
+                        for (int k = 0; k < high; k++) cube(u, 0f, y + k * 2f * cs, cs, ((k + t) & 1) == 0 ? c : BRICK);
+                    }
+                    flat = false;
+                    s = storeys;
+                    break;
+                }
+                case SLABS: {
+                    int n = 6 + g.nextInt(5);
+                    float bend = (g.nextFloat() - 0.5f) * 1.2f;
+                    for (int i = 0; i < n; i++) {
+                        float a = i * 0.55f;
+                        float u = bend * (float) Math.sin(a), du = bend * 0.55f / 0.5f * (float) Math.cos(a);
+                        block(u, -1.8f + i * 0.5f, 0f, 0.26f, 0.45f, 0.06f, (i & 1) == 0 ? STONE : BRICK, (float) Math.atan(du));
+                    }
+                    flat = false;
+                    s = storeys;
+                    break;
+                }
+                case STEPS: {
+                    float cs = 0.2f;
+                    int base = Math.max(2, Math.min(4, Math.round(hw / cs)));
+                    for (int k = 0; k < base; k++) {
+                        int n = base - k;
+                        for (int i = 0; i < n; i++) cube((i - (n - 1) * 0.5f) * 2f * cs, 0f, y + k * 2f * cs, cs - 0.003f, (k & 1) == 0 ? STONE : STONE2);
+                    }
+                    flat = false;
+                    s = storeys;
+                    break;
+                }
+                default: { // a totem in the middle, stone and brick by turns
+                    int n = 3 + g.nextInt(3);
+                    for (int i = 0; i < n; i++) {
+                        boolean wide = (i & 1) == 0;
+                        float hu = wide ? 0.17f : 0.12f, hy = wide ? 0.11f : 0.16f;
+                        block(0f, 0f, y, hu, hy, 0.14f, wide ? c : BRICK, 0f);
+                        y += 2f * hy;
+                    }
+                    flat = false;
+                    s = storeys;
+                    break;
+                }
+            }
+            hw *= 0.65f + g.nextFloat() * 0.25f;
+            if (hw < 0.28f) break;
+        }
+        // a flat top may wear a cap
+        if (flat && g.nextFloat() < 0.7f) {
+            if (g.nextBoolean()) block(0f, 0f, y, 0.13f, 0.45f, 0.13f, PIN, 0f);
+            else for (int i = -1; i <= 1; i += 2) cube(i * Math.min(0.3f, hw), 0f, y, 0.15f, BRICK2);
+        }
     }
 
     // ---- the figures ----
