@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.38";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.39";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -1813,12 +1813,15 @@ final class World implements Physics.Listener {
             clock += dt;
             alley.update(dt, this);
             alley.handUpdate(dt);
+            shore.traffic = alley.traffic;
+            shore.update(dt);
             particles(dt);
             if (alley.done()) endAlley();
             return;
         }
         clock += dt;
         stateTime += dt;
+        seaFade = Math.max(0f, seaFade - dt / 1.4f);
         // fixed physics steps, at most two a frame
         acc += dt;
         int steps = 0;
@@ -2585,25 +2588,94 @@ final class World implements Physics.Listener {
         if (ras == null) return;
         if (alley == null) {
             drawStreet(f);
+            if (seaFade > 0f) {
+                // back from the sea: the white of the glare clears off the street
+                float k = seaFade * seaFade;
+                for (int i = 0; i < f.a.length; i++) f.a[i] = Backdrop.mix(f.a[i], 0xFFFFFFFF, k);
+            }
             return;
         }
         int ph = alley.phase;
+        if (ph == Alley.SEA) {
+            drawSea(f);
+            return;
+        }
         if (ph != Alley.TURN_IN && ph != Alley.TURN_OUT) {
             drawAlley(f);
             return;
         }
-        // the turn: both views drawn, swept past one another as the head turns
+        // the turn of the head, a quarter of the way and a half, a nod at each
         if (turnA == null || turnA.a.length != f.a.length) {
             turnA = new Px(f.w, f.h);
             turnB = new Px(f.w, f.h);
         }
+        float t = alley.phaseT;
+        boolean in = ph == Alley.TURN_IN;
+        // which leg of the turn: sweeps at 0, 2, 4, nods at 1, 3
+        int leg = 0;
+        float lt = t;
+        float[] len = {Alley.SWEEP, Alley.NOD, Alley.SWEEP, Alley.NOD, Alley.SWEEP};
+        while (leg < 4 && lt >= len[leg]) {
+            lt -= len[leg];
+            leg++;
+        }
+        float k = Math.min(1f, lt / len[leg]);
+        // the views in the order the head passes them
+        int a = (leg & 1) == 0 ? leg / 2 : (leg + 1) / 2, b = a + 1;
+        if (!in) {
+            a = 3 - a;
+            b = 3 - b;
+        }
         noHud = true;
-        drawStreet(turnA);
-        drawAlley(turnB);
+        int[] from = turnView(a, turnA), to = (leg & 1) == 0 ? turnView(b, turnB) : null;
         noHud = false;
-        float t = Math.min(1f, alley.phaseT / Alley.TURN_T);
-        if (ph == Alley.TURN_IN) whip(f, turnA.a, turnB.a, t);
-        else whip(f, turnB.a, turnA.a, t);
+        if ((leg & 1) == 0) whip(f, from, to, k, in ? 1 : -1);
+        else nod(f, from, k);
+    }
+
+    // the views a turn passes: 0 the street, 1 and 2 painted on the way, 3 the alley
+    private int[][] turnCols = new int[4][];
+
+    private int[] turnView(int i, Px buf) {
+        if (i == 0) {
+            drawStreet(buf);
+            return buf.a;
+        }
+        if (i == 3) {
+            drawAlley(buf);
+            return buf.a;
+        }
+        return turnCols[i];
+    }
+
+    /** A nod: the head dips and comes up again, the picture rising a little and settling. */
+    private void nod(Px f, int[] src, float k) {
+        int dy = Math.round((float) Math.sin(k * Math.PI) * h * 0.022f);
+        for (int y = 0; y < h; y++) {
+            int sy = Math.min(h - 1, y + dy);
+            System.arraycopy(src, sy * W, f.a, y * W, W);
+        }
+    }
+
+    private float seaFade;
+
+    /** Down to the water: the view closes in on the sea and fades into the glare. */
+    private void drawSea(Px f) {
+        drawAlley(f);
+        float t = Math.min(1f, alley.phaseT / Alley.SEA_T);
+        float e = t * t * (3f - 2f * t);
+        float zk = 1f + 2.2f * e;
+        alleyRas.project(alley.wx(0f, 70f), 0.5f, alley.wz(0f, 70f), scr);
+        float cx = W * 0.5f + (scr[0] - W * 0.5f) * e, cy = h * 0.5f + (scr[1] - h * 0.5f) * e;
+        int[] src = f.a.clone();
+        float white = Math.max(0f, (t - 0.55f) / 0.45f);
+        for (int y = 0; y < h; y++) {
+            int sy = Math.max(0, Math.min(h - 1, (int) (cy + (y + 0.5f - h * 0.5f) / zk)));
+            for (int x = 0; x < W; x++) {
+                int sx = Math.max(0, Math.min(W - 1, (int) (cx + (x + 0.5f - W * 0.5f) / zk)));
+                f.a[y * W + x] = Backdrop.mix(src[sy * W + sx], 0xFFFFFFFF, white);
+            }
+        }
     }
 
     private Px turnA, turnB;
@@ -2613,7 +2685,7 @@ final class World implements Physics.Listener {
      * A quick turn of the head: the view sweeps sideways from one picture to the other,
      * smeared along the sweep, fastest in the middle.
      */
-    private void whip(Px f, int[] from, int[] to, float t) {
+    private void whip(Px f, int[] from, int[] to, float t, int dir) {
         float e = t * t * (3f - 2f * t);
         int gap = W / 5, span = W + gap;
         float off = e * span;
@@ -2621,15 +2693,23 @@ final class World implements Physics.Listener {
         for (int y = 0; y < h; y++) {
             int row = y * W;
             for (int x = 0; x < W; x++) {
-                float sx = x + off;
                 int c;
-                if (sx < W) c = from[row + (int) sx];
-                else if (sx < W + gap) c = Backdrop.mix(from[row + W - 1], to[row], (sx - W) / gap);
-                else c = to[row + Math.min(W - 1, (int) (sx - W - gap))];
+                if (dir > 0) {
+                    // turning right: the picture runs off to the left, the next comes in from the right
+                    float sx = x + off;
+                    if (sx < W) c = from[row + (int) sx];
+                    else if (sx < W + gap) c = Backdrop.mix(from[row + W - 1], to[row], (sx - W) / gap);
+                    else c = to[row + Math.min(W - 1, (int) (sx - W - gap))];
+                } else {
+                    float sx = x - off;
+                    if (sx >= 0f) c = from[row + (int) sx];
+                    else if (sx >= -gap) c = Backdrop.mix(from[row], to[row + W - 1], -sx / gap);
+                    else c = to[row + Math.max(0, (int) (sx + W + gap))];
+                }
                 out[row + x] = c;
             }
         }
-        int r = (int) (6f * t * (1f - t) * 16f);
+        int r = (int) (6f * t * (1f - t) * 13f);
         if (r > 0) for (int y = 0; y < h; y++) smear(out, y * W, r);
     }
 
@@ -3750,6 +3830,7 @@ final class World implements Physics.Listener {
     // ---- the alley behind the player ----
 
     Alley alley;
+    private final Life shore = new Life(true);
     private Raster alleyRas;
     private int[] aCol;
     private float[] aZ;
@@ -3775,6 +3856,15 @@ final class World implements Physics.Listener {
                 aZ = r.zb.clone();
                 aLit = r.lit.clone();
                 aCol = r.col.clone();
+                // the two views on the way round, a third and two thirds of the turn
+                for (int i = 1; i <= 2; i++) {
+                    float k = i / 3f;
+                    Raster v = new Raster(W, h);
+                    v.camera(CAM_X + (Alley.CAM_X - CAM_X) * k, CAM_Y + (Alley.CAM_Y - CAM_Y) * k, 0f,
+                            YAW + (Alley.YAW - YAW) * k, PITCH + (Alley.PITCH - PITCH) * k, focal, h * 0.5f);
+                    new Backdrop().paint(v, 11L);
+                    turnCols[i] = v.col;
+                }
             }
         });
         alleyPaint.setDaemon(true);
@@ -3802,6 +3892,7 @@ final class World implements Physics.Listener {
     }
 
     private void endAlley() {
+        if (alley.phase == Alley.SEA) seaFade = 1f;
         alley = null;
         pN = 0;
         aiming = false;
@@ -3814,6 +3905,11 @@ final class World implements Physics.Listener {
         heavyOn = true;
         host.saveGifts(heavyLeft);
         host.buzz(40);
+    }
+
+    /** Sea water thrown up, for the alley. */
+    void spray(float x, float y, float z) {
+        spawnWater(x + (fx.nextFloat() - 0.5f) * 3f, y, z + (fx.nextFloat() - 0.5f) * 3f, 0f, 6f, 0f);
     }
 
     /** A puff of street dust, for the alley. */
@@ -3829,7 +3925,8 @@ final class World implements Physics.Listener {
         System.arraycopy(aLit, 0, ras.lit, 0, aLit.length);
         java.util.Arrays.fill(ras.idb, 0);
         glowN = 0;
-        float cx = alley.wx(0f, Alley.FIGURE_V + 1f), cz = alley.wz(0f, Alley.FIGURE_V + 1f);
+        float fv = Alley.figureV(alley.round) + 1f;
+        float cx = alley.wx(0f, fv), cz = alley.wz(0f, fv);
         ras.shadowBegin(cx, cz, 9f);
         for (int i = 0; i < alley.blocks.size(); i++) {
             Body b = alley.blocks.get(i);
@@ -3851,6 +3948,7 @@ final class World implements Physics.Listener {
             ras.shadowBall(b.px, b.py, b.pz, b.radius);
         }
         if (!alley.golem.down) alley.golem.draw(ras, 700 << 3);
+        shore.draw(ras);
         if (alley.phase == Alley.AIM) {
             // the next ball, held low in front, following the finger
             ras.viewToWorld(alley.handX * 0.22f, -0.5f, 1.05f, tmp);
@@ -3858,7 +3956,6 @@ final class World implements Physics.Listener {
             float spin = clock * 0.6f, c = (float) Math.cos(spin), s = (float) Math.sin(spin);
             ras.ball(bx, by, bz, 0.13f, c, 0, s, 0, 1, 0, -s, 0, c, 0xFF22357E, Backdrop.mix(0xFF22357E, 0xFFFFFFFF, 0.28f), 950 << 3);
         }
-        drawParticles();
         float minX = W, minY = h, maxX = 0, maxY = 0;
         for (int i = 0; i < 8; i++) {
             ras.project(cx + ((i & 1) == 0 ? -9f : 9f), (i & 2) == 0 ? 0f : 4f, cz + ((i & 4) == 0 ? -9f : 9f), scr);
@@ -3869,6 +3966,8 @@ final class World implements Physics.Listener {
         }
         ras.shadowApply(Math.max(0, (int) minX), Math.max(0, (int) minY), Math.min(W - 1, (int) maxX + 1), Math.min(h - 1, (int) maxY + 1));
         ras.outlines(0, 0, W - 1, h - 1, 1);
+        // spray and dust over the outlines, so a speck is never ringed in black
+        drawParticles();
         System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
         if (alley.flash > 0f) {
             float k = alley.flash * alley.flash * 0.6f;
@@ -3879,24 +3978,20 @@ final class World implements Physics.Listener {
     }
 
     /**
-     * The alley's corner: five frames in a row, filled as they are bowled (green for all
-     * down, amber for most, grey for few, a star for a strike), the balls left in the frame
-     * under them, and at the end the heavy hammers the gods give.
+     * The alley's corner, without a word: five squares for the five figures, green for
+     * those felled and the one bowled at now blinking; under them the balls left; to the
+     * right the bar of what still stands, with the line it must fall below, as on the street.
      */
     private void drawAlleyHud(Px f) {
         int x = 6, y = 8;
-        for (int i = 0; i < Alley.FRAMES; i++) {
+        for (int i = 0; i < Alley.ROUNDS; i++) {
             int bx = x + i * 17;
-            boolean now = i == alley.frame && alley.phase < Alley.FINALE;
-            boolean done = i < alley.frame || alley.phase >= Alley.FINALE;
+            boolean now = i == alley.round && !alley.lost && alley.won <= i;
+            boolean done = i < alley.won;
             f.rect(bx, y, bx + 14, y + 14, now && ((int) (clock * 3f) & 1) == 0 ? 0xFFFFC93A : 0xFF5A3A0E);
-            int fill = 0xFF3A3236;
-            if (done) {
-                float s = alley.share[i];
-                fill = s >= 0.999f ? 0xFF6FBF5A : s >= 0.5f ? 0xFFF2B640 : 0xFF8E8A84;
-            } else if (now) fill = 0xFFF3E9D2;
+            int fill = done ? 0xFF6FBF5A : now ? 0xFFF3E9D2 : 0xFF3A3236;
+            if (i == alley.round && alley.lost) fill = 0xFFB8301E;
             f.rect(bx + 1, y + 1, bx + 13, y + 13, fill);
-            if (done && alley.strike[i]) star(f, bx + 7, y + 7, 5.4f, 0xFFFFFFFF, 0xFF8A5A12, true);
         }
         if (alley.phase >= Alley.AIM && alley.phase <= Alley.SETTLE) {
             int left = Alley.BALLS - alley.ball - (alley.phase == Alley.AIM ? 0 : 1);
@@ -3907,8 +4002,15 @@ final class World implements Physics.Listener {
                         if (dx * dx + dy * dy <= 17) f.set(cx + dx, cy + dy, dx + dy < -3 ? 0xFF5A70B8 : 0xFF22357E);
             }
         }
-        for (int i = 0; i < Math.max(0, alley.reward); i++) heavyMark(f, x + i * 13 + 1, y + 32, true);
-        levelPlate(f, W - 6, y);
+        // what stands of the figure, with the line to bring it below
+        int bw = 58, bx = W - bw - 7, by = 9;
+        float on = alley.standing;
+        f.rect(bx - 1, by - 1, bx + bw + 1, by + 7, 0xFF8A5A12);
+        f.rect(bx, by, bx + bw, by + 6, 0xFFF3E9D2);
+        f.rect(bx, by, bx + Math.round(bw * on), by + 6, on <= 1f - Alley.WIN ? 0xFF6FBF5A : 0xFFE8963C);
+        int mark = bx + Math.round(bw * (1f - Alley.WIN));
+        f.rect(mark, by - 3, mark + 1, by + 9, 0xFF5A3A0E);
+        levelPlate(f, bx + bw + 1, by + 11);
     }
 
     // ---- HUD ----

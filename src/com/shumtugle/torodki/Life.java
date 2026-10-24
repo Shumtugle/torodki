@@ -9,6 +9,10 @@ import java.util.Random;
  * People are drawn round, from shaded spheres and tapered limbs; cars are small sedans
  * with glass, chrome and lights. Everyone casts a soft evening shadow. None of it
  * touches the physics or makes a sound.
+ *
+ * Its shore twin keeps the street behind the player: people on the pavements down to the
+ * shore road and strolling along the beach, and, once let through, cars passing along the
+ * shore road far off.
  */
 final class Life {
     // ---- people ----
@@ -19,6 +23,10 @@ final class Life {
     private final int[] pSkin = new int[PEOPLE], pTop = new int[PEOPLE], pLegs = new int[PEOPLE], pHair = new int[PEOPLE];
     private final int[] pKind = new int[PEOPLE];      // 0 shorts, 1 trousers, 2 skirt
     private final boolean[] pHat = new boolean[PEOPLE], pLongHair = new boolean[PEOPLE], pBag = new boolean[PEOPLE];
+    private final boolean[] pAlongX = new boolean[PEOPLE];   // on the beach, walking along the shore
+
+    final boolean shore;
+    boolean traffic;                  // the shore road is open to cars
 
     // ---- cars on the move ----
     private static final int CARS = 3;
@@ -119,6 +127,11 @@ final class Life {
     }
 
     Life() {
+        this(false);
+    }
+
+    Life(boolean shore) {
+        this.shore = shore;
         for (int i = 0; i < PEOPLE; i++) spawnPerson(i, true);
         for (int i = 0; i < PARK_X.length; i++) {
             parkColor[i] = PAINT[rnd.nextInt(PAINT.length)];
@@ -133,6 +146,18 @@ final class Life {
         pDir[i] = up ? 1f : -1f;
         pz[i] = anywhere ? 3f + rnd.nextFloat() * 70f : (up ? -2f : 80f);
         pYaw[i] = up ? 0f : (float) Math.PI;
+        pAlongX[i] = false;
+        if (shore) {
+            if (rnd.nextInt(5) < 2) {
+                // along the beach, between the sea wall and the water
+                pAlongX[i] = true;
+                pz[i] = Backdrop.SHORE_Z - 3f - rnd.nextFloat() * 6f;
+                px[i] = anywhere ? -14f + rnd.nextFloat() * 38f : (up ? -16f : 26f);
+                pYaw[i] = up ? (float) Math.PI * 0.5f : -(float) Math.PI * 0.5f;
+            } else {
+                pz[i] = anywhere ? -36f + rnd.nextFloat() * 34f : (up ? -37f : -1f);
+            }
+        }
         pSpeed[i] = 1.0f + rnd.nextFloat() * 0.5f;
         pPhase[i] = rnd.nextFloat() * 6f;
         pScale[i] = rnd.nextInt(7) == 0 ? 0.7f : 0.92f + rnd.nextFloat() * 0.14f;
@@ -151,11 +176,15 @@ final class Life {
     void update(float dt) {
         for (int i = 0; i < PARK_X.length; i++) alarm[i] = Math.max(0f, alarm[i] - dt);
         for (int i = 0; i < PEOPLE; i++) {
-            pz[i] += pDir[i] * pSpeed[i] * dt;
+            if (pAlongX[i]) px[i] += pDir[i] * pSpeed[i] * dt;
+            else pz[i] += pDir[i] * pSpeed[i] * dt;
             pPhase[i] += dt * pSpeed[i] * 4.2f;
-            if (pz[i] > 82f || pz[i] < -4f) spawnPerson(i, false);
+            boolean out = shore ? (pAlongX[i] ? px[i] > 27f || px[i] < -17f : pz[i] > -0.5f || pz[i] < -37.5f)
+                    : pz[i] > 82f || pz[i] < -4f;
+            if (out) spawnPerson(i, false);
         }
-        cars(dt);
+        if (shore) shoreCars(dt);
+        else cars(dt);
     }
 
     private void cars(float dt) {
@@ -225,6 +254,31 @@ final class Life {
         }
     }
 
+    /** Cars passing along the shore road, both ways, far off across the end of the street. */
+    private void shoreCars(float dt) {
+        nextCar -= dt;
+        if (traffic && nextCar <= 0f) {
+            nextCar = 2.5f + rnd.nextFloat() * 5f;
+            for (int c = 0; c < CARS; c++)
+                if (cState[c] == OFF) {
+                    boolean east = rnd.nextBoolean();
+                    cLane[c] = east ? 1f : -1f;
+                    cz[c] = east ? Backdrop.CROSS_Z - 2.3f : Backdrop.SHORE_Z + 2.3f;
+                    cx[c] = east ? -26f : 70f;
+                    cYaw[c] = (float) Math.PI * (east ? 0.5f : -0.5f);
+                    cV[c] = 8f + rnd.nextFloat() * 4f;
+                    cColor[c] = PAINT[rnd.nextInt(PAINT.length)];
+                    cState[c] = GO;
+                    break;
+                }
+        }
+        for (int c = 0; c < CARS; c++) {
+            if (cState[c] == OFF) continue;
+            cx[c] += cLane[c] * cV[c] * dt;
+            if (cx[c] > 72f || cx[c] < -28f) cState[c] = OFF;
+        }
+    }
+
     private void spawnCar(int c) {
         cLane[c] = rnd.nextBoolean() ? LANE : -LANE;
         cx[c] = cLane[c];
@@ -255,20 +309,23 @@ final class Life {
         Raster.lightK(0.3f, 0.9f, kl);
         sunSx = Raster.sunX() * r.cyw - Raster.sunZ() * r.syw < 0f ? -1f : 1f;
         // soft shadows first, then everything that casts them
-        for (int i = 0; i < PARK_X.length; i++) if (!carGone[i]) carShadow(carX[i], carZ[i]);
+        if (!shore) for (int i = 0; i < PARK_X.length; i++) if (!carGone[i]) carShadow(carX[i], carZ[i]);
         for (int c = 0; c < CARS; c++) if (cState[c] != OFF) carShadow(cx[c], cz[c]);
         for (int i = 0; i < PEOPLE; i++) personShadow(i);
         // the cones stand at the foot of the plinth, wherever it is
         float dz = Builder.CZ - Builder.BASE_CZ;
-        for (int i = 0; i < CONE_X.length; i++)
-            r.softShadow(CONE_X[i], CONE_Z[i] + dz, CONE_X[i] + SHX * 0.7f * SH_LEN, CONE_Z[i] + dz + SHZ * 0.7f * SH_LEN, 0.2f, 0.06f, 0.75f);
-        for (int i = 0; i < PARK_X.length; i++)
-            if (!carGone[i]) car(carX[i], carZ[i], parkYaw[i], parkColor[i], (5000 + i) << 3, damage[i],
-                    alarm[i] > 0f && ((int) (alarm[i] * 6f) & 1) == 0);
+        if (!shore) {
+            for (int i = 0; i < CONE_X.length; i++)
+                r.softShadow(CONE_X[i], CONE_Z[i] + dz, CONE_X[i] + SHX * 0.7f * SH_LEN, CONE_Z[i] + dz + SHZ * 0.7f * SH_LEN, 0.2f, 0.06f, 0.75f);
+            for (int i = 0; i < PARK_X.length; i++)
+                if (!carGone[i]) car(carX[i], carZ[i], parkYaw[i], parkColor[i], (5000 + i) << 3, damage[i],
+                        alarm[i] > 0f && ((int) (alarm[i] * 6f) & 1) == 0);
+        }
         for (int c = 0; c < CARS; c++) if (cState[c] != OFF) car(cx[c], cz[c], cYaw[c], cColor[c], (4000 + c) << 3);
-        for (int i = 0; i < CONE_X.length; i++) cone(CONE_X[i], CONE_Z[i] + dz);
+        if (!shore) for (int i = 0; i < CONE_X.length; i++) cone(CONE_X[i], CONE_Z[i] + dz);
         for (int i = 0; i < PEOPLE; i++) drawPerson(i);
     }
+
 
     private void fogAt(float x, float z) {
         float d = Math.max(1f, ras.depth(x, 1f, z));

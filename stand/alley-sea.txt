@@ -1,0 +1,30 @@
+# Five figures felled (the stand asks for little): the golem is driven into the sea and
+# the view goes down to the water, then back to the street.
+screen 1096 2560
+level 30
+wait 1.0
+alley
+alleyneed 0
+bowl 0 10 0
+bowl 0 10 0
+bowl 0 10 0
+bowl 0 10 0
+bowl 0 10 0
+alleyuntil 6
+wait 1.4
+shot e1_gathered
+alleyuntil 1
+wait 1.2
+shot e2_beach
+wait 1.45
+shot e3_splash
+alleystate
+alleyuntil 8
+wait 1.0
+shot e4_to_the_water
+wait 1.2
+shot e5_glare
+wait 1.0
+shot e6_street
+alleystate
+state

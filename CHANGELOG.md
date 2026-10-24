@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.39
+- The turn round to the alley is a turn of the whole body now: three sweeps of the head,
+  past the houses at a third of the way and at two thirds, with a nod at each.
+- Life behind: people stroll on the pavements down to the shore road and along the beach;
+  once the golem has come through, cars pass along the shore road far off.
+- The figures are the golem's own stones and as big as it is: pillars twice a man's
+  height, walls, gates, pyramids.
+- New rules. Three balls to a figure; fell most of it (the bar shows what still stands,
+  and the line it must fall below) and the golem gathers itself, falls back down the
+  street and builds the next figure farther off; each figure felled is a heavy hammer.
+  A figure left standing after the third ball and the golem laughs, and the view turns
+  back to the buildings. Drive it back five times and it leaps over the shore road,
+  across the beach and into the sea in a great splash; the player goes down to the water
+  in the glare, with two more heavy hammers, and comes back to the street.
+
 ## 0.38
 - The alley behind the player. Before the 51st and the 91st building, and the 151st and
   191st, and so on, and whenever the new blue button in the booth is pressed, the view

@@ -314,13 +314,20 @@ public final class Stand implements World.Host {
             while (world.alley != null && world.alley.phase != Alley.AIM && time - t0 < 30f) step();
             if (world.alley != null) world.alley.roll(f(p[1]), f(p[2]), f(p[3]));
             step();
-            System.out.println(String.format("%7.2fs  rolled, frame %d ball %d", time, world.alley == null ? -1 : world.alley.frame,
+            System.out.println(String.format("%7.2fs  rolled, round %d ball %d", time, world.alley == null ? -1 : world.alley.round,
                     world.alley == null ? -1 : world.alley.ball));
+        } else if (c.equals("alleyuntil")) {
+            // wait until the alley reaches a phase, or is over
+            int want = Integer.parseInt(p[1]);
+            float t0 = time;
+            while (world.alley != null && world.alley.phase != want && time - t0 < 30f) step();
+        } else if (c.equals("alleyneed")) {
+            if (world.alley != null) world.alley.need = f(p[1]);
         } else if (c.equals("alleystate")) {
             Alley a = world.alley;
             if (a == null) System.out.println(String.format("%7.2fs  no alley; heavy %d", time, world.heavyLeft));
-            else System.out.println(String.format("%7.2fs  alley phase %d frame %d ball %d shares %.2f %.2f %.2f %.2f %.2f reward %d",
-                    time, a.phase, a.frame, a.ball, a.share[0], a.share[1], a.share[2], a.share[3], a.share[4], a.reward));
+            else System.out.println(String.format("%7.2fs  alley phase %d round %d ball %d won %d standing %.2f%s; heavy %d",
+                    time, a.phase, a.round, a.ball, a.won, a.standing, a.lost ? " LOST" : "", world.heavyLeft));
         } else if (c.equals("tear")) {
             world.standTear();
         } else if (c.equals("fliers")) {
