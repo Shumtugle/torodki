@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.55
+- A drifting iceberg no longer leaves its building standing on nothing. The plinth moved
+  with the drift, but its bounds for the physics stayed where the level began: a few
+  seconds into the drift the building rested on empty air, held only by sleep, and the
+  first touch brought all of it down. A throw that hit anything cleared the level; now a
+  building on a drifting iceberg is as sturdy as on a still one.
+- The iceberg stands much nearer: thirty-two to forty-two meters off instead of fifty-four
+  to sixty-four. What stands on it is about twice the size, and a throw lands in two to
+  three seconds instead of almost four. The close view at the drifting iceberg is no
+  longer widened as much, so the building fills about half of it.
+- The drift keeps one steady pace, half a meter a second, with a short rounded turn at
+  either end; before, it sped up and slowed down all the way. It is under way from the
+  first moment.
+- A drifting iceberg leaves a trail of foam behind it and pushes a ridge of foam ahead:
+  which way it goes, and how fast, can be seen.
+- Two buildings on the iceberg stand closer together, so what is knocked off the front one
+  falls against the one behind. Each needs two thirds of its weight knocked off, and the
+  level gives seven throws instead of five.
+- Two boats moved out of the way of the nearer iceberg.
+
 ## 0.54
 - From the 130th level on, out at sea, the iceberg carries two buildings, one behind the
   other: a low one in front and a tall one behind it, standing in its shade and showing

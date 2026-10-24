@@ -251,6 +251,7 @@ final class Ocean {
     private static final float[][] RINGS = {{0f, 0.06f, 0.08f}, {-0.14f, 0.2f, 0.14f}, {-0.55f, 0.42f, 0.4f}, {-1.15f, 0.7f, 0.5f}};
     private final float[][] ringX = new float[RINGS.length][RIM], ringZ = new float[RINGS.length][RIM];
     private float meshFor = Float.NaN, meshDepth;
+    float wake;                       // the iceberg's drift across, m/s, plus to the right
     // crags: x and z off the plinth's middle, base radius, height, sides; then their points
     private static final float[][] CRAGS = {{-1.9f, 1.7f, 1.15f, 2.7f}, {0.6f, 2.0f, 1.35f, 3.6f}, {2.6f, 1.0f, 1.0f, 2.2f}, {-2.9f, 0.3f, 0.8f, 1.6f}};
     private static final int CRAG_SIDES = 6;
@@ -337,6 +338,29 @@ final class Ocean {
             float vz = r.project(x, 0f, z, s);
             if (vz < 1f) continue;
             r.haze(s[0], s[1], 1.1f * r.f / vz, 1f / (vz - 1.2f), 0xFF4E9AAA, 110);
+        }
+        // drifting, it leaves a trail of foam behind it, longer the faster it goes, and pushes
+        // a ridge of foam ahead: which way it goes and how fast can be seen, not only guessed
+        if (Math.abs(wake) > 0.04f) {
+            float dir = Math.signum(wake), sp = Math.min(1f, Math.abs(wake) / World.DRIFT_V);
+            float edge = Builder.PHX + 1.25f;
+            for (int i = 0; i < 26; i++) {
+                float u = i / 25f;
+                // two streaks fanning out behind, churned foam between them
+                float side = (i & 1) == 0 ? 1f : -1f;
+                float x = -dir * (edge + u * 9f * sp);
+                float z = cz + side * (Builder.PHZ * 0.6f + u * 1.6f) + 0.3f * (float) Math.sin(i * 2.7f + time * 0.9f);
+                float vz = r.project(x, 0.03f, z, s);
+                if (vz < 1f) continue;
+                r.haze(s[0], s[1], (0.55f + 0.6f * u) * r.f / vz, 1f / (vz - 0.8f), 0xFFF2F6F8, (int) (235f * (1f - u * 0.85f) * sp));
+            }
+            // and a ridge of foam pushed up ahead, at the waterline
+            for (int i = -4; i <= 4; i++) {
+                float x = dir * (edge - 0.35f + 0.2f * (float) Math.sin(time * 3.1f + i)), z = cz + i * (Builder.PHZ + 0.6f) / 4f;
+                float vz = r.project(x, 0.05f, z, s);
+                if (vz < 1f) continue;
+                r.haze(s[0], s[1], 0.6f * r.f / vz, 1f / (vz - 0.8f), 0xFFFFFFFF, (int) (240f * sp));
+            }
         }
         // the crags first: they stand behind
         for (int c = 0; c < CRAGS.length; c++) {
@@ -426,8 +450,8 @@ final class Ocean {
     // x, z, yaw, hull color
 
     private static final float[][] BOATS = {
-            {-5.2f, 33f, 0.5f}, {-11f, 47f, -0.35f}, {-15f, 78f, 0.25f}, {-6f, 118f, 0.9f},
-            {10f, 24f, -0.6f}, {19f, 45f, 0.55f}, {31f, 74f, -0.25f}, {44f, 104f, 0.4f},
+            {-8.5f, 27f, 0.5f}, {-11f, 47f, -0.35f}, {-15f, 78f, 0.25f}, {-6f, 118f, 0.9f},
+            {13.5f, 22f, -0.6f}, {19f, 45f, 0.55f}, {31f, 74f, -0.25f}, {44f, 104f, 0.4f},
             {8f, -30f, 0.3f}, {-14f, -46f, -0.5f}, {20f, -68f, 0.7f}};
     private static final int[] HULLS = {0xFF3A2E2A, 0xFF6A2420, 0xFF22303E, 0xFFDCD8CE, 0xFF2E4A3A, 0xFFE2DED4,
             0xFF4A3A2E, 0xFF2A3A4E, 0xFF5A2420, 0xFF2E3A44, 0xFFD8D2C6};

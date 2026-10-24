@@ -40,7 +40,7 @@ final class Builder {
     static float PHZ = PHZ1;
     // two rows: each stands this far before or behind the plinth's middle, and the plinth
     // reaches this far past each of them, front and back
-    static final float ROW = 0.7f, ROW_LIP = 0.9f, PHZ2 = ROW + ROW_LIP;
+    static final float ROW = 0.45f, ROW_LIP = 0.6f, PHZ2 = ROW + ROW_LIP;
 
     // in the order they first appear: the first ones fall easily, the pyramid is the stubborn one;
     // the last three carry heavy polished balls and come in from the 15th level

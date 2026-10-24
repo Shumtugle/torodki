@@ -1,0 +1,32 @@
+# The nearer winter: wide and close views at the start of the sea, at the drift and at two rows, with the wake.
+screen 1096 2560
+level 101
+wait 1.5
+shot n0wide
+down 548 1000
+wait 0.6
+shot n1zoom
+up 548 1000
+wait 0.3
+level 121
+wait 6.0
+shot n2drift
+down 548 1000
+wait 0.6
+shot n3driftzoom
+up 548 1000
+wait 0.3
+level 137
+wait 14.0
+shot n4rows
+down 548 1000
+wait 0.6
+shot n5rowszoom
+up 548 1000
+wait 0.3
+level 137
+wait 40.0
+down 548 1000
+wait 0.6
+shot n6back
+up 548 1000

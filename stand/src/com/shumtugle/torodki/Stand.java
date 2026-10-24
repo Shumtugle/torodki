@@ -275,12 +275,13 @@ public final class Stand implements World.Host {
             step();
         } else if (c.equals("rowbot")) {
             // throws at whichever row stands more, the front one first, until won or out of stars
-            float speed = f(p[1]);
+            float speed = f(p[1]), spread = p.length > 2 ? f(p[2]) : 0f;
+            java.util.Random hand = new java.util.Random(world.level * 31L + 7L);
             float t0 = time, ready = time + 0.3f;
-            while (time - t0 < 40f && world.state == World.PLAY) {
+            while (time - t0 < 70f && world.state == World.PLAY) {
                 if (world.hs == World.HAND && time >= ready) {
-                    int row = !world.rows || world.onPlinth(0) > 1f - World.CLEAR ? 0 : 1;
-                    if (world.standThrowRow(row, speed))
+                    int row = !world.rows || world.onPlinth(0) > 1f - world.clearShare() ? 0 : 1;
+                    if (world.standThrowRow(row, speed, (float) hand.nextGaussian() * spread, (float) hand.nextGaussian() * spread))
                         System.out.println(String.format("%7.2fs  throw at row %d, standing front %.2f back %.2f",
                                 time, row, world.onPlinth(0), world.onPlinth(1)));
                     else break;

@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.54";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.55";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -80,9 +80,13 @@ final class World implements Physics.Listener {
         return lv >= SEA_FROM;
     }
 
-    /** Out at sea nothing starts over: the iceberg stands far off at once, and farther on. */
+    /**
+     * Out at sea the iceberg stands nearer than the last buildings of the street, so that
+     * what stands on it can be made out and a throw at it lands in time: twenty meters
+     * farther than the first plinth, then two more every ten levels, thirty at most.
+     */
     static float seaFar(int n) {
-        return Math.min(52f, 42f + 2f * (n / 8));
+        return Math.min(30f, 20f + 2f * (n / 10));
     }
     final Physics phys = new Physics();
     private Body plinth;
@@ -370,7 +374,7 @@ final class World implements Physics.Listener {
         phys.add(hammer);
         buildFromSky = false;
         lastBuildTime = 0f;
-        stars = STARS;
+        stars = starsMax();
         throwsMade = 0;
         thundered = false;
         aiming = false;
@@ -629,6 +633,16 @@ final class World implements Physics.Listener {
         return rowMass[row] > 0f ? m / rowMass[row] : 0f;
     }
 
+    /** The share to knock off: of each of two buildings, a little less than of one. */
+    float clearShare() {
+        return rows ? 0.65f : CLEAR;
+    }
+
+    /** Throws for a building: two buildings on the plinth bring two more. */
+    int starsMax() {
+        return rows ? STARS + 2 : STARS;
+    }
+
     /** What has yet to fall: with two rows, the one that stands more. */
     float standing() {
         return rows ? Math.max(onPlinth(0), onPlinth(1)) : onPlinth();
@@ -818,7 +832,7 @@ final class World implements Physics.Listener {
         float yaw = (float) Math.atan2(dx, dz), pitch = (float) Math.atan2(lookY - CAM_Y, dist);
         zoomZ = Math.max(1.25f, Math.min(4.6f, Builder.CZ / Builder.BASE_CZ * 0.92f));
         // with the iceberg drifting the close view is a little wider: room to aim ahead of it
-        if (atSea && drifting(level)) zoomZ *= 0.58f;
+        if (atSea && drifting(level)) zoomZ *= 0.85f;
         if (zoomRas == null) zoomRas = new Raster(W, h);
         zoomRas.camera(CAM_X, CAM_Y, 0f, yaw, pitch, focal * zoomZ, h * 0.5f);
         zoomPitch = pitch;
@@ -1096,9 +1110,17 @@ final class World implements Physics.Listener {
      * drift as a player would lead it. At the row behind it aims over the front one.
      */
     boolean standThrowRow(int row, float speed) {
+        return standThrowRow(row, speed, 0f, 0f);
+    }
+
+    /** The same, off by so many meters across and up: a hand that is not perfect. */
+    boolean standThrowRow(int row, float speed, float offX, float offY) {
         float mx = 0f, my = 0f, mz = 0f, m = 0f, frontTop = 0f, top = 0f;
+        // what still stands, not the rubble lying on the plinth; only rubble left, the rubble
+        boolean upright = false;
+        for (Body b : pieces) if (stillOn(b) && (!rows || b.row == row) && b.maxY >= Builder.TOP + 0.45f) upright = true;
         for (Body b : pieces) {
-            if (!stillOn(b)) continue;
+            if (!stillOn(b) || upright && b.maxY < Builder.TOP + 0.45f) continue;
             if (rows && b.row == 0) frontTop = Math.max(frontTop, b.maxY);
             if (rows && b.row != row) continue;
             mx += b.px * b.mass;
@@ -1116,7 +1138,7 @@ final class World implements Physics.Listener {
         float dx = mx - tmp[0], dy = my - tmp[1], dz = mz - tmp[2];
         float t = flight((float) Math.sqrt(dx * dx + dy * dy + dz * dz), speed);
         if (atSea && drifting(level)) mx += driftAt(driftT + t) - Builder.CX;
-        float[] o = screenOf(mx, my, mz);
+        float[] o = screenOf(mx + offX, my + offY, mz);
         return throwAt(o[0], o[1], speed);
     }
 
@@ -2497,7 +2519,7 @@ final class World implements Physics.Listener {
             host.sound(Synth.THUNDER, 1.1f, 1f);
             host.buzz(160);
         }
-        if (1f - standing() >= CLEAR && state != WON) {
+        if (1f - standing() >= clearShare() && state != WON) {
             if (!thundered && throwsMade == 1) {
                 thundered = true;
                 host.sound(Synth.THUNDER, 1.1f, 1f);
@@ -3672,11 +3694,26 @@ final class World implements Physics.Listener {
         return lv - SEA_FROM >= 18;
     }
 
-    /** Where the iceberg is across, at a time into its drift: from the left edge, to the right, and back. */
+    // the drift's pace across, meters a second, the same all the way but for a short turn at
+    // either end: a steady pace can be foreseen, a pace that keeps changing cannot
+    static final float DRIFT_V = 0.5f;
+    private static final float DRIFT_K = 0.96f, DRIFT_AK = (float) Math.asin(DRIFT_K);
+
+    /**
+     * Where the iceberg is across, at a time into its drift: a zigzag with rounded turns,
+     * across the middle of the usual view at that distance and near its edges at both ends.
+     * It is under way from the start, near the left edge, heading right.
+     */
     private static float driftAt(float t) {
-        // across the middle of the usual view at that distance, near its edges at both ends
-        float hw = Builder.CZ * 0.263f, mid = CAM_X + Builder.CZ * (float) Math.tan(YAW);
-        return mid - 0.62f * hw * (float) Math.cos(t * 0.11f);
+        float hw = Builder.CZ * 0.263f, mid = CAM_X + Builder.CZ * (float) Math.tan(YAW), a = 0.62f * hw;
+        float w = DRIFT_V * DRIFT_AK / (a * DRIFT_K);
+        return mid + a * (float) Math.asin(DRIFT_K * Math.sin(w * t - 1.2f)) / DRIFT_AK;
+    }
+
+    /** How fast the iceberg drifts across now, meters a second, plus to the right. */
+    private float driftPace() {
+        if (!atSea || !drifting(level)) return 0f;
+        return (driftAt(driftT + 0.05f) - driftAt(driftT - 0.05f)) * 10f;
     }
 
     /** One step of the drift: the plinth moves, and what rests on it moves with it. */
@@ -3692,6 +3729,9 @@ final class World implements Physics.Listener {
         Builder.CX = x;
         plinth.px += dx;
         plinth.ppx += dx;
+        // the physics never moves the plinth itself, so its bounds must be moved here: left
+        // behind, they would leave the building standing on nothing once it is woken
+        plinth.updateR();
         for (Body b : pieces) {
             if (b.gone || b.sunk > 0f) continue;
             if (Math.abs(b.px - old) > Builder.PHX + 0.4f || b.minY < Builder.TOP - 0.3f) continue;
@@ -3753,6 +3793,7 @@ final class World implements Physics.Listener {
             if (golem == null) {
                 // the iceberg is laid out round x = 0: drawn where it has drifted to
                 ras.camX -= Builder.CX;
+                ocean.wake = golem == null ? driftPace() : 0f;
                 ocean.iceberg(ras, Builder.CZ, lift, FLOE_ID << 3, clock);
                 ras.camX += Builder.CX;
             }
@@ -5543,7 +5584,7 @@ final class World implements Physics.Listener {
 
     private void drawHud(Px f) {
         int x = 6, y = 8;
-        for (int i = 0; i < STARS; i++) {
+        for (int i = 0; i < starsMax(); i++) {
             boolean on = i < stars;
             boolean flash = state == WON && on && ((int) (stateTime * 6) & 1) == 0;
             star(f, x + i * 15 + 6, y + 6, 6.6f, on ? (flash ? 0xFFFFFFFF : 0xFFFFC93A) : 0x00000000, 0xFF8A5A12, on);
@@ -5551,7 +5592,7 @@ final class World implements Physics.Listener {
         // the heavy throws left: small dark hammers under the stars, ringed in gold when in hand
         for (int i = 0; i < heavyLeft; i++) heavyMark(f, x + i * 13 + 1, y + 16, heavyOn);
         // the golden cubes the gods have handed over, in the row beside the stars
-        int cx = x + STARS * 15 + 3;
+        int cx = x + starsMax() * 15 + 3;
         if (cubes <= 6) for (int i = 0; i < cubes; i++) cubeMark(f, cx + i * 11, y + 2);
         else {
             cubeMark(f, cx, y + 2);
@@ -5566,14 +5607,14 @@ final class World implements Physics.Listener {
             for (int r = 0; r < 2; r++) {
                 float on = onPlinth(r);
                 int y0 = r == 1 ? by : by + 4;
-                f.rect(bx, y0, bx + Math.round(bw * on), y0 + 2, on <= 1f - CLEAR ? 0xFF6FBF5A : 0xFFE8963C);
+                f.rect(bx, y0, bx + Math.round(bw * on), y0 + 2, on <= 1f - clearShare() ? 0xFF6FBF5A : 0xFFE8963C);
             }
             f.rect(bx, by + 2, bx + bw, by + 4, 0xFF8A5A12);
         } else {
             float on = onPlinth();
             f.rect(bx, by, bx + Math.round(bw * on), by + 6, on <= 1f - CLEAR ? 0xFF6FBF5A : 0xFFE8963C);
         }
-        int mark = bx + Math.round(bw * (1f - CLEAR));
+        int mark = bx + Math.round(bw * (1f - clearShare()));
         f.rect(mark, by - 3, mark + 1, by + 9, 0xFF5A3A0E);
         levelPlate(f, bx + bw + 1, by + 11);
         String v = VERSION;
