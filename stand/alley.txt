@@ -1,0 +1,29 @@
+# The alley behind the player: the view turns, the golem comes round the corner and falls
+# apart into figures, balls roll at them, and the view turns back.
+screen 1096 2560
+level 20
+wait 1.0
+alley
+wait 0.55
+shot a01_turning
+wait 0.7
+shot a02_turned
+wait 1.6
+shot a03_golem
+wait 2.2
+shot a04_golem_near
+bowl 0 8 0
+shot a05_figure
+wait 1.0
+shot a06_rolling
+wait 1.2
+shot a07_hit
+alleystate
+bowl 0.3 9 -0.03
+wait 2.2
+shot a08_second
+alleystate
+bowl 0 8 0
+wait 0.3
+shot a09_next_figure
+alleystate

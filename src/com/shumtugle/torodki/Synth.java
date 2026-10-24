@@ -17,8 +17,10 @@ final class Synth {
     static final int CLANG = DTMF + 12, SAND = DTMF + 13, RUBBER = DTMF + 14, BUSY = DTMF + 15;
     // luggage: a leather slap, brass latches snapping, a mattress groaning, ticking torn open
     static final int LEATHER = DTMF + 16, LATCH = DTMF + 17, MATTRESS = DTMF + 18, TEAR = DTMF + 19;
+    // a heavy ball rolling away down the asphalt
+    static final int ROLL = DTMF + 20;
 
-    final float[][] bank = new float[DTMF + 20][];
+    final float[][] bank = new float[DTMF + 21][];
 
     Synth() {
         Random r = new Random(7);
@@ -56,6 +58,7 @@ final class Synth {
         bank[LATCH] = latch(r);
         bank[MATTRESS] = mattress(r);
         bank[TEAR] = tear(r);
+        bank[ROLL] = roll(r);
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
     }
@@ -240,6 +243,27 @@ final class Synth {
             float twang = u > 0f ? (float) Math.sin(2 * Math.PI * (330f + 90f * (float) Math.exp(-6f * u)) * u)
                     * (float) Math.exp(-5f * u) * 0.4f : 0f;
             s[i] = rip + twang;
+        }
+        return s;
+    }
+
+    /**
+     * A heavy ball rolling away over asphalt: a low growl of grit that thrums with the turns
+     * of the ball and fades as it goes off.
+     */
+    private static float[] roll(Random r) {
+        int n = (int) (2.6f * RATE);
+        float[] s = new float[n];
+        float lp = 0f, lp2 = 0f, ph = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.05f;
+            lp2 += (lp - lp2) * 0.08f;
+            ph += (5.5f - 1.2f * t) / RATE;
+            float thrum = 0.7f + 0.3f * (float) Math.sin(2 * Math.PI * ph);
+            float tone = (float) Math.sin(2 * Math.PI * 48f * t) * 0.25f;
+            float env = Math.min(1f, t * 30f) * (float) Math.exp(-0.7f * t) * Math.min(1f, (2.6f - t) * 3f);
+            s[i] = (lp2 * 9f + tone) * thrum * env * 0.8f;
         }
         return s;
     }

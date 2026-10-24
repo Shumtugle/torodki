@@ -51,6 +51,8 @@ final class Body {
     boolean gone;                   // burst: no longer part of the building
     float lastHit;                  // game time of the last sound it made
     float homeX, homeY, homeZ;      // where the generator put it
+    float homeQw = 1f, homeQx, homeQy, homeQz;  // and turned how, where that matters
+    float shown = 1f;               // drawn at this share of its size, while it flies into place
     // a suitcase burst open or a mattress torn: game time it happened, or below zero
     float broke = -1f;
     float markX, markY, markZ;      // where, in the body's own frame
@@ -202,6 +204,13 @@ final class Body {
     }
 
     /** Makes the body heavier or lighter, keeping its shape: mass and inertia scale together. */
+    /** Gives up the raised inertia that keeps stacks still: it topples as freely as a real block. */
+    void trueInertia() {
+        iix *= INERTIA;
+        iiy *= INERTIA;
+        iiz *= INERTIA;
+    }
+
     void scaleMass(float k) {
         if (invMass == 0f) return;
         mass *= k;

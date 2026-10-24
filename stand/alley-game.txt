@@ -1,0 +1,46 @@
+# A whole game in the alley: ten balls, the end, and the view turning back.
+screen 1096 2560
+level 30
+heavy
+wait 1.0
+alley
+bowl 0 8 0
+wait 1.3
+shot f00
+bowl 0.3 9 -0.02
+wait 1.3
+shot f01
+bowl -0.1 9 0.01
+wait 1.3
+shot f02
+bowl 0.2 7 0
+wait 1.3
+shot f03
+bowl 0 10 0
+wait 1.3
+shot f04
+bowl -0.3 8 0.02
+wait 1.3
+shot f05
+bowl 0.1 8 0
+wait 1.3
+shot f06
+bowl 0 9 0
+wait 1.3
+shot f07
+bowl 0.2 8 -0.01
+wait 1.3
+shot f08
+bowl -0.2 9 0.01
+wait 1.3
+shot f09
+alleystate
+wait 3.5
+shot g1_finale
+alleystate
+wait 1.4
+shot g2_turning_back
+wait 2.0
+shot g3_back
+alleystate
+state

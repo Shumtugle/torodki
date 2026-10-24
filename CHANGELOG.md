@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.38
+- The alley behind the player. Before the 51st and the 91st building, and the 151st and
+  191st, and so on, and whenever the new blue button in the booth is pressed, the view
+  turns round: the street runs on behind to the shore road, with a sea wall, a beach under
+  umbrellas and the sea beyond, the last house turning the corner. The golem comes round
+  that corner in leaps, stops in the road and falls apart, its stones and bricks flying in
+  arcs to stand up as a figure: ten pins in a triangle, a brick wall, a gate, a bending
+  row of slabs that topple one another, a stepped pyramid, three ranks of pins, two towers bridged, three totems.
+- Bowling: a heavy ball is held low in front; a swipe up rolls it, aimed by where the
+  swipe starts and which way it leans, faster for a quicker swipe, rumbling down the
+  asphalt. Two balls to a figure; a stone counts once it lies or has been pushed off its
+  spot. All down with the first ball is a strike: thunder and a flash. Then the stones fly
+  back together into the golem, it leaps, and falls apart into the next figure. Five
+  figures in all, shown as five squares in the corner, filled green, amber or grey, a star
+  for a strike.
+- At the end the gods give up to three heavy hammers for what was knocked down, and the
+  view turns back to the building that waits. Nothing is lost in the alley.
+
 ## 0.37
 - The level plate warns without a word: pale green while buildings fall, and with every
   one in a row that will not, it ripens through amber to red, the number turning white

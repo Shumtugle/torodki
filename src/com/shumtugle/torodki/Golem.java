@@ -32,6 +32,9 @@ final class Golem {
     float actT, jumpIn = 2.0f;
     int landings;               // how many times it has come down: the world shakes for each
     private float z0, z1, jumpH;
+    // a leap the world asks for, to a given spot, instead of one straight at the player
+    private boolean hopping;
+    private float hopX, hopZ, x0, x1;
     float time;
     private float squat, air;   // how low it crouches, how high it is
 
@@ -96,13 +99,20 @@ final class Golem {
                     act = AIR;
                     actT = 0f;
                     z0 = z;
+                    x0 = x1 = x;
                     z1 = z - leap(near);
+                    if (hopping) {
+                        x1 = hopX;
+                        z1 = hopZ;
+                        hopping = false;
+                    }
                     jumpH = (kneeL + kneeR == 2 ? 3.2f : 1.8f) / G;
                 }
                 break;
             case AIR: {
                 float k = Math.min(1f, actT / 1.0f);
                 z = z0 + (z1 - z0) * k;
+                x = x0 + (x1 - x0) * k;
                 air = jumpH * 4f * k * (1f - k);
                 squat = Math.max(0f, 1f - k * 3f) * 0.6f;
                 if (k >= 1f) {
@@ -131,6 +141,20 @@ final class Golem {
 
     private void settle(float dt) {
         squat += ((act == CRAWL ? 1f : 0.3f) - squat) * Math.min(1f, dt * 4f);
+    }
+
+    /** A leap to a spot of the world's choosing: crouch, spring, come down there. */
+    void hop(float tx, float tz) {
+        hopping = true;
+        hopX = tx;
+        hopZ = tz;
+        act = CROUCH;
+        actT = 0f;
+    }
+
+    /** True while it stands still, ready for the next thing. */
+    boolean idle() {
+        return act == STAND && !hopping;
     }
 
     /** True when it has come close enough to strike the player. */

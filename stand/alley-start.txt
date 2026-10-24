@@ -1,0 +1,21 @@
+# The alley comes by itself before the 51st building, once; the booth has its own button.
+screen 1096 2560
+level 49
+wait 1.0
+win 1
+wait 9
+shot s1_51_turning
+alleystate
+level 12
+wait 1.0
+press
+wait 0.2
+press
+wait 0.2
+press
+wait 1.0
+shot s2_booth
+tap 190 470
+wait 0.6
+shot s3_from_booth
+alleystate

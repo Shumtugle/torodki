@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.37";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.38";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -203,6 +203,7 @@ final class World implements Physics.Listener {
         bgZ = ras.zb.clone();
         bgLit = ras.lit.clone();
         sky.build(ras, host.asset("gods.bin"), host.asset("clouds.bin"));
+        paintAlley();
         if (firstBuild) {
             firstBuild = false;
             startLevel(level, true);
@@ -250,6 +251,7 @@ final class World implements Physics.Listener {
 
     /** Raises the building for a level: tested for standing still, asleep, ready to fall. */
     void startLevel(int lv, boolean animate) {
+        if (alley != null) endAlley();
         // the farthest level reached is kept before the level changes: going back must not lose it
         int far = Math.max(host.loadInt("best"), Math.max(level + 1, lv + 1));
         if (far != host.loadInt("best")) host.saveInt("best", far);
@@ -500,6 +502,10 @@ final class World implements Physics.Listener {
     void touch(int type, float x, float y) {
         if (booth >= 0f) {
             boothTouch(type, x, y);
+            return;
+        }
+        if (alley != null) {
+            alley.touch(type, x, y, clock);
             return;
         }
         if (type == DOWN && state == PLAY && hs == HAND && onCallButton(x, y)) {
@@ -870,11 +876,18 @@ final class World implements Physics.Listener {
             return;
         }
         int gy = golemY();
-        if (y >= gy && y < gy + 34 && x >= BX0 + 14 && x < BX1 - 14) {
+        if (y >= gy && y < gy + 34 && x >= BX0 + 14 && x < W / 2 - 3) {
             dialled.setLength(0);
             booth = -1f;
             host.sound(Synth.ROAR, 0.8f, 1f);
             startBoss(level);
+            return;
+        }
+        if (y >= gy && y < gy + 34 && x >= W / 2 + 3 && x < BX1 - 14) {
+            dialled.setLength(0);
+            booth = -1f;
+            host.sound(Synth.DOOR, 0.8f, 1.15f);
+            startAlley();
             return;
         }
         // the hook: hang up and go back to the street
@@ -890,6 +903,17 @@ final class World implements Physics.Listener {
             "XXXXXXXXX",
             "XXX...XXX",
             "XX.....XX"};
+    // a ball rolling at a pin
+    private static final String[] BOWL = {
+            "..........X..",
+            ".........XXX.",
+            "..........X..",
+            ".........XXX.",
+            ".XXXX...XXXXX",
+            "XX.XXX..XXXXX",
+            "XXX.XX..XXXXX",
+            "XXXXXX..XXXXX",
+            ".XXXX....XXX."};
     private static final String[] ERASE = {
             "...X.....",
             "..XX.....",
@@ -955,11 +979,15 @@ final class World implements Physics.Listener {
             else if (clear) glyph(f, ERASE, bx + KW / 2, by + KH / 2 + o, 4, 0xFF2A2420);
             else PixelFont.draw(f, KEYS[k], bx + KW / 2 - PixelFont.width(KEYS[k], 2) / 2, by + KH / 2 - 6 + o, 2, 0xFF2A2420);
         }
-        // the golem's red button, and the hook to hang up on
+        // the golem's red button, the alley's blue one beside it, and the hook to hang up on
         int gy = golemY();
-        f.rect(BX0 + 14, gy, BX1 - 14, gy + 34, 0xFF3A1A10);
-        f.rect(BX0 + 16, gy + 2, BX1 - 16, gy + 32, ((int) (clock * 3f + booth * 3f) & 1) == 0 ? 0xFFD8402A : 0xFFB8301E);
-        PixelFont.draw(f, "GOLEM", W / 2 - PixelFont.width("GOLEM", 2) / 2, gy + 10, 2, 0xFFFFE8D8);
+        f.rect(BX0 + 14, gy, W / 2 - 3, gy + 34, 0xFF3A1A10);
+        f.rect(BX0 + 16, gy + 2, W / 2 - 5, gy + 32, ((int) (clock * 3f + booth * 3f) & 1) == 0 ? 0xFFD8402A : 0xFFB8301E);
+        int gx = (BX0 + 14 + W / 2 - 3) / 2;
+        PixelFont.draw(f, "GOLEM", gx - PixelFont.width("GOLEM", 2) / 2, gy + 10, 2, 0xFFFFE8D8);
+        f.rect(W / 2 + 3, gy, BX1 - 14, gy + 34, 0xFF14243A);
+        f.rect(W / 2 + 5, gy + 2, BX1 - 16, gy + 32, 0xFF2F5D8C);
+        glyph(f, BOWL, (W / 2 + 3 + BX1 - 14) / 2, gy + 17, 3, 0xFFF3EDE0);
         f.rect(W / 2 - 46, gy + 46, W / 2 + 46, gy + 66, 0xFF1E1C1A);
         f.rect(W / 2 - 40, gy + 42, W / 2 + 40, gy + 50, 0xFF2E2C2A);
         PixelFont.draw(f, "HOME", W / 2 - PixelFont.width("HOME", 1) / 2, gy + 54, 1, 0xFFE8E2D6);
@@ -1037,6 +1065,7 @@ final class World implements Physics.Listener {
     }
 
     private void startBoss(int lv) {
+        if (alley != null) endAlley();
         bossNext = false;
         level = lv;
         host.saveLevel(lv);
@@ -1780,6 +1809,14 @@ final class World implements Physics.Listener {
             booth += dt;
             return;
         }
+        if (alley != null) {
+            clock += dt;
+            alley.update(dt, this);
+            alley.handUpdate(dt);
+            particles(dt);
+            if (alley.done()) endAlley();
+            return;
+        }
         clock += dt;
         stateTime += dt;
         // fixed physics steps, at most two a frame
@@ -1826,6 +1863,13 @@ final class World implements Physics.Listener {
         if (fromSky) {
             backT += dt;
             if (backT >= TILT + 0.2f) fromSky = false;
+        }
+        // now and then, before a building, the view turns round to the alley behind
+        if (state == PLAY && golem == null && alleyLevel(level) && host.loadInt("alley") != level + 1 && stateTime > 0.8f
+                && hs == HAND && !aiming && throwsMade == 0) {
+            host.saveInt("alley", level + 1);
+            startAlley();
+            return;
         }
         switch (state) {
             case BUILD:
@@ -2539,6 +2583,84 @@ final class World implements Physics.Listener {
 
     void draw(Px f) {
         if (ras == null) return;
+        if (alley == null) {
+            drawStreet(f);
+            return;
+        }
+        int ph = alley.phase;
+        if (ph != Alley.TURN_IN && ph != Alley.TURN_OUT) {
+            drawAlley(f);
+            return;
+        }
+        // the turn: both views drawn, swept past one another as the head turns
+        if (turnA == null || turnA.a.length != f.a.length) {
+            turnA = new Px(f.w, f.h);
+            turnB = new Px(f.w, f.h);
+        }
+        noHud = true;
+        drawStreet(turnA);
+        drawAlley(turnB);
+        noHud = false;
+        float t = Math.min(1f, alley.phaseT / Alley.TURN_T);
+        if (ph == Alley.TURN_IN) whip(f, turnA.a, turnB.a, t);
+        else whip(f, turnB.a, turnA.a, t);
+    }
+
+    private Px turnA, turnB;
+    private boolean noHud;
+
+    /**
+     * A quick turn of the head: the view sweeps sideways from one picture to the other,
+     * smeared along the sweep, fastest in the middle.
+     */
+    private void whip(Px f, int[] from, int[] to, float t) {
+        float e = t * t * (3f - 2f * t);
+        int gap = W / 5, span = W + gap;
+        float off = e * span;
+        int[] out = f.a;
+        for (int y = 0; y < h; y++) {
+            int row = y * W;
+            for (int x = 0; x < W; x++) {
+                float sx = x + off;
+                int c;
+                if (sx < W) c = from[row + (int) sx];
+                else if (sx < W + gap) c = Backdrop.mix(from[row + W - 1], to[row], (sx - W) / gap);
+                else c = to[row + Math.min(W - 1, (int) (sx - W - gap))];
+                out[row + x] = c;
+            }
+        }
+        int r = (int) (6f * t * (1f - t) * 16f);
+        if (r > 0) for (int y = 0; y < h; y++) smear(out, y * W, r);
+    }
+
+    private final int[] smearRow = new int[W];
+
+    /** A running box blur along one row. */
+    private void smear(int[] a, int row, int r) {
+        System.arraycopy(a, row, smearRow, 0, W);
+        int sr = 0, sg = 0, sb = 0, n = 0;
+        for (int x = -r; x < W; x++) {
+            int in = x + r;
+            if (in < W) {
+                int c = smearRow[in];
+                sr += (c >> 16) & 0xFF;
+                sg += (c >> 8) & 0xFF;
+                sb += c & 0xFF;
+                n++;
+            }
+            int outI = x - r - 1;
+            if (outI >= 0) {
+                int c = smearRow[outI];
+                sr -= (c >> 16) & 0xFF;
+                sg -= (c >> 8) & 0xFF;
+                sb -= c & 0xFF;
+                n--;
+            }
+            if (x >= 0) a[row + x] = 0xFF000000 | ((sr / n) << 16) | ((sg / n) << 8) | (sb / n);
+        }
+    }
+
+    private void drawStreet(Px f) {
         glowN = 0;
         System.arraycopy(zoomed ? zCol : bgCol, 0, ras.col, 0, bgCol.length);
         System.arraycopy(zoomed ? zZ : bgZ, 0, ras.zb, 0, bgZ.length);
@@ -2633,7 +2755,7 @@ final class World implements Physics.Listener {
             if (golem != null) {
                 drawFightHud(f);
                 drawFlash(f);
-            } else drawHud(f);
+            } else if (!noHud) drawHud(f);
             if (booth >= 0f) drawBooth(f);
         }
         dream(f);
@@ -3623,6 +3745,170 @@ final class World implements Physics.Listener {
     private void put(int x, int y, int c) {
         if (x < 0 || y < 0 || x >= W || y >= h) return;
         ras.col[y * W + x] = c;
+    }
+
+    // ---- the alley behind the player ----
+
+    Alley alley;
+    private Raster alleyRas;
+    private int[] aCol;
+    private float[] aZ;
+    private byte[] aLit;
+    private Thread alleyPaint;
+
+    /** Before levels 51 and 91, 151 and 191, and so on, the view turns round to the alley. */
+    static boolean alleyLevel(int lv) {
+        int n = lv + 1;
+        return n >= 51 && (n % 100 == 51 || n % 100 == 91);
+    }
+
+    /** The street behind is painted once, in the background, while the game goes on. */
+    private void paintAlley() {
+        final Raster r = new Raster(W, h);
+        r.camera(Alley.CAM_X, Alley.CAM_Y, 0f, Alley.YAW, Alley.PITCH, focal, h * 0.5f);
+        alleyRas = r;
+        aCol = null;
+        alleyPaint = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                new Backdrop().paint(r, 11L);
+                aZ = r.zb.clone();
+                aLit = r.lit.clone();
+                aCol = r.col.clone();
+            }
+        });
+        alleyPaint.setDaemon(true);
+        alleyPaint.start();
+    }
+
+    void startAlley() {
+        if (alley != null || alleyRas == null) return;
+        try {
+            alleyPaint.join();
+        } catch (InterruptedException e) {
+            return;
+        }
+        if (zoomed) setZoomed(false);
+        zoomK = 0f;
+        aiming = false;
+        pN = 0;
+        alley = new Alley(host, seed ^ 0xA11EL ^ clock2long());
+        alley.phys.listener = this;
+        host.sound(Synth.WHOOSH, 0.8f, 0.7f);
+    }
+
+    private long clock2long() {
+        return (long) (clock * 1000f);
+    }
+
+    private void endAlley() {
+        alley = null;
+        pN = 0;
+        aiming = false;
+    }
+
+    /** Heavy hammers from the gods, for bowling well. */
+    void giveHeavy(int n) {
+        if (n <= 0) return;
+        heavyLeft = Math.min(HEAVY_MAX, heavyLeft + n);
+        heavyOn = true;
+        host.saveGifts(heavyLeft);
+        host.buzz(40);
+    }
+
+    /** A puff of street dust, for the alley. */
+    void dust(float x, float y, float z) {
+        spawn(x, y, z, true, 0xFFDCD3C4, 1.2f);
+    }
+
+    private void drawAlley(Px f) {
+        Raster keep = ras;
+        ras = alleyRas;
+        System.arraycopy(aCol, 0, ras.col, 0, aCol.length);
+        System.arraycopy(aZ, 0, ras.zb, 0, aZ.length);
+        System.arraycopy(aLit, 0, ras.lit, 0, aLit.length);
+        java.util.Arrays.fill(ras.idb, 0);
+        glowN = 0;
+        float cx = alley.wx(0f, Alley.FIGURE_V + 1f), cz = alley.wz(0f, Alley.FIGURE_V + 1f);
+        ras.shadowBegin(cx, cz, 9f);
+        for (int i = 0; i < alley.blocks.size(); i++) {
+            Body b = alley.blocks.get(i);
+            if (b.gone) continue;
+            drawBody(b, b.shown, 0f, 40 + i);
+            if (Alley.isPin(b) && b.shown >= 1f)
+                for (int k = 0; k < 2; k++) {
+                    toWorld(b, 0f, b.hy * (0.32f + k * 0.16f), 0f, 0f, wp);
+                    ras.box(wp[0], wp[1], wp[2], b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                            b.hx * 1.04f, b.hy * 0.045f, b.hz * 1.04f, 0xFFD8402A, Raster.PAT_FLAT, (40 + i) << 3);
+                }
+            ras.shadowBox(b.px, b.py, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
+                    b.hx * b.shown, b.hy * b.shown, b.hz * b.shown);
+        }
+        for (int i = 0; i < alley.balls.size(); i++) {
+            Body b = alley.balls.get(i);
+            if (b.gone) continue;
+            drawBody(b, 1f, 0f, 30 + i);
+            ras.shadowBall(b.px, b.py, b.pz, b.radius);
+        }
+        if (!alley.golem.down) alley.golem.draw(ras, 700 << 3);
+        if (alley.phase == Alley.AIM) {
+            // the next ball, held low in front, following the finger
+            ras.viewToWorld(alley.handX * 0.22f, -0.5f, 1.05f, tmp);
+            float bx = tmp[0] + Alley.CAM_X, by = tmp[1] + Alley.CAM_Y, bz = tmp[2];
+            float spin = clock * 0.6f, c = (float) Math.cos(spin), s = (float) Math.sin(spin);
+            ras.ball(bx, by, bz, 0.13f, c, 0, s, 0, 1, 0, -s, 0, c, 0xFF22357E, Backdrop.mix(0xFF22357E, 0xFFFFFFFF, 0.28f), 950 << 3);
+        }
+        drawParticles();
+        float minX = W, minY = h, maxX = 0, maxY = 0;
+        for (int i = 0; i < 8; i++) {
+            ras.project(cx + ((i & 1) == 0 ? -9f : 9f), (i & 2) == 0 ? 0f : 4f, cz + ((i & 4) == 0 ? -9f : 9f), scr);
+            minX = Math.min(minX, scr[0]);
+            maxX = Math.max(maxX, scr[0]);
+            minY = Math.min(minY, scr[1]);
+            maxY = Math.max(maxY, scr[1]);
+        }
+        ras.shadowApply(Math.max(0, (int) minX), Math.max(0, (int) minY), Math.min(W - 1, (int) maxX + 1), Math.min(h - 1, (int) maxY + 1));
+        ras.outlines(0, 0, W - 1, h - 1, 1);
+        System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
+        if (alley.flash > 0f) {
+            float k = alley.flash * alley.flash * 0.6f;
+            for (int i = 0; i < f.a.length; i++) f.a[i] = Backdrop.mix(f.a[i], 0xFFFFFFFF, k);
+        }
+        if (!noHud) drawAlleyHud(f);
+        ras = keep;
+    }
+
+    /**
+     * The alley's corner: five frames in a row, filled as they are bowled (green for all
+     * down, amber for most, grey for few, a star for a strike), the balls left in the frame
+     * under them, and at the end the heavy hammers the gods give.
+     */
+    private void drawAlleyHud(Px f) {
+        int x = 6, y = 8;
+        for (int i = 0; i < Alley.FRAMES; i++) {
+            int bx = x + i * 17;
+            boolean now = i == alley.frame && alley.phase < Alley.FINALE;
+            boolean done = i < alley.frame || alley.phase >= Alley.FINALE;
+            f.rect(bx, y, bx + 14, y + 14, now && ((int) (clock * 3f) & 1) == 0 ? 0xFFFFC93A : 0xFF5A3A0E);
+            int fill = 0xFF3A3236;
+            if (done) {
+                float s = alley.share[i];
+                fill = s >= 0.999f ? 0xFF6FBF5A : s >= 0.5f ? 0xFFF2B640 : 0xFF8E8A84;
+            } else if (now) fill = 0xFFF3E9D2;
+            f.rect(bx + 1, y + 1, bx + 13, y + 13, fill);
+            if (done && alley.strike[i]) star(f, bx + 7, y + 7, 5.4f, 0xFFFFFFFF, 0xFF8A5A12, true);
+        }
+        if (alley.phase >= Alley.AIM && alley.phase <= Alley.SETTLE) {
+            int left = Alley.BALLS - alley.ball - (alley.phase == Alley.AIM ? 0 : 1);
+            for (int i = 0; i < left; i++) {
+                int cx = x + 5 + i * 13, cy = y + 23;
+                for (int dy = -4; dy <= 4; dy++)
+                    for (int dx = -4; dx <= 4; dx++)
+                        if (dx * dx + dy * dy <= 17) f.set(cx + dx, cy + dy, dx + dy < -3 ? 0xFF5A70B8 : 0xFF22357E);
+            }
+        }
+        for (int i = 0; i < Math.max(0, alley.reward); i++) heavyMark(f, x + i * 13 + 1, y + 32, true);
+        levelPlate(f, W - 6, y);
     }
 
     // ---- HUD ----

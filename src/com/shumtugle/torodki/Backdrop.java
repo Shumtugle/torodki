@@ -7,8 +7,10 @@ import java.util.Random;
  * promenade with two rows of palms, a stone parapet and the sea beyond it; to the
  * right a row of old seaside houses, pastel, with shutters, iron balconies and
  * awnings over the shops. A low sun from the left lays the palms' shadows across the
- * road. Painted once per camera pose into the raster, then kept and copied under
- * every frame.
+ * road. Behind the player the street runs on to a crossing: a road along the shore, a
+ * low sea wall, a strip of beach and the sea again, with the last houses turning the
+ * corner to face it. Painted once per camera pose into the raster, then kept and copied
+ * under every frame.
  */
 final class Backdrop {
     static final int HAZE = 0xFFE9D6BE;
@@ -16,12 +18,14 @@ final class Backdrop {
     private final float[] d = new float[3], s = new float[2], k3 = new float[3];
 
     // palms, kept for the shadows they throw: base x, z, height, lean
-    private final float[] pmX = new float[64], pmZ = new float[64], pmH = new float[64], pmL = new float[64];
+    private final float[] pmX = new float[80], pmZ = new float[80], pmH = new float[80], pmL = new float[80];
     private int pmN;
 
     // the parapet between the promenade and the sea
     static final float PARAPET_X = -14.6f;
     static final float HOUSES_X = 12.5f;
+    // behind the player: the near edge of the shore road, its far edge, the sea wall, the sea
+    static final float CROSS_Z = -38f, SHORE_Z = -46f, WALL_Z = -46.6f, SEA_Z = -62f;
 
     void paint(Raster r, long seed) {
         Random rnd = new Random(seed);
@@ -56,7 +60,7 @@ final class Backdrop {
                 if (dy < -0.002f) {
                     float t = -r.camY / d[1];
                     float wx = r.camX + d[0] * t, wz = r.camZ + d[2] * t;
-                    if (wx < PARAPET_X - 0.6f) {
+                    if (wx < PARAPET_X - 0.6f && wz > SHORE_Z || wz < SEA_Z) {
                         r.col[k] = sea(wx, wz, dx, dy, dz, shx, shz, t);
                         r.zb[k] = 1f / t;
                         r.lit[k] = 0;
@@ -148,7 +152,27 @@ final class Backdrop {
         float grit = t < 30f ? (n - 128) / 128f * (1f - t / 30f) : 0f;
         float ax = Math.abs(x);
         int c;
-        if (ax < 3.75f) {
+        if (z < SHORE_Z - 0.9f) {
+            // the beach: dry pale sand, ripples blown into it, darker and wet toward the sea
+            c = 0xFFE6CFA2;
+            float wet = smooth(SEA_Z + 4f, SEA_Z + 0.5f, z);
+            int rip = hash((int) Math.floor(x * 2.2f + z * 0.4f), (int) Math.floor(z * 4f));
+            if (rip < 70) c = scale(c, 0.95f);
+            c = mix(c, 0xFFB89E74, wet * 0.8f);
+            if (z < SEA_Z + 0.9f) c = mix(c, 0xFFF4F1E8, 0.7f);          // the foam at the water's edge
+        } else if (z < SHORE_Z) {
+            c = 0xFFD3C7B2;                                            // a pavement under the sea wall
+        } else if (z < CROSS_Z && x > PARAPET_X - 0.6f) {
+            // the shore road: asphalt, a dashed middle line along it
+            int patch = hash((int) Math.floor(x * 0.5f + 7), (int) Math.floor(z * 0.7f));
+            c = patch < 40 ? 0xFF655F58 : 0xFF77706A;
+            float mid = (SHORE_Z + CROSS_Z) * 0.5f;
+            if (Math.abs(z - mid) < 0.07f && ((x % 6f) + 6f) % 6f < 2.6f) c = 0xFFE2DED4;
+            if (z > CROSS_Z - 0.25f && ax > 4.3f) c = 0xFFC9BFAE;      // the curb at the corners
+            // a zebra across the end of our street
+            if (z > CROSS_Z - 3.2f && z < CROSS_Z - 0.6f && ax < 3.6f && ((int) Math.floor((x + 20f) / 0.45f) & 1) == 0)
+                c = 0xFFE4DFD3;
+        } else if (ax < 3.75f) {
             // asphalt: dark, worn, patched
             int patch = hash((int) Math.floor(x * 0.7f + 31), (int) Math.floor(z * 0.5f));
             c = patch < 40 ? 0xFF655F58 : 0xFF77706A;
@@ -217,16 +241,56 @@ final class Backdrop {
                     0.25f, 0.2f, len * 0.5f, scale(tint, 1.05f), Raster.PAT_FLAT, 0);
             z += len;
         }
+        // behind: the last houses of the street up to the corner, and the row facing the sea
+        r.facadeSeed = 60;
+        house(r, HOUSES_X + 7f, CROSS_Z * 0.5f - 6f, 7f, -CROSS_Z * 0.5f - 6f, 5, 0xFFF0D9B0);
+        int k = 0;
+        for (float x = HOUSES_X + 14f; x < 120f; x += 12f + (k % 3) * 2f, k++) {
+            float len = 12f + (k % 3) * 2f;
+            r.facadeSeed = 61 + k;
+            house(r, x + len * 0.5f, CROSS_Z + 9f, len * 0.5f, 9f, 4 + (k & 1), WALLS[(k * 3 + 1) % WALLS.length]);
+        }
+        // the sea wall between the shore road and the beach, open for steps down in the middle
+        r.box((PARAPET_X - 1f + -4.6f) * 0.5f, 0.35f, WALL_Z, 1, 0, 0, 0, 1, 0, 0, 0, 1,
+                (-4.6f - PARAPET_X + 1f) * 0.5f, 0.35f, 0.3f, 0xFFE2D4BA, Raster.PAT_STONE, 0);
+        r.box((-0.4f + 120f) * 0.5f, 0.35f, WALL_Z, 1, 0, 0, 0, 1, 0, 0, 0, 1,
+                (120f + 0.4f) * 0.5f, 0.35f, 0.3f, 0xFFE2D4BA, Raster.PAT_STONE, 0);
+        for (int s = 0; s < 3; s++)
+            r.box(-2.5f, 0.1f + s * 0.1f, WALL_Z - 0.8f + s * 0.3f, 1, 0, 0, 0, 1, 0, 0, 0, 1,
+                    2.1f, 0.1f + s * 0.1f, 0.15f, 0xFFD8CBB2, Raster.PAT_STONE, 0);
         // the far end of the street
         r.facadeSeed = 77;
         r.box(-2f, 10f, 250f, 1, 0, 0, 0, 1, 0, 0, 0, 1, 30f, 10f, 6f, 0xFFEBD2AC, Raster.PAT_FACADE, 0);
         // the parapet along the sea
-        r.box(PARAPET_X, 0.45f, 100f, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3f, 0.45f, 120f, 0xFFE2D4BA, Raster.PAT_STONE, 0);
-        r.box(PARAPET_X, 0.95f, 100f, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.38f, 0.06f, 120f, 0xFFEDE2CC, Raster.PAT_FLAT, 0);
+        r.box(PARAPET_X, 0.45f, 91f, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3f, 0.45f, 129f, 0xFFE2D4BA, Raster.PAT_STONE, 0);
+        r.box(PARAPET_X, 0.95f, 91f, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.38f, 0.06f, 129f, 0xFFEDE2CC, Raster.PAT_FLAT, 0);
+    }
+
+    /** One house: a block with its facades and a cornice round the top. */
+    private static void house(Raster r, float xc, float zc, float hx, float hz, int storeys, int tint) {
+        float height = 3.3f * (storeys + 1) + 0.5f;
+        r.box(xc, height * 0.5f, zc, 1, 0, 0, 0, 1, 0, 0, 0, 1, hx, height * 0.5f, hz, tint, Raster.PAT_FACADE, 0);
+        r.box(xc, height - 0.2f, zc, 1, 0, 0, 0, 1, 0, 0, 0, 1, hx + 0.15f, 0.2f, hz + 0.15f, scale(tint, 1.05f), Raster.PAT_FLAT, 0);
     }
 
     /** Lamp posts and bollards along the curbs, cafe parasols in front of the houses. */
     private void props(Raster r, Random rnd) {
+        for (float z = -12f; z > CROSS_Z + 2f; z -= 14f)
+            for (int side = -1; side <= 1; side += 2) {
+                float x = side * 4.55f;
+                r.box(x, 2.1f, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.06f, 2.1f, 0.06f, 0xFF2E2D2F, Raster.PAT_FLAT, 0);
+                r.box(x, 4.35f, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.16f, 0.22f, 0.16f, 0xFF3A3836, Raster.PAT_FLAT, 0);
+                r.box(x, 4.3f, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.13f, 0.12f, 0.13f, 0xFFF3E2B4, Raster.PAT_FLAT, 0);
+            }
+        // beach umbrellas on the sand
+        Random sand = new Random(93);
+        for (int i = 0; i < 7; i++) {
+            float x = -12f + i * 4.6f + sand.nextFloat() * 1.5f, z = SHORE_Z - 4f - sand.nextFloat() * 8f;
+            int cloth = i % 3 == 0 ? 0xFFE8483C : i % 3 == 1 ? 0xFFF3EDE0 : 0xFF3F8FD8;
+            r.box(x, 1.1f, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03f, 1.1f, 0.03f, 0xFFE8E2D6, Raster.PAT_FLAT, 0);
+            r.box(x, 2.15f, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1.0f, 0.1f, 1.0f, cloth, Raster.PAT_FLAT, 0);
+            r.box(x, 2.28f, z, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0.6f, 0.05f, 0.6f, cloth, Raster.PAT_FLAT, 0);
+        }
         for (float z = 2f; z < 120f; z += 14f) {
             for (int side = -1; side <= 1; side += 2) {
                 float x = side * 4.55f;
@@ -281,6 +345,24 @@ final class Backdrop {
                 pmL[pmN] = (rnd.nextFloat() - 0.5f) * 0.6f;
                 pmN++;
             }
+        }
+        // their own draw, so the street in front stays exactly as it was
+        Random back = new Random(91);
+        // behind the player, up to the corner, and a few on the beach
+        for (int i = 0; i < 4; i++)
+            for (float rx : rows) {
+                pmX[pmN] = rx + (back.nextFloat() - 0.5f) * 0.3f;
+                pmZ[pmN] = -6f - i * 7.5f - (rx < -8f ? 3.7f : 0f) + (back.nextFloat() - 0.5f) * 0.6f;
+                pmH[pmN] = 7.2f + back.nextFloat() * 2.6f;
+                pmL[pmN] = (back.nextFloat() - 0.5f) * 0.6f;
+                pmN++;
+            }
+        for (int i = 0; i < 5; i++) {
+            pmX[pmN] = -16f + i * 8.5f + back.nextFloat() * 3f;
+            pmZ[pmN] = SHORE_Z - 3f - back.nextFloat() * 6f;
+            pmH[pmN] = 6.5f + back.nextFloat() * 3f;
+            pmL[pmN] = (back.nextFloat() - 0.5f) * 1.6f;
+            pmN++;
         }
     }
 

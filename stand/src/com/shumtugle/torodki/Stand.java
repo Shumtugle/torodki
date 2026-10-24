@@ -305,6 +305,22 @@ public final class Stand implements World.Host {
             // grow suitcases (1), mattresses (2) or both (3) into every building from now on
             Builder.force = Integer.parseInt(p[1]);
             world.standForget();
+        } else if (c.equals("alley")) {
+            world.startAlley();
+            step();
+        } else if (c.equals("bowl")) {
+            // wait for the alley to be ready for a ball, then roll one: across, speed, angle
+            float t0 = time;
+            while (world.alley != null && world.alley.phase != Alley.AIM && time - t0 < 30f) step();
+            if (world.alley != null) world.alley.roll(f(p[1]), f(p[2]), f(p[3]));
+            step();
+            System.out.println(String.format("%7.2fs  rolled, frame %d ball %d", time, world.alley == null ? -1 : world.alley.frame,
+                    world.alley == null ? -1 : world.alley.ball));
+        } else if (c.equals("alleystate")) {
+            Alley a = world.alley;
+            if (a == null) System.out.println(String.format("%7.2fs  no alley; heavy %d", time, world.heavyLeft));
+            else System.out.println(String.format("%7.2fs  alley phase %d frame %d ball %d shares %.2f %.2f %.2f %.2f %.2f reward %d",
+                    time, a.phase, a.frame, a.ball, a.share[0], a.share[1], a.share[2], a.share[3], a.share[4], a.reward));
         } else if (c.equals("tear")) {
             world.standTear();
         } else if (c.equals("fliers")) {
