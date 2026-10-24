@@ -24,7 +24,8 @@ final class Sky {
     private static final int MAX_PICTURES = 24;
 
     private int w, sh;
-    private int[] strip;
+    private int[] strip, winterStrip;
+    boolean winter;               // over the winter ocean: a cold grey sky, the gods frosted
     private int verdict = POLITE;
     float time;
     int bolts;                    // how many strikes of lightning so far: the world thunders for each
@@ -134,7 +135,16 @@ final class Sky {
                 strip[j * w + x] = Backdrop.sky(d[0] / l, d[1] / l, d[2] / l, shx, shz);
             }
         rays();
-        farClouds(far);
+        farClouds(far, strip, false);
+        // the winter sky: low cloud, grey, the same far clouds gone cold
+        winterStrip = new int[w * sh];
+        for (int j = 0; j < sh; j++)
+            for (int x = 0; x < w; x++) {
+                r.ray(x + 0.5f, j - sh + 0.5f, d);
+                float l = (float) Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+                winterStrip[j * w + x] = Ocean.sky(d[0] / l, d[1] / l, d[2] / l);
+            }
+        farClouds(far, winterStrip, true);
         readGods(gods);
     }
 
@@ -167,7 +177,7 @@ final class Sky {
      * Lays the far clouds into the strip, a little veiled by the air between: tinted toward
      * the sky behind them and thinned, more so low down where the strip meets the street's sky.
      */
-    private void farClouds(byte[] b) {
+    private void farClouds(byte[] b, int[] strip, boolean cold) {
         if (b == null || b.length < 2) return;
         int n = Math.min(FAR.length, u16(b, 0)), p = 2;
         for (int i = 0; i < n && p + 4 <= b.length; i++) {
@@ -188,6 +198,10 @@ final class Sky {
                     int c = 0xFF000000 | (Math.min(255, (b[p] & 0xFF) * 255 / a) << 16)
                             | (Math.min(255, (b[p + 1] & 0xFF) * 255 / a) << 8) | Math.min(255, (b[p + 2] & 0xFF) * 255 / a);
                     c = Backdrop.mix(c, strip[k], 0.18f);
+                    if (cold) {
+                        c = cold(c | 0xFF000000);
+                        al *= 0.7f;
+                    }
                     strip[k] = Backdrop.mix(strip[k], c, al * fade);
                 }
         }
@@ -353,7 +367,7 @@ final class Sky {
             else {
                 int j = sh + src;
                 if (j < 0) j = 0;
-                System.arraycopy(strip, j * w, out, y * w, w);
+                System.arraycopy(winter ? winterStrip : strip, j * w, out, y * w, w);
             }
         }
     }
@@ -439,6 +453,7 @@ final class Sky {
                 }
                 if (c == 0) continue;
                 if (al < 256) c = lerp(0, c, al);
+                if (winter) c = cold(c);
                 int k = y * f.w + x;
                 f.a[k] = over(c, f.a[k]);
             }
@@ -458,9 +473,29 @@ final class Sky {
                 int c = img[y * ww + x];
                 if (c == 0) continue;
                 int k = py * f.w + px;
-                f.a[k] = over(lerp(0, c, al), f.a[k]);
+                c = lerp(0, c, al);
+                if (winter) c = cold(c);
+                f.a[k] = over(c, f.a[k]);
             }
         }
+    }
+
+    /**
+     * Frost over a premultiplied color: its light kept, its warmth gone, toward slate in the
+     * shadows and the white of snow in the lights, a trace of the old color left.
+     */
+    static int cold(int c) {
+        int a = c >>> 24;
+        if (a == 0) return 0;
+        int r = (c >> 16) & 0xFF, g = (c >> 8) & 0xFF, b = c & 0xFF;
+        float l = (r * 0.3f + g * 0.59f + b * 0.11f) / a;
+        if (l > 1f) l = 1f;
+        l = l * l * (3f - 2f * l);
+        float dr = 0x4C + (0xEE - 0x4C) * l, dg = 0x58 + (0xF3 - 0x58) * l, db = 0x68 + (0xF8 - 0x68) * l;
+        int nr = Math.min(a, (int) (r * 0.28f + dr * a / 255f * 0.72f));
+        int ng = Math.min(a, (int) (g * 0.28f + dg * a / 255f * 0.72f));
+        int nb = Math.min(a, (int) (b * 0.28f + db * a / 255f * 0.72f));
+        return (a << 24) | (nr << 16) | (ng << 8) | nb;
     }
 
     /** Premultiplied a toward b, t out of 256. */

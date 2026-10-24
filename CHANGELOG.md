@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.45
+- The portal is a ring of glowing cloud now, gathering over the plinth out of a puff;
+  through it shows raw winter: a grey sky, a dark sea, fog blowing across and snow
+  streaming out at the player, and some of it blows out of the ring into the street.
+- Over the ocean the gods look down from a winter sky, low and grey, and a frost lies
+  over them: their warmth gone to slate and snow-white. Snow falls in front of them too.
+- Out at sea nothing starts over: the building stands far off from the first level there,
+  and farther on. It stands on an iceberg: a snowy top, cliffs of old blue ice falling to
+  the water and wider at the waterline, its bulk showing green under the surface, crags of
+  ice standing up behind and beside it.
+- Buildings out there are partly ice, and snow lies on their tops; a knock or a tilt
+  throws the snow off in a puff. The sails are dark and weathered. The light is more
+  from one side and the shadows deeper.
+- A real blizzard: twice the snow, the near flakes drawn out into streaks, gusts that
+  whiten the air and thicken the snow, two whirls at a time, and snow running in streams
+  low over the ice. The floe rocks twice as hard.
+
 ## 0.44
 - The 101st building down, and the gods have looked: no new building comes. The stones
   of the golem's shell fly up from the plinth into a ring standing on its edge, its inside

@@ -712,9 +712,9 @@ final class Raster {
         float sun = Math.max(0f, ndl);
         float sky = 0.5f + 0.5f * ny;
         if (overcast) {
-            out[0] = 0.52f + 0.30f * sky + 0.22f * sun;
-            out[1] = 0.55f + 0.31f * sky + 0.21f * sun;
-            out[2] = 0.61f + 0.34f * sky + 0.19f * sun;
+            out[0] = 0.30f + 0.26f * sky + 0.62f * sun;
+            out[1] = 0.33f + 0.27f * sky + 0.60f * sun;
+            out[2] = 0.41f + 0.30f * sky + 0.55f * sun;
             return;
         }
         out[0] = 0.27f + 0.10f * sky + 1.08f * sun;
@@ -815,7 +815,7 @@ final class Raster {
                 if (s < 0 || t < 0 || s >= SM || t >= SM) continue;
                 if (sm[t * SM + s] > smD(wx, wy, wz) + bias) {
                     int c = col[k];
-                    int sr = overcast ? 200 : SH_R, sg = overcast ? 204 : SH_G, sb = overcast ? 214 : SH_B;
+                    int sr = overcast ? 150 : SH_R, sg = overcast ? 160 : SH_G, sb = overcast ? 186 : SH_B;
                     int r = ((c >> 16) & 0xFF) * sr >> 8, g = ((c >> 8) & 0xFF) * sg >> 8, b = (c & 0xFF) * sb >> 8;
                     col[k] = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }

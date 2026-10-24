@@ -10,7 +10,7 @@ wait 1.0
 shot p2_ring
 wait 1.5
 shot p3_ring_open
-throwat 0 2.8 55.5 13
+throwat 0 3.3 55.5 13
 wait 1.5
 shot p4_flight
 wait 2.25

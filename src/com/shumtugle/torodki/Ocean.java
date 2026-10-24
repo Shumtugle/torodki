@@ -57,14 +57,6 @@ final class Ocean {
         return dx * dx + dz * dz < sq(rag((float) Math.atan2(dz, dx), 0.7f));
     }
 
-    static final float TF_RX = 4.4f, TF_RZ = 3.3f;
-
-    /** On the floe the building stands on, centered at (0, cz). */
-    static boolean onTarget(float x, float z, float cz) {
-        float dx = x / TF_RX, dz = (z - cz) / TF_RZ;
-        return dx * dx + dz * dz < sq(rag((float) Math.atan2(dz, dx), 2.1f));
-    }
-
     private static float sq(float v) {
         return v * v;
     }
@@ -226,7 +218,8 @@ final class Ocean {
                 float q = zb[k];
                 float dist = q > 0f ? 1f / q : 1e4f;
                 int a = 0;
-                if (idb[k] != 0 && q > 0f) a = (int) (fog(dist) * 256f);
+                // things drawn this frame thin into the fog more slowly than the air itself
+                if (idb[k] != 0 && q > 0f) a = (int) (fog(dist * 0.5f) * 256f);
                 if (dist > 18f && edge > 0) {
                     int b = (BANK[by * BANK_W + ((x + shift) & (BANK_W - 1))] + 128) * edge >> 8;
                     float far = Math.min(1f, (dist - 18f) / 40f);
@@ -242,66 +235,180 @@ final class Ocean {
         return 0.09f * (float) Math.sin(time * 1.05f + z * 0.3f) + 0.035f * (float) Math.sin(time * 2.3f + x * 0.5f);
     }
 
-    private final float[] px = new float[24], pz = new float[24];
+    // ---- the iceberg ----
+    // The building stands on an iceberg: a flat snowy top round the plinth, cliffs of old ice
+    // falling away to the water, wider at the waterline, and crags of ice standing up behind
+    // and beside it. Its bulk shows green-blue under the water. It rides the swell a little.
+
+    private static final int RIM = 24;
+    // rings from the top down: height, how far out past the plinth, how much that varies
+    private static final float[][] RINGS = {{0f, 0.06f, 0.08f}, {-0.14f, 0.2f, 0.14f}, {-0.55f, 0.42f, 0.4f}, {-1.15f, 0.7f, 0.5f}};
+    private final float[][] ringX = new float[RINGS.length][RIM], ringZ = new float[RINGS.length][RIM];
+    private float meshFor = Float.NaN;
+    // crags: x and z off the plinth's middle, base radius, height, sides; then their points
+    private static final float[][] CRAGS = {{-1.9f, 1.7f, 1.15f, 2.7f}, {0.6f, 2.0f, 1.35f, 3.6f}, {2.6f, 1.0f, 1.0f, 2.2f}, {-2.9f, 0.3f, 0.8f, 1.6f}};
+    private static final int CRAG_SIDES = 6;
+    private final float[][] cragX = new float[CRAGS.length][CRAG_SIDES], cragZ = new float[CRAGS.length][CRAG_SIDES];
+    private final float[] apex = new float[CRAGS.length * 2];
     private final float[] qx = new float[4], qy = new float[4], qz = new float[4];
 
-    /** The floe the building stands on: a ragged slab of ice round the block, its top at this height. */
-    void targetFloe(Raster r, float cz, float top, int id) {
-        int n = 20;
-        for (int i = 0; i < n; i++) {
-            float a = (float) (i * Math.PI * 2 / n);
-            float rad = rag(a, 2.1f);
-            px[i] = (float) Math.cos(a) * TF_RX * rad;
-            pz[i] = cz + (float) Math.sin(a) * TF_RZ * rad;
+    private void mesh(float cz) {
+        if (cz == meshFor) return;
+        meshFor = cz;
+        Random r = new Random((long) (cz * 1000f) ^ 0x1CEB3L);
+        float hx = Builder.PHX, hz = Builder.PHZ;
+        float per = 4f * (hx + hz);
+        float[] jit = new float[RIM];
+        for (int i = 0; i < RIM; i++) jit[i] = r.nextFloat();
+        for (int ring = 0; ring < RINGS.length; ring++)
+            for (int i = 0; i < RIM; i++) {
+                // round the plinth's rectangle, then out along the way from its middle
+                float t = (i + 0.5f) / RIM * per, x, z;
+                if (t < 2f * hx) {
+                    x = -hx + t;
+                    z = -hz;
+                } else if (t < 2f * hx + 2f * hz) {
+                    x = hx;
+                    z = -hz + (t - 2f * hx);
+                } else if (t < 4f * hx + 2f * hz) {
+                    x = hx - (t - 2f * hx - 2f * hz);
+                    z = hz;
+                } else {
+                    x = -hx;
+                    z = hz - (t - 4f * hx - 2f * hz);
+                }
+                float l = (float) Math.sqrt(x * x / (hx * hx) + z * z / (hz * hz));
+                float nx = x / (hx * l), nz = z / (hz * l);
+                float nl = (float) Math.sqrt(nx * nx + nz * nz);
+                float out = RINGS[ring][1] + RINGS[ring][2] * (0.5f * jit[i] + 0.5f * r.nextFloat());
+                ringX[ring][i] = x + nx / nl * out;
+                ringZ[ring][i] = cz + z + nz / nl * out;
+            }
+        for (int c = 0; c < CRAGS.length; c++) {
+            float bx = CRAGS[c][0], bz = cz + CRAGS[c][1], rad = CRAGS[c][2];
+            for (int i = 0; i < CRAG_SIDES; i++) {
+                float a = (float) (i * Math.PI * 2 / CRAG_SIDES) + r.nextFloat() * 0.5f;
+                float rr = rad * (0.7f + r.nextFloat() * 0.5f);
+                cragX[c][i] = bx + (float) Math.cos(a) * rr;
+                cragZ[c][i] = bz + (float) Math.sin(a) * rr * 0.8f;
+            }
+            apex[2 * c] = bx + (r.nextFloat() - 0.5f) * rad * 0.8f;
+            apex[2 * c + 1] = bz + (r.nextFloat() - 0.2f) * rad * 0.5f;
         }
-        float bottom = top - 0.55f;
-        // the rim: blue ice, wet and darker at the waterline
-        for (int i = 0; i < n; i++) {
-            int j = (i + 1) % n;
-            qx[0] = px[i];
-            qx[1] = px[j];
-            qx[2] = px[j];
-            qx[3] = px[i];
-            qz[0] = pz[i];
-            qz[1] = pz[j];
-            qz[2] = pz[j];
-            qz[3] = pz[i];
-            qy[0] = qy[1] = top;
-            qy[2] = qy[3] = bottom;
-            int c = (i % 3) == 0 ? ICE_RIM : Backdrop.scale(ICE_RIM, 0.92f + 0.04f * (i % 2));
-            r.poly(qx, qy, qz, null, null, 4, c, Raster.PAT_FLAT, id, false);
+    }
+
+    /** One flat face, lit by its own slope. */
+    private void face(Raster r, int n, int color, int id, boolean top) {
+        float ax = qx[1] - qx[0], ay = qy[1] - qy[0], az = qz[1] - qz[0];
+        float bx = qx[n - 1] - qx[0], by = qy[n - 1] - qy[0], bz = qz[n - 1] - qz[0];
+        float nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+        float l = (float) Math.sqrt(nx * nx + ny * ny + nz * nz);
+        if (l < 1e-6f) return;
+        nx /= l;
+        ny /= l;
+        nz /= l;
+        // turned toward the camera, whichever way the points ran
+        if ((qx[0] - r.camX) * nx + (qy[0] - r.camY) * ny + (qz[0] - r.camZ) * nz > 0f) {
+            nx = -nx;
+            ny = -ny;
+            nz = -nz;
         }
-        // a lip of snow along the top edge
-        for (int i = 0; i < n; i++) {
-            int j = (i + 1) % n;
-            qx[0] = px[i];
-            qx[1] = px[j];
-            qx[2] = px[j] * 0.93f;
-            qx[3] = px[i] * 0.93f;
-            qz[0] = pz[i];
-            qz[1] = pz[j];
-            qz[2] = cz + (pz[j] - cz) * 0.93f;
-            qz[3] = cz + (pz[i] - cz) * 0.93f;
-            qy[0] = qy[1] = qy[2] = qy[3] = top;
-            r.poly(qx, qy, qz, null, null, 4, 0xFFC9DAE4, Raster.PAT_FLAT, id, true);
-        }
-        for (int i = 0; i < n; i++) {
-            int j = (i + 1) % n;
-            qx[0] = 0f;
-            qx[1] = px[i] * 0.93f;
-            qx[2] = px[j] * 0.93f;
-            qz[0] = cz;
-            qz[1] = cz + (pz[i] - cz) * 0.93f;
-            qz[2] = cz + (pz[j] - cz) * 0.93f;
-            qy[0] = qy[1] = qy[2] = top;
-            r.poly(qx, qy, qz, null, null, 3, (i & 1) == 0 ? ICE : Backdrop.scale(ICE, 0.975f), Raster.PAT_FLAT, id, true);
-        }
-        // the swell slaps at its foot: a ring of foam just above the water
-        for (int i = 0; i < n; i += 1) {
-            float vz = r.project(px[i] * 1.03f, 0.02f, cz + (pz[i] - cz) * 1.03f, s);
+        float ndl = nx * Raster.sunX() + ny * Raster.sunY() + nz * Raster.sunZ();
+        r.poly(qx, qy, qz, null, null, n, Raster.light(color, nx, ny, nz, ndl), Raster.PAT_FLAT, id, top || ny > 0.6f);
+    }
+
+    /** The iceberg under the plinth at (0, cz), its top at the plinth's top plus lift. */
+    void iceberg(Raster r, float cz, float lift, int id, float time) {
+        mesh(cz);
+        float top = Builder.TOP + lift;
+        // its bulk under the water, green-blue, and the swell foaming round its foot
+        int last = RINGS.length - 1;
+        for (int i = 0; i < RIM; i += 2) {
+            float x = ringX[last][i] * 1.15f, z = cz + (ringZ[last][i] - cz) * 1.15f;
+            float vz = r.project(x, 0f, z, s);
             if (vz < 1f) continue;
-            float k = 0.5f + 0.5f * (float) Math.sin(i * 1.9f + top * 30f);
-            r.haze(s[0], s[1], (0.25f + 0.25f * k) * r.f / vz, 1f / (vz - 0.4f), 0xFFE6EEF2, (int) (150 * k));
+            r.haze(s[0], s[1], 1.1f * r.f / vz, 1f / (vz - 1.2f), 0xFF4E9AAA, 110);
+        }
+        // the crags first: they stand behind
+        for (int c = 0; c < CRAGS.length; c++) {
+            float h = CRAGS[c][3] + lift, ax = apex[2 * c], az = apex[2 * c + 1];
+            for (int i = 0; i < CRAG_SIDES; i++) {
+                int j = (i + 1) % CRAG_SIDES;
+                // ice below, snow on the upper third
+                float k = 0.62f;
+                float mxi = cragX[c][i] + (ax - cragX[c][i]) * k, mzi = cragZ[c][i] + (az - cragZ[c][i]) * k;
+                float mxj = cragX[c][j] + (ax - cragX[c][j]) * k, mzj = cragZ[c][j] + (az - cragZ[c][j]) * k;
+                float my = -0.3f + (h + 0.3f) * k;
+                qx[0] = cragX[c][i];
+                qy[0] = -0.3f;
+                qz[0] = cragZ[c][i];
+                qx[1] = cragX[c][j];
+                qy[1] = -0.3f;
+                qz[1] = cragZ[c][j];
+                qx[2] = mxj;
+                qy[2] = my;
+                qz[2] = mzj;
+                qx[3] = mxi;
+                qy[3] = my;
+                qz[3] = mzi;
+                face(r, 4, (i & 1) == 0 ? 0xFF9EC5D8 : 0xFF88B6CC, id, false);
+                qx[0] = mxi;
+                qy[0] = my;
+                qz[0] = mzi;
+                qx[1] = mxj;
+                qy[1] = my;
+                qz[1] = mzj;
+                qx[2] = ax;
+                qy[2] = h;
+                qz[2] = az;
+                face(r, 3, 0xFFEDF3F7, id, true);
+            }
+        }
+        // the cliffs, ring by ring down to the water
+        for (int ring = 0; ring < last; ring++) {
+            float y0 = top + RINGS[ring][0];
+            float y1 = ring + 1 == last ? -0.3f : top + RINGS[ring + 1][0];
+            int c = ring == 0 ? 0xFFEFF5F8 : ring == 1 ? 0xFFADCDDD : 0xFF7FB2C8;
+            for (int i = 0; i < RIM; i++) {
+                int j = (i + 1) % RIM;
+                qx[0] = ringX[ring][i];
+                qy[0] = y0;
+                qz[0] = ringZ[ring][i];
+                qx[1] = ringX[ring][j];
+                qy[1] = y0;
+                qz[1] = ringZ[ring][j];
+                qx[2] = ringX[ring + 1][j];
+                qy[2] = y1;
+                qz[2] = ringZ[ring + 1][j];
+                face(r, 3, (i % 3) == 0 ? Backdrop.scale(c, 0.95f) : c, id, ring == 0);
+                qx[1] = ringX[ring + 1][j];
+                qy[1] = y1;
+                qz[1] = ringZ[ring + 1][j];
+                qx[2] = ringX[ring + 1][i];
+                qy[2] = y1;
+                qz[2] = ringZ[ring + 1][i];
+                face(r, 3, (i % 4) == 1 ? Backdrop.scale(c, 1.04f) : c, id, ring == 0);
+            }
+        }
+        // the snowy top, as a fan from the middle
+        for (int i = 0; i < RIM; i++) {
+            int j = (i + 1) % RIM;
+            qx[0] = 0f;
+            qy[0] = top;
+            qz[0] = cz;
+            qx[1] = ringX[0][i];
+            qy[1] = top;
+            qz[1] = ringZ[0][i];
+            qx[2] = ringX[0][j];
+            qy[2] = top;
+            qz[2] = ringZ[0][j];
+            r.poly(qx, qy, qz, null, null, 3, (i & 1) == 0 ? 0xFFF1F6F9 : 0xFFEAF1F5, Raster.PAT_FLAT, id, true);
+        }
+        for (int i = 0; i < RIM; i++) {
+            float vz = r.project(ringX[last][i], 0.03f, ringZ[last][i], s);
+            if (vz < 1f) continue;
+            float k = 0.5f + 0.5f * (float) Math.sin(i * 1.9f + time * 2.1f);
+            r.haze(s[0], s[1], (0.3f + 0.3f * k) * r.f / vz, 1f / (vz - 0.6f), 0xFFE6EEF2, (int) (170 * k));
         }
     }
 
@@ -314,6 +421,8 @@ final class Ocean {
             {10f, 24f, -0.6f}, {19f, 45f, 0.55f}, {31f, 74f, -0.25f}, {44f, 104f, 0.4f}};
     private static final int[] HULLS = {0xFF3A2E2A, 0xFF6A2420, 0xFF22303E, 0xFFDCD8CE, 0xFF2E4A3A, 0xFFE2DED4,
             0xFF4A3A2E, 0xFF2A3A4E};
+    private static final int[] SAILS = {0xFF4A423C, 0xFF5E4A3A, 0xFF34383E, 0xFF6A5644, 0xFF3E3632, 0xFF56504A,
+            0xFF4A3E34, 0xFF2E3034};
     private final float[] m = new float[9];
 
     void boats(Raster r, float time) {
@@ -337,9 +446,10 @@ final class Ocean {
             box(r, bx, heave, bz, 0f, 4.2f, 0.45f, 0.05f, 3.4f, 0.05f, 0xFF3A3430);
             box(r, bx, heave, bz, 0f, 1.6f, -0.45f, 0.04f, 0.04f, 0.9f, 0xFF3A3430);
             // a reefed mainsail, a small jib before the mast
-            int sail = 0xFFE6E0D0;
+            // tanned sails, dark with weather
+            int sail = SAILS[i];
             tri(r, bx, heave, bz, 0f, 6.8f, 0.5f, 0f, 1.65f, 0.5f, 0f, 1.65f, -1.35f, sail);
-            tri(r, bx, heave, bz, 0f, 6.5f, 0.6f, 0f, 1.25f, 0.6f, 0f, 1.25f, 2.85f, Backdrop.scale(sail, 0.92f));
+            tri(r, bx, heave, bz, 0f, 6.5f, 0.6f, 0f, 1.25f, 0.6f, 0f, 1.25f, 2.85f, Backdrop.scale(sail, 0.85f));
         }
     }
 
@@ -404,14 +514,19 @@ final class Ocean {
         out[2] = z + m[6] * -0.16f + m[7] * ly;
     }
 
-    // ---- snow ----
-    // Flakes in the air before the eyes, nearer ones bigger and faster, all driven slantwise
-    // by the wind; now and then a whirl wanders across and winds them round it.
+    // ---- the blizzard ----
+    // Flakes in the air before the eyes, nearer ones bigger, faster and drawn out into
+    // streaks, all driven slantwise by a wind that gusts; in a gust the air goes white and
+    // the snow thickens. Whirls wander across and wind the flakes round them, and low over
+    // the ice the snow runs along in streams.
 
-    private static final int FLAKES = 300;
+    private static final int FLAKES = 560, DRIFTS = 46, WHIRLS = 2;
     private final float[] fx = new float[FLAKES], fy = new float[FLAKES], fz = new float[FLAKES];
+    private final float[] fvx = new float[FLAKES], fvy = new float[FLAKES];
+    private final float[] dx = new float[DRIFTS], dy = new float[DRIFTS], dl = new float[DRIFTS], dv = new float[DRIFTS];
     private final Random rnd = new Random(31);
-    private float whirlX = -100f, whirlY, whirlT = -1f, whirlIn = 3f, gustT;
+    private final float[] whirlX = new float[WHIRLS], whirlY = new float[WHIRLS], whirlT = new float[WHIRLS], whirlIn = new float[WHIRLS];
+    private float gustT, gust, gustIn = 6f, gustLen, gustAt = -1f;
     private int w = 1, h = 1;
 
     void snowFor(int width, int height) {
@@ -422,67 +537,120 @@ final class Ocean {
             fy[i] = rnd.nextFloat() * h;
             fz[i] = 0.2f + rnd.nextFloat() * 0.8f;
         }
+        for (int i = 0; i < DRIFTS; i++) {
+            dx[i] = rnd.nextFloat() * w;
+            dy[i] = h * (0.72f + rnd.nextFloat() * 0.28f);
+            dl[i] = 8f + rnd.nextFloat() * 22f;
+            dv[i] = 0.6f + rnd.nextFloat() * 0.8f;
+        }
+        for (int k = 0; k < WHIRLS; k++) {
+            whirlT[k] = -1f;
+            whirlIn[k] = 2f + k * 4f + rnd.nextFloat() * 3f;
+        }
     }
 
-    boolean whirling() {
-        return whirlT >= 0f;
+    /** How hard the wind blows now, 1 as usual, up to about 2.6 in a gust. */
+    float wind() {
+        return gust;
     }
 
     void snow(float dt) {
         gustT += dt;
-        whirlIn -= dt;
-        if (whirlT < 0f && whirlIn <= 0f) {
-            whirlT = 0f;
-            whirlX = -60f;
-            whirlY = h * (0.2f + rnd.nextFloat() * 0.55f);
+        // gusts: now and then the wind rises for a second or two and the air goes white
+        float g = 0f;
+        if (gustAt >= 0f) {
+            gustAt += dt;
+            float k = gustAt / gustLen;
+            if (k >= 1f) {
+                gustAt = -1f;
+                gustIn = 5f + rnd.nextFloat() * 8f;
+            } else g = (float) Math.sin(Math.PI * k);
+        } else if ((gustIn -= dt) <= 0f) {
+            gustAt = 0f;
+            gustLen = 1.4f + rnd.nextFloat() * 1.6f;
         }
-        if (whirlT >= 0f) {
-            whirlT += dt;
-            whirlX += 85f * dt;
-            whirlY += (float) Math.sin(whirlT * 1.3f) * 14f * dt;
-            if (whirlX > w + 80f) {
-                whirlT = -1f;
-                whirlIn = 5f + rnd.nextFloat() * 7f;
+        gust = 1f + 0.45f * (float) Math.sin(gustT * 0.6f) + 0.2f * (float) Math.sin(gustT * 1.7f) + 1.4f * g;
+        for (int k = 0; k < WHIRLS; k++) {
+            if (whirlT[k] < 0f && (whirlIn[k] -= dt) <= 0f) {
+                whirlT[k] = 0f;
+                whirlX[k] = -90f;
+                whirlY[k] = h * (0.15f + rnd.nextFloat() * 0.7f);
             }
-        }
-        float gust = 1f + 0.55f * (float) Math.sin(gustT * 0.6f) + 0.25f * (float) Math.sin(gustT * 1.7f);
-        for (int i = 0; i < FLAKES; i++) {
-            float z = fz[i];
-            float vx = 70f * z * gust, vy = 34f * z + 8f * (float) Math.sin(gustT * 2f + i);
-            if (whirlT >= 0f) {
-                float dx = fx[i] - whirlX, dy = fy[i] - whirlY, dd = (float) Math.sqrt(dx * dx + dy * dy) + 1f;
-                if (dd < 110f) {
-                    float k = (1f - dd / 110f) * 330f * z;
-                    vx += dy / dd * k;
-                    vy += -dx / dd * k - 20f * (1f - dd / 110f);
+            if (whirlT[k] >= 0f) {
+                whirlT[k] += dt;
+                whirlX[k] += (70f + 30f * gust) * dt;
+                whirlY[k] += (float) Math.sin(whirlT[k] * 1.3f + k) * 18f * dt;
+                if (whirlX[k] > w + 100f) {
+                    whirlT[k] = -1f;
+                    whirlIn[k] = 3f + rnd.nextFloat() * 6f;
                 }
             }
+        }
+        for (int i = 0; i < FLAKES; i++) {
+            float z = fz[i];
+            float vx = 75f * z * gust, vy = 30f * z + 10f * (float) Math.sin(gustT * 2f + i);
+            for (int k = 0; k < WHIRLS; k++) {
+                if (whirlT[k] < 0f) continue;
+                float ex = fx[i] - whirlX[k], ey = fy[i] - whirlY[k], dd = (float) Math.sqrt(ex * ex + ey * ey) + 1f;
+                if (dd < 150f) {
+                    float s = (1f - dd / 150f) * 380f * z;
+                    vx += ey / dd * s;
+                    vy += -ex / dd * s - 26f * (1f - dd / 150f);
+                }
+            }
+            fvx[i] = vx;
+            fvy[i] = vy;
             fx[i] += vx * dt;
             fy[i] += vy * dt;
-            if (fx[i] > w + 4) {
-                fx[i] -= w + 8;
+            if (fx[i] > w + 8) {
+                fx[i] -= w + 16;
                 fy[i] = rnd.nextFloat() * h;
             }
-            if (fx[i] < -4) fx[i] += w + 8;
-            if (fy[i] > h + 4) {
-                fy[i] = -4f;
+            if (fx[i] < -8) fx[i] += w + 16;
+            if (fy[i] > h + 6) {
+                fy[i] = -6f;
                 fx[i] = rnd.nextFloat() * w;
             }
-            if (fy[i] < -6) fy[i] = h + 2f;
+            if (fy[i] < -8) fy[i] = h + 4f;
+        }
+        for (int i = 0; i < DRIFTS; i++) {
+            dx[i] += 160f * dv[i] * gust * dt;
+            if (dx[i] - dl[i] > w) {
+                dx[i] = -rnd.nextFloat() * 40f;
+                dy[i] = h * (0.72f + rnd.nextFloat() * 0.28f);
+            }
         }
     }
 
     void drawSnow(Px f) {
-        for (int i = 0; i < FLAKES; i++) {
+        float g = Math.max(0f, gust - 1.45f) / 1.4f;
+        // a gust: the air itself goes white
+        if (g > 0f) {
+            int a = (int) (Math.min(1f, g) * 92f);
+            for (int k = 0; k < f.a.length; k++) f.a[k] = lerp(f.a[k], 0xFFE2E8EC, a);
+        }
+        // the snow running low over the ice
+        for (int i = 0; i < DRIFTS; i++) {
+            int y = (int) dy[i], x1 = (int) dx[i], len = (int) (dl[i] * (0.7f + 0.3f * gust));
+            int a = (int) ((50 + 50 * Math.min(1f, gust - 0.6f)) * dv[i]);
+            for (int j = 0; j < len; j++) {
+                float k = (float) j / len;
+                blend(f, x1 - j, y + (int) (Math.sin(j * 0.3f + i) * 1.2f), 0xFFF2F6F8, (int) (a * (1f - k) * Math.min(1f, k * 6f)));
+            }
+        }
+        int extra = (int) (FLAKES * (0.6f + 0.4f * Math.min(1f, g)));
+        for (int i = 0; i < extra; i++) {
             int x = (int) fx[i], y = (int) fy[i];
             float z = fz[i];
             int a = (int) (110 + 140 * z);
-            blend(f, x, y, 0xFFFFFFFF, a);
-            if (z > 0.7f) {
-                blend(f, x + 1, y, 0xFFF4F8FA, a * 3 / 4);
-                blend(f, x, y + 1, 0xFFF4F8FA, a * 3 / 4);
-                if (z > 0.88f) blend(f, x + 1, y + 1, 0xFFF4F8FA, a / 2);
-            }
+            if (z > 0.62f) {
+                // near ones are drawn out along their flight
+                float vx = fvx[i], vy = fvy[i], sp = (float) Math.sqrt(vx * vx + vy * vy) + 1f;
+                int n = Math.min(7, (int) (sp * 0.025f * z) + 1);
+                for (int j = 0; j < n; j++)
+                    blend(f, x - (int) (vx / sp * j), y - (int) (vy / sp * j), 0xFFFFFFFF, a * (n - j) / n);
+                if (z > 0.85f) blend(f, x + 1, y, 0xFFF4F8FA, a * 2 / 3);
+            } else blend(f, x, y, 0xFFF4F8FA, a);
         }
     }
 

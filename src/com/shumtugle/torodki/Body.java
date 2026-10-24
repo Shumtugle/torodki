@@ -50,6 +50,8 @@ final class Body {
     boolean ghost;                  // collides with nothing
     boolean gone;                   // burst: no longer part of the building
     float sunk;                     // meters gone under the water, out at sea
+    boolean icy;                    // out at sea: a block of ice, not of wood or stone
+    boolean snowy;                  // out at sea: a cap of snow on its top, till it is knocked off
     float lastHit;                  // game time of the last sound it made
     float homeX, homeY, homeZ;      // where the generator put it
     float homeQw = 1f, homeQx, homeQy, homeQz;  // and turned how, where that matters
