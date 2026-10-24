@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.48";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.49";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -70,7 +70,8 @@ final class World implements Physics.Listener {
     // the winter ocean beyond the portal: the levels after the 101st are played there
     static final int SEA_FROM = 101;
     private final Ocean ocean = new Ocean();
-    private final Ocean.Mask seaMask = new Ocean.Mask(), zSeaMask = new Ocean.Mask();
+    private final Ocean.Mask seaMask = new Ocean.Mask(), zMaskA = new Ocean.Mask(), zMaskB = new Ocean.Mask();
+    private Ocean.Mask zSeaMask = zMaskA;
     boolean atSea;
     private boolean bgSea, zoomSea;
     private final float[] callAt3 = new float[3];
@@ -305,13 +306,15 @@ final class World implements Physics.Listener {
         atSea = oceanLevel(lv);
         if (bgSea != atSea && normRas != null) paintBg(atSea);
         Builder.CZ = Builder.BASE_CZ + (atSea ? seaFar(lv - SEA_FROM) : Builder.farther(lv));
+        driftT = 0f;
+        Builder.CX = drifting(lv) ? driftAt(0f) : 0f;
         if (atSea && skipLevel(lv) && normRas != null) paintSeaAlley();
         prepareZoom();
         phys.clear();
         pieces.clear();
         // out at sea the plinth is a block of old blue ice
         plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, atSea ? 0xFFB9D4E2 : 0xFFF2E3C6);
-        plinth.setPose(0f, Builder.TOP * 0.5f, Builder.CZ, 1, 0, 0, 0);
+        plinth.setPose(Builder.CX, Builder.TOP * 0.5f, Builder.CZ, 1, 0, 0, 0);
         phys.add(plinth);
         golem = null;
         for (int i = 0; i < FLY_MAX; i++) flyState[i] = 0;
@@ -328,7 +331,10 @@ final class World implements Physics.Listener {
         if (made == null) made = buildingFor(lv);
         // grown at the first plinth spot: carried along to where the plinth stands now
         float shift = Builder.CZ - Builder.BASE_CZ;
-        for (Body b : made) b.homeZ += shift;
+        for (Body b : made) {
+            b.homeZ += shift;
+            b.homeX += Builder.CX;
+        }
         totalMass = 0f;
         for (Body b : made) {
             b.setPose(b.homeX, b.homeY, b.homeZ, 1, 0, 0, 0);
@@ -528,8 +534,9 @@ final class World implements Physics.Listener {
         if (g == null) return;
         float mx = Builder.PHX - g.hx * 0.9f, z0 = Builder.CZ - Builder.PHZ + g.hz * 0.9f, z1 = Builder.CZ + Builder.PHZ - g.hz * 0.9f;
         boolean moved = false;
-        if (g.px < -mx || g.px > mx) {
-            g.px = Math.max(-mx, Math.min(mx, g.px));
+        float cx = Builder.CX;
+        if (g.px < cx - mx || g.px > cx + mx) {
+            g.px = Math.max(cx - mx, Math.min(cx + mx, g.px));
             g.vx = -g.vx * 0.2f;
             moved = true;
         }
@@ -554,7 +561,7 @@ final class World implements Physics.Listener {
     float onPlinth() {
         float m = 0f;
         for (Body b : pieces)
-            if (!b.gone && b != goldCube && Math.abs(b.px) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.CZ) < Builder.PHZ + 0.05f
+            if (!b.gone && b != goldCube && Math.abs(b.px - Builder.CX) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.CZ) < Builder.PHZ + 0.05f
                     && b.py > Builder.TOP - 0.05f) m += b.mass;
         return totalMass > 0f ? m / totalMass : 0f;
     }
@@ -684,7 +691,7 @@ final class World implements Physics.Listener {
             baseX = sx / m;
             baseY = sy / m;
         } else {
-            ras.project(0f, Builder.TOP + 1f, Builder.CZ, scr);
+            ras.project(Builder.CX, Builder.TOP + 1f, Builder.CZ, scr);
             baseX = scr[0];
             baseY = scr[1];
         }
@@ -729,10 +736,11 @@ final class World implements Physics.Listener {
             zoomZ = 1f;
             return;
         }
-        if (Builder.CZ == zoomFor && zoomSea == atSea) return;
+        if (Builder.CZ == zoomFor && zoomSea == atSea && Builder.CX == zoomForX) return;
         zoomFor = Builder.CZ;
         zoomSea = atSea;
-        float lookY = Builder.TOP + 1.4f, dx = -CAM_X, dz = Builder.CZ;
+        zoomForX = Builder.CX;
+        float lookY = Builder.TOP + 1.4f, dx = Builder.CX - CAM_X, dz = Builder.CZ;
         float dist = (float) Math.sqrt(dx * dx + dz * dz);
         float yaw = (float) Math.atan2(dx, dz), pitch = (float) Math.atan2(lookY - CAM_Y, dist);
         zoomZ = Math.max(1.25f, Math.min(4.6f, Builder.CZ / Builder.BASE_CZ * 0.92f));
@@ -744,9 +752,70 @@ final class World implements Physics.Listener {
         zZ = zoomRas.zb.clone();
         zLit = zoomRas.lit.clone();
         // where the zoomed view's middle sits in the usual view: the closing-in heads there
-        normRas.project(0f, lookY, Builder.CZ, scr);
+        normRas.project(Builder.CX, lookY, Builder.CZ, scr);
         zPX = scr[0];
         zPY = scr[1];
+    }
+
+    // the zoomed view follows the drifting iceberg: painted afresh in the background once it
+    // has drifted off the middle, and swapped in while the view is wide
+    private float zoomForX;
+    private Raster zoomSpare;
+    private Thread zoomPaint;
+    private volatile boolean zoomReady;
+    private float zNextX, zNextCZ;
+    private int[] zNextCol;
+    private float[] zNextZ;
+    private byte[] zNextLit;
+
+    private void followZoom() {
+        if (!atSea || !drifting(level) || zoomRas == null || zoomZ <= 1f) return;
+        if (zoomReady) {
+            if (zoomed || zoomK > 0f) return;
+            if (zNextCZ != Builder.CZ) {
+                // painted for another level: of no use now
+                zoomReady = false;
+                zoomPaint = null;
+                return;
+            }
+            Raster r = zoomRas;
+            zoomRas = zoomSpare;
+            zoomSpare = r;
+            zCol = zNextCol;
+            zZ = zNextZ;
+            zLit = zNextLit;
+            zSeaMask = zSeaMask == zMaskA ? zMaskB : zMaskA;
+            zoomForX = zNextX;
+            normRas.project(zNextX, Builder.TOP + 1.4f, Builder.CZ, scr);
+            zPX = scr[0];
+            zPY = scr[1];
+            zoomReady = false;
+            zoomPaint = null;
+            return;
+        }
+        if (zoomPaint != null || Math.abs(Builder.CX - zoomForX) < 0.5f) return;
+        if (zoomSpare == null) zoomSpare = new Raster(W, h);
+        final Raster r = zoomSpare;
+        final Ocean.Mask m = zSeaMask == zMaskA ? zMaskB : zMaskA;
+        // a little ahead of where it is, the way it is drifting
+        final float x = driftAt(driftT + 0.8f), cz = Builder.CZ;
+        float lookY = Builder.TOP + 1.4f, dx = x - CAM_X, dz = Builder.CZ;
+        float dist = (float) Math.sqrt(dx * dx + dz * dz);
+        r.camera(CAM_X, CAM_Y, 0f, (float) Math.atan2(dx, dz), (float) Math.atan2(lookY - CAM_Y, dist), focal * zoomZ, h * 0.5f);
+        zoomPaint = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                new Ocean().paint(r, m);
+                zNextCol = r.col.clone();
+                zNextZ = r.zb.clone();
+                zNextLit = r.lit.clone();
+                zNextX = x;
+                zNextCZ = cz;
+                zoomReady = true;
+            }
+        });
+        zoomPaint.setDaemon(true);
+        zoomPaint.start();
     }
 
     /** Swaps cameras, carrying the aim over so the ring stays on the same spot of the world. */
@@ -959,15 +1028,24 @@ final class World implements Physics.Listener {
             return;
         }
         int gy = golemY();
-        // out at sea neither the golem nor the alley answers
-        if (!atSea && y >= gy && y < gy + 34 && x >= BX0 + 14 && x < W / 2 - 3) {
+        // three buttons in a row: the golem, the alley, the stones on the water. Out at sea
+        // only the stones answer; on the street only the first two
+        int which = y >= gy && y < gy + 34 ? boothButton(x) : -1;
+        if (which == 2 && atSea) {
+            dialled.setLength(0);
+            booth = -1f;
+            host.sound(Synth.SPLASH, 0.8f, 1.2f);
+            startSkip();
+            return;
+        }
+        if (!atSea && which == 0) {
             dialled.setLength(0);
             booth = -1f;
             host.sound(Synth.ROAR, 0.8f, 1f);
             startBoss(level);
             return;
         }
-        if (!atSea && y >= gy && y < gy + 34 && x >= W / 2 + 3 && x < BX1 - 14) {
+        if (!atSea && which == 1) {
             dialled.setLength(0);
             booth = -1f;
             host.sound(Synth.DOOR, 0.8f, 1.15f);
@@ -980,6 +1058,32 @@ final class World implements Physics.Listener {
             closeBooth();
         }
     }
+
+    /** The row of three buttons under the keypad: their left edges, and the right edge of the last. */
+    private void boothRow(int[] out) {
+        int x0 = BX0 + 14, x3 = BX1 - 14, w3 = (x3 - x0) / 3;
+        out[0] = x0;
+        out[1] = x0 + w3;
+        out[2] = x0 + 2 * w3;
+        out[3] = x3;
+    }
+
+    private int boothButton(float x) {
+        int[] bx = new int[4];
+        boothRow(bx);
+        if (x < bx[0] || x >= bx[3]) return -1;
+        return x < bx[1] - 3 ? 0 : x < bx[1] + 3 ? -1 : x < bx[2] - 3 ? 1 : x < bx[2] + 3 ? -1 : 2;
+    }
+
+    // a flat stone skipping over the waves
+    private static final String[] SKIP = {
+            ".XX..........",
+            "XXXX...X...X.",
+            ".XX...X.X.X.X",
+            ".....X...X...",
+            ".............",
+            "X.X.X.X.X.X.X",
+            ".X.X.X.X.X.X."};
 
     // pictures for the keys, a cell to a character
     private static final String[] HANDSET = {
@@ -1063,18 +1167,25 @@ final class World implements Physics.Listener {
             else if (clear) glyph(f, ERASE, bx + KW / 2, by + KH / 2 + o, 4, 0xFF2A2420);
             else PixelFont.draw(f, KEYS[k], bx + KW / 2 - PixelFont.width(KEYS[k], 2) / 2, by + KH / 2 - 6 + o, 2, 0xFF2A2420);
         }
-        // the golem's red button, the alley's blue one beside it, and the hook to hang up on
+        // the golem's red button, the alley's blue one, the sea-green one for stones on the
+        // water, and the hook to hang up on
         int gy = golemY();
-        f.rect(BX0 + 14, gy, W / 2 - 3, gy + 34, 0xFF3A1A10);
-        f.rect(BX0 + 16, gy + 2, W / 2 - 5, gy + 32, ((int) (clock * 3f + booth * 3f) & 1) == 0 ? 0xFFD8402A : 0xFFB8301E);
-        int gx = (BX0 + 14 + W / 2 - 3) / 2;
+        int[] bx = new int[4];
+        boothRow(bx);
+        f.rect(bx[0], gy, bx[1] - 3, gy + 34, 0xFF3A1A10);
+        f.rect(bx[0] + 2, gy + 2, bx[1] - 5, gy + 32, ((int) (clock * 3f + booth * 3f) & 1) == 0 ? 0xFFD8402A : 0xFFB8301E);
+        int gx = (bx[0] + bx[1] - 3) / 2;
         PixelFont.draw(f, "GOLEM", gx - PixelFont.width("GOLEM", 2) / 2, gy + 10, 2, 0xFFFFE8D8);
-        f.rect(W / 2 + 3, gy, BX1 - 14, gy + 34, 0xFF14243A);
-        f.rect(W / 2 + 5, gy + 2, BX1 - 16, gy + 32, 0xFF2F5D8C);
-        glyph(f, BOWL, (W / 2 + 3 + BX1 - 14) / 2, gy + 17, 3, 0xFFF3EDE0);
-        if (atSea)
-            for (int yy = gy; yy < gy + 34; yy++)
-                for (int xx = BX0 + 14; xx < BX1 - 14; xx++) f.a[yy * W + xx] = Backdrop.mix(f.a[yy * W + xx], 0xFF2A2E33, 0.75f);
+        f.rect(bx[1] + 3, gy, bx[2] - 3, gy + 34, 0xFF14243A);
+        f.rect(bx[1] + 5, gy + 2, bx[2] - 5, gy + 32, 0xFF2F5D8C);
+        glyph(f, BOWL, (bx[1] + bx[2]) / 2, gy + 17, 3, 0xFFF3EDE0);
+        f.rect(bx[2] + 3, gy, bx[3], gy + 34, 0xFF103A3A);
+        f.rect(bx[2] + 5, gy + 2, bx[3] - 2, gy + 32, 0xFF2A7A78);
+        glyph(f, SKIP, (bx[2] + 3 + bx[3]) / 2, gy + 17, 3, 0xFFF3EDE0);
+        // what does not answer here is dimmed
+        int d0 = atSea ? bx[0] : bx[2] + 3, d1 = atSea ? bx[2] - 3 : bx[3];
+        for (int yy = gy; yy < gy + 34; yy++)
+            for (int xx = d0; xx < d1; xx++) f.a[yy * W + xx] = Backdrop.mix(f.a[yy * W + xx], 0xFF2A2E33, 0.75f);
         f.rect(W / 2 - 46, gy + 46, W / 2 + 46, gy + 66, 0xFF1E1C1A);
         f.rect(W / 2 - 40, gy + 42, W / 2 + 40, gy + 50, 0xFF2E2C2A);
         PixelFont.draw(f, "HOME", W / 2 - PixelFont.width("HOME", 1) / 2, gy + 54, 1, 0xFFE8E2D6);
@@ -1122,6 +1233,13 @@ final class World implements Physics.Listener {
     float[] standCallButton() {
         float[] o = new float[2];
         callScreen(ras, o);
+        // where it shows on the rocking screen
+        if (atSea) {
+            float px = o[0] - W * 0.5f + rockX, py = o[1] - h * 0.5f + rockY;
+            float c = (float) Math.cos(rockA), sn = (float) Math.sin(rockA);
+            o[0] = W * 0.5f + ROCK_S * (c * px - sn * py);
+            o[1] = h * 0.5f + ROCK_S * (sn * px + c * py);
+        }
         return o;
     }
 
@@ -1845,7 +1963,7 @@ final class World implements Physics.Listener {
         }
         if (best > 1e8f) {
             // the vertical plane through the plinth, a little short of the far end
-            best = ras.depth(0f, CAM_Y, Builder.CZ);
+            best = ras.depth(Builder.CX, CAM_Y, Builder.CZ);
             if (dy * best + CAM_Y < 0f && dy < 0f) best = -CAM_Y / dy;
         }
         out[0] = CAM_X + dx * best;
@@ -1953,6 +2071,7 @@ final class World implements Physics.Listener {
         while (acc >= 1f / 60f && steps < 2) {
             acc -= 1f / 60f;
             steps++;
+            drift(1f / 60f);
             if (state != BUILD && state != VANISH) phys.step(1f / 60f);
             flyingCases();
             bursts();
@@ -1965,6 +2084,7 @@ final class World implements Physics.Listener {
         puddles(dt);
         life.update(dt);
         if (atSea) {
+            followZoom();
             ocean.orcaStep(dt);
             ocean.snow(dt);
             rockStep();
@@ -2511,7 +2631,7 @@ final class World implements Physics.Listener {
                         || b.maxY + e < o.minY || o.maxZ + e < b.minZ || b.maxZ + e < o.minZ)) phys.wake(o);
             for (int i = 0; i < 120; i++) spawnWater(b.px, b.py, b.pz, b.vx, b.vy, b.vz);
             for (int i = 0; i < 6; i++) spawn(b.px, b.py, b.pz, true, 0xFFF2F8FF, 1.6f);
-            boolean onTop = Math.abs(b.px) < Builder.PHX && Math.abs(b.pz - Builder.CZ) < Builder.PHZ
+            boolean onTop = Math.abs(b.px - Builder.CX) < Builder.PHX && Math.abs(b.pz - Builder.CZ) < Builder.PHZ
                     && b.py > Builder.TOP - 0.2f;
             int top = addPuddle(b.px, onTop ? Builder.TOP : 0.002f, b.pz, 1.5f + fx.nextFloat() * 0.6f);
             if (onTop) {
@@ -2704,7 +2824,7 @@ final class World implements Physics.Listener {
             pX[i] += pVx[i] * dt;
             pY[i] += pVy[i] * dt;
             pZ[i] += pVz[i] * dt;
-            float floor = Math.abs(pX[i]) < Builder.PHX && Math.abs(pZ[i] - Builder.CZ) < Builder.PHZ ? Builder.TOP : 0f;
+            float floor = Math.abs(pX[i] - Builder.CX) < Builder.PHX && Math.abs(pZ[i] - Builder.CZ) < Builder.PHZ ? Builder.TOP : 0f;
             if (pY[i] < floor && !pDust[i]) {
                 pY[i] = floor;
                 pVy[i] = -pVy[i] * 0.3f;
@@ -2719,7 +2839,7 @@ final class World implements Physics.Listener {
      * swinging from side to side; once down they lie where they fell.
      */
     private void flutter(int i, float dt) {
-        float floor = Math.abs(pX[i]) < Builder.PHX && Math.abs(pZ[i] - Builder.CZ) < Builder.PHZ ? Builder.TOP : 0f;
+        float floor = Math.abs(pX[i] - Builder.CX) < Builder.PHX && Math.abs(pZ[i] - Builder.CZ) < Builder.PHZ ? Builder.TOP : 0f;
         if (pY[i] <= floor + 0.01f && pVy[i] <= 0f) {
             pY[i] = floor + 0.01f;
             pVx[i] = pVy[i] = pVz[i] = 0f;
@@ -3070,7 +3190,7 @@ final class World implements Physics.Listener {
     }
 
     private float portalX() {
-        return (holeU - 0.5f) * portalW();
+        return Builder.CX + (holeU - 0.5f) * portalW();
     }
 
     private void openPortal() {
@@ -3150,7 +3270,7 @@ final class World implements Physics.Listener {
         float open = Math.max(0f, Math.min(1f, t / 1.1f));
         if (open <= 0f) return;
         float e = 1f - (1f - open) * (1f - open) * (1f - open);
-        float vz = ras.project(0f, portalMid(), Builder.CZ, scr);
+        float vz = ras.project(Builder.CX, portalMid(), Builder.CZ, scr);
         if (vz < 0.5f) return;
         float cx = scr[0], cy = scr[1];
         // grows out of a puff, breathes, sways a little
@@ -3269,7 +3389,7 @@ final class World implements Physics.Listener {
 
     /** How far the iceberg rides up or down now, on the swell: a little, it is heavy. */
     private float floeLift() {
-        return 0.6f * Ocean.heave(0f, Builder.CZ, clock);
+        return 0.6f * Ocean.heave(Builder.CX, Builder.CZ, clock);
     }
 
     /**
@@ -3311,9 +3431,51 @@ final class World implements Physics.Listener {
 
     /** The floe underfoot rocks: the view leans a little and rises and sinks with it. */
     private void rockStep() {
-        rockA = 0.034f * (float) Math.sin(clock * 0.8f) + 0.012f * (float) Math.sin(clock * 1.9f + 1f);
-        rockY = 7.5f * (float) Math.sin(clock * 1.05f + 0.4f) + 2f * (float) Math.sin(clock * 2.6f);
-        rockX = 3f * (float) Math.sin(clock * 0.61f);
+        // the floe underfoot lies still at first; from the 110th it rocks, harder as it goes
+        int n = level - SEA_FROM;
+        float k = n < 8 ? 0f : Math.min(1f, 0.55f + (n - 8) * 0.05f);
+        rockA = k * (0.034f * (float) Math.sin(clock * 0.8f) + 0.012f * (float) Math.sin(clock * 1.9f + 1f));
+        rockY = k * (7.5f * (float) Math.sin(clock * 1.05f + 0.4f) + 2f * (float) Math.sin(clock * 2.6f));
+        rockX = k * 3f * (float) Math.sin(clock * 0.61f);
+    }
+
+    // ---- the drifting iceberg ----
+    // From the 120th on, the iceberg does not keep still: it drifts in from the left edge
+    // of the view to the right and back again, the building riding on it, so the target
+    // moves as well as rocks. Everything resting on it is carried along with it.
+
+    private float driftT;
+
+    static boolean drifting(int lv) {
+        return lv - SEA_FROM >= 18;
+    }
+
+    /** Where the iceberg is across, at a time into its drift: from the left edge, to the right, and back. */
+    private static float driftAt(float t) {
+        // across the middle of the usual view at that distance, near its edges at both ends
+        float hw = Builder.CZ * 0.263f, mid = CAM_X + Builder.CZ * (float) Math.tan(YAW);
+        return mid - 0.62f * hw * (float) Math.cos(t * 0.11f);
+    }
+
+    /** One step of the drift: the plinth moves, and what rests on it moves with it. */
+    private void drift(float dt) {
+        if (!atSea || !drifting(level) || golem != null) return;
+        if (state != PLAY && state != WON && state != LOST) return;
+        driftT += dt;
+        float x = driftAt(driftT), dx = x - Builder.CX;
+        if (dx == 0f) return;
+        float old = Builder.CX;
+        Builder.CX = x;
+        plinth.px += dx;
+        plinth.ppx += dx;
+        for (Body b : pieces) {
+            if (b.gone || b.sunk > 0f) continue;
+            if (Math.abs(b.px - old) > Builder.PHX + 0.4f || b.minY < Builder.TOP - 0.3f) continue;
+            b.px += dx;
+            b.ppx += dx;
+            b.homeX += dx;
+            b.updateR();
+        }
     }
 
     /** Where a point shown on the rocking screen lies in the steady picture. */
@@ -3360,7 +3522,12 @@ final class World implements Physics.Listener {
             ocean.boats(ras, clock);
             ocean.orcas(ras);
             lift = floeLift();
-            if (golem == null) ocean.iceberg(ras, Builder.CZ, lift, FLOE_ID << 3, clock);
+            if (golem == null) {
+                // the iceberg is laid out round x = 0: drawn where it has drifted to
+                ras.camX -= Builder.CX;
+                ocean.iceberg(ras, Builder.CZ, lift, FLOE_ID << 3, clock);
+                ras.camX += Builder.CX;
+            }
         } else if (golem == null) drawBody(plinth, 1f, 0f, 1);
         if (state == PORTAL) drawPortal();
         drawCallButton();

@@ -1,0 +1,19 @@
+# From the 120th level out at sea the floe underfoot rocks and the iceberg drifts across the view.
+screen 1096 2560
+level 119
+wait 1.0
+shot d1
+wait 6.0
+shot d2
+wait 6.0
+shot d3
+down 548 1000
+wait 1.0
+shot d4_aim
+up 548 1000
+wait 4.0
+shot d5
+state
+wait 8.0
+shot d6
+state

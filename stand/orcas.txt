@@ -1,7 +1,7 @@
 # Out at sea: a pod of killer whales going by in front of the iceberg.
 screen 1096 2560
 level 101
-wait 6.0
+wait 9.0
 shot k1
 wait 1.2
 shot k2

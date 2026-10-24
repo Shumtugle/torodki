@@ -589,6 +589,80 @@ final class Ocean {
     private final float[] sp0 = new float[3], sp1 = new float[3];
     private static final float[] ORCA_R = {0.28f, 0.48f, 0.62f, 0.66f, 0.6f, 0.5f, 0.38f, 0.26f, 0.17f, 0.12f};
 
+    private static final int NS = 12, NR = 10;
+    private final float[][] wX = new float[NS][NR], wY = new float[NS][NR], wZ = new float[NS][NR];
+    private final float[] q4x = new float[4], q4y = new float[4], q4z = new float[4];
+
+    /**
+     * One whale's body, of a piece: rings round its spine from snout to tail, joined by
+     * faces; black above, the belly white, a white patch behind the eye, a grey saddle
+     * behind the fin. False when none of it is above the water.
+     */
+    private boolean body(Raster r, int p, int k, float size, int id) {
+        spine(p, k, 0f, sp0);
+        spine(p, k, 1f, sp1);
+        float tx0 = sp1[0] - sp0[0], ty0 = sp1[1] - sp0[1], tl = (float) Math.sqrt(tx0 * tx0 + ty0 * ty0);
+        float txn = tx0 / tl, tyn = ty0 / tl;
+        // up, square to the spine in its vertical plane; side is across the way it swims
+        float ux = -tyn, uy = txn;
+        if (uy < 0f) {
+            ux = -ux;
+            uy = -uy;
+        }
+        boolean above = false;
+        for (int i = 0; i < NS; i++) {
+            float u = i / (float) (NS - 1), fi = u * (ORCA_R.length - 1);
+            int i0 = Math.min(ORCA_R.length - 2, (int) fi);
+            float rad = (ORCA_R[i0] + (ORCA_R[i0 + 1] - ORCA_R[i0]) * (fi - i0)) * size;
+            // the snout comes to a blunt point; the tail stock is flattened side to side
+            if (i == 0) rad *= 0.5f;
+            float wide = u > 0.7f ? 0.6f : 0.9f;
+            spine(p, k, u, sp0);
+            for (int j = 0; j < NR; j++) {
+                double th = j * Math.PI * 2 / NR;
+                float c = (float) Math.cos(th) * rad, sn = (float) Math.sin(th) * rad * wide;
+                wX[i][j] = sp0[0] + ux * c;
+                wY[i][j] = sp0[1] + uy * c;
+                wZ[i][j] = sp0[2] + sn;
+                if (wY[i][j] > -0.03f) above = true;
+            }
+        }
+        if (!above) return false;
+        for (int i = 0; i < NS - 1; i++) {
+            float u = (i + 0.5f) / (NS - 1);
+            for (int j = 0; j < NR; j++) {
+                int jn = (j + 1) % NR;
+                if (wY[i][j] < -0.3f && wY[i][jn] < -0.3f && wY[i + 1][j] < -0.3f && wY[i + 1][jn] < -0.3f) continue;
+                double thm = (j + 0.5) * Math.PI * 2 / NR;
+                float cm = (float) Math.cos(thm), sm = (float) Math.sin(thm);
+                float nx = ux * cm, ny = uy * cm, nz = sm;
+                q4x[0] = wX[i][j];
+                q4y[0] = wY[i][j];
+                q4z[0] = wZ[i][j];
+                q4x[1] = wX[i][jn];
+                q4y[1] = wY[i][jn];
+                q4z[1] = wZ[i][jn];
+                q4x[2] = wX[i + 1][jn];
+                q4y[2] = wY[i + 1][jn];
+                q4z[2] = wZ[i + 1][jn];
+                q4x[3] = wX[i + 1][j];
+                q4y[3] = wY[i + 1][j];
+                q4z[3] = wZ[i + 1][j];
+                if ((r.camX - q4x[0]) * nx + (r.camY - q4y[0]) * ny + (r.camZ - q4z[0]) * nz <= 0f) continue;
+                int c = 0xFF16181C;
+                if (cm < -0.3f && u > 0.08f && u < 0.62f) c = 0xFFE6EAEC;              // the belly
+                else if (u > 0.1f && u < 0.22f && cm > 0.1f && cm < 0.75f) c = 0xFFF0F2F2; // behind the eye
+                else if (u > 0.45f && u < 0.6f && cm > 0.75f) c = 0xFF54585E;          // the saddle
+                float ndl = nx * Raster.sunX() + ny * Raster.sunY() + nz * Raster.sunZ();
+                int lc = Raster.light(c, nx, ny, nz, ndl);
+                // wet: a sheen where it faces the sky
+                if (ny > 0.6f) lc = Backdrop.mix(lc, 0xFFB8C4CC, (ny - 0.6f) * 0.5f);
+                r.poly(q4x, q4y, q4z, null, null, 4, lc, Raster.PAT_FLAT, id, false);
+            }
+        }
+        return true;
+    }
+
     void orcas(Raster r) {
         for (int p = 0; p < PODS; p++) {
             if (!podOn[p]) continue;
@@ -601,16 +675,7 @@ final class Ocean {
                 r.project(sp0[0], 0f, sp0[2], s);
                 if (s[0] < -80f || s[0] > r.w + 80f) continue;
                 int id = (980 + p * 4 + k) << 3;
-                boolean any = false;
-                for (int i = 0; i < 16; i++) {
-                    float u = i / 15f, fi = u * (ORCA_R.length - 1);
-                    int i0 = Math.min(ORCA_R.length - 2, (int) fi);
-                    float rad = (ORCA_R[i0] + (ORCA_R[i0 + 1] - ORCA_R[i0]) * (fi - i0)) * size;
-                    spine(p, k, u, sp0);
-                    if (sp0[1] + rad < -0.05f) continue;
-                    any = true;
-                    r.ball(sp0[0], sp0[1], sp0[2], rad, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0xFF17191D, 0xFF17191D, id, true);
-                }
+                boolean any = body(r, p, k, size, id);
                 // the tall fin, over the middle of the back
                 spine(p, k, 0.36f, sp0);
                 spine(p, k, 0.5f, sp1);

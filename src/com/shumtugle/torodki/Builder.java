@@ -15,6 +15,7 @@ final class Builder {
     static final float TOP = 1.0f;           // plinth top
     static final float BASE_CZ = 11.5f;      // plinth center along the street, early levels
     static float CZ = BASE_CZ;               // where it stands for the level being played
+    static float CX = 0f;                    // and across: out at sea, from the 120th on, it drifts
 
     /**
      * How much farther down the street the plinth stands for a level (counted from 0):

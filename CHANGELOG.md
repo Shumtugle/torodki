@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.49
+- The killer whales are one smooth body each now, not a string of balls: black, the belly
+  white, a white patch behind the eye, a grey saddle behind the tall fin, the flukes.
+- From the 110th level the floe underfoot rocks, a little at first and harder by the
+  120th; before that it lies still.
+- From the 120th the iceberg drifts: in from the left edge of the view, across to the right
+  and back, slowly, carrying the building with it, while it rises and sinks on the swell.
+  The close view for aiming follows it.
+- The booth has a third button, sea-green with a stone skipping over waves: out at sea it
+  starts stone skipping with the ice golem. On the street it is dimmed, and at sea the
+  golem's and the alley's are.
+
 ## 0.48
 - The game opens on a picture: the golem bursting into the street in a storm of rubble, the
   view drifting slowly from its glowing head toward the fist coming at the player, the
