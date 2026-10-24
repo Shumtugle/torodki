@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.55";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.56";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -63,6 +63,7 @@ final class World implements Physics.Listener {
     private float zoomFor = -1f, zoomZ = 1f, zoomK, zPX, zPY;
     private boolean zoomed;
     static final float ZOOM_T = 0.3f;        // seconds to close in, and back
+    static final float FINGER = 34f;         // pixels a ring is lifted to show above a finger
     private int[] bgCol;
     private float[] bgZ;
     private byte[] bgLit;
@@ -716,6 +717,13 @@ final class World implements Physics.Listener {
                 baseX = aimX;
                 baseY = aimY;
             }
+            // at the drifting iceberg the last throw's spot has long been left behind, and the
+            // player puts the finger where he means to aim, ahead of it: the ring starts there.
+            // Closing in, the view enlarges that spot away from the finger, so it stays in sight
+            if (atSea && drifting(level) && golem == null) {
+                baseX = x;
+                baseY = zoomed ? y - FINGER : y;
+            }
             aimX = baseX;
             aimY = baseY;
             downAt = clock;
@@ -911,7 +919,7 @@ final class World implements Physics.Listener {
             if (zoomed && d != 0f) {
                 // the ring keeps its place in the world
                 float F = focal * zoomZ;
-                aimX = W * 0.5f + F * (float) Math.tan(Math.atan((aimX - W * 0.5f) / F) - d);
+                aimX = Math.max(2f, Math.min(W - 3f, W * 0.5f + F * (float) Math.tan(Math.atan((aimX - W * 0.5f) / F) - d)));
                 baseX = W * 0.5f + F * (float) Math.tan(Math.atan((baseX - W * 0.5f) / F) - d);
             }
         }
@@ -1027,10 +1035,14 @@ final class World implements Physics.Listener {
         zoomed = on;
         ras = on ? zoomRas : normRas;
         if (on) {
-            aimX = (aimX - zPX) * zoomZ + W * 0.5f;
-            aimY = (aimY - zPY) * zoomZ + h * 0.5f;
+            // never off the screen: a ring that cannot be seen cannot be aimed
+            aimX = Math.max(2f, Math.min(W - 3f, (aimX - zPX) * zoomZ + W * 0.5f));
+            aimY = Math.max(2f, Math.min(h - 3f, (aimY - zPY) * zoomZ + h * 0.5f));
             baseX = (baseX - zPX) * zoomZ + W * 0.5f;
             baseY = (baseY - zPY) * zoomZ + h * 0.5f;
+            // enlarged, the spot may come to lie under the finger itself: then it shows above it
+            if (aiming && atSea && drifting(level) && Math.abs(aimX - lastX) < FINGER * 0.8f && aimY > lastY - FINGER)
+                aimY = Math.max(2f, lastY - FINGER);
         } else {
             aimX = (aimX - W * 0.5f) / zoomZ + zPX;
             aimY = (aimY - h * 0.5f) / zoomZ + zPY;
@@ -1481,6 +1493,28 @@ final class World implements Physics.Listener {
             o[1] = h * 0.5f + ROCK_S * (sn * px + c * py);
         }
         return o;
+    }
+
+    /**
+     * For the stand: where on the rocking screen a finger would touch to point at the
+     * iceberg's middle shifted by dx across and up by dy, meters, in the view now shown.
+     */
+    float[] standPointAt(float dx, float dy) {
+        float[] o = new float[2];
+        ras.project(Builder.CX + dx, Builder.TOP + dy, Builder.CZ, o);
+        if (atSea) {
+            float px = o[0] - W * 0.5f + rockX, py = o[1] - h * 0.5f + rockY;
+            float c = (float) Math.cos(rockA), sn = (float) Math.sin(rockA);
+            o[0] = W * 0.5f + ROCK_S * (c * px - sn * py);
+            o[1] = h * 0.5f + ROCK_S * (sn * px + c * py);
+        }
+        return o;
+    }
+
+    /** For the stand: the world point the ring points at now, on the plane through the plinth. */
+    float[] standRingWorld() {
+        target(aimX, aimY, tmp);
+        return new float[]{tmp[0] - Builder.CX, tmp[1] - Builder.TOP};
     }
 
     void standGolemAt(float z) {

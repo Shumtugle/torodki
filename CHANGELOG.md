@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.56
+- At the drifting iceberg the ring starts where the finger goes down. Before, it started
+  at the spot of the last throw, kept in the world: the iceberg had long drifted away from
+  it, so the ring came up at the far edge of the close view, or past it, while the finger
+  was ahead of the iceberg with no room left to move it across.
+- Closing in, the view enlarges the spot the finger chose: a finger put down a meter ahead
+  of the iceberg brings the ring up a meter ahead of it. Should that spot fall under the
+  finger, the ring shows just above it instead.
+- The ring never leaves the screen, neither on closing in nor while the close view turns
+  after the iceberg.
+
 ## 0.55
 - A drifting iceberg no longer leaves its building standing on nothing. The plinth moved
   with the drift, but its bounds for the physics stayed where the level began: a few

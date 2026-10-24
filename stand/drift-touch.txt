@@ -1,0 +1,31 @@
+# The drifting iceberg, second throw: the finger goes down ahead of it, to its right, in the wide view.
+screen 1096 2560
+level 121
+wait 2.0
+down 548 1000
+wait 0.6
+up 548 1000
+wait 9.0
+ring
+shot t0wide
+downahead 1.5 1.2
+wait 0.15
+ring
+shot t1closing
+wait 0.5
+ring
+shot t2zoomed
+move 200 300
+wait 0.3
+ring
+shot t3moved
+up 200 300
+wait 4.0
+state
+level 127
+wait 20.0
+downahead -1.5 2.5
+wait 0.6
+ring
+shot t4back
+up 0 0
