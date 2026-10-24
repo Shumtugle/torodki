@@ -1,0 +1,28 @@
+Winter buildings (assets/winter.bin)
+====================================
+
+The fifty buildings played out at sea are adapted from the main set of generated
+levels published with the work "Utilizing Generative Adversarial Networks for
+Stable Structure Generation in Angry Birds", (c) 2023 Frederic Abraham, Mathew
+Stephenson, licensed under Creative Commons Attribution-ShareAlike 4.0
+International (CC BY-SA 4.0).
+
+  Source:  https://github.com/Blaxzter/Utilizing-Generative-Adversarial-Networks-for-Stable-Structure-Generation-in-Angry-Birds/tree/main/generated_levels/main_set
+           (commit c803c18be10c96f029a62ee6df58aa94224e61f7)
+  License: https://creativecommons.org/licenses/by-sa/4.0/
+
+Changes made: fifty of the eight thousand levels were chosen, numbers
+  1528 1125 6532 6159 5553 5578 4580 437 7412 7184 6484 3045 3692 7762
+  3545 1069 978 6970 5106 6871 265 6091 1026 2975 3394 3525 2545 5805 6885
+  1755 2015 6775 4762 6248 3669 6651 1776 4841 2306 3840 5383 5104 1940
+  2751 1715 288 7842 2002 5355 6006
+in the order they are played. Targets, birds, slingshot and camera were removed.
+The flat blocks were given a depth of 0.48 m, scaled down where needed to fit the
+plinth, narrowed by 5 cm so neighbours do not overlap, and each laid exactly on what
+is under it; then tested for standing in this game's physics, both as they are and
+mirrored, and ordered from easy to stubborn by one test throw. In play they come
+round again after the fiftieth, mirrored on every other pass.
+
+The adapted set in assets/winter.bin is licensed under CC BY-SA 4.0 as well. The
+material is provided as is, without warranties, as the license says. Everything
+else in this project stays under the terms in LICENSE.

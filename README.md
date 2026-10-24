@@ -36,4 +36,6 @@ each took.
 
 ## License
 
-0BSD, see `LICENSE`.
+0BSD, see `LICENSE`. The fifty winter buildings in `assets/winter.bin` are adapted
+from a published set of generated layouts and are under CC BY-SA 4.0: authors,
+source and changes are in `CREDITS`.

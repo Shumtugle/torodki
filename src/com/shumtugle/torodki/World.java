@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.45";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.46";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -208,6 +208,7 @@ final class World implements Physics.Listener {
         cubes = Math.max(0, host.loadInt("cubes"));
         cubesDue = Math.max(0, host.loadInt("cubesDue"));
         atSea = oceanLevel(level);
+        if (!Builder.hasWinter()) Builder.readWinter(host.asset("winter.bin"));
         phys.listener = this;
     }
 
@@ -347,9 +348,11 @@ final class World implements Physics.Listener {
         if (atSea) {
             // out at sea a good part of every building is ice, and snow lies on its tops
             java.util.Random ir = new java.util.Random(seed ^ 0x1CEL);
+            boolean set = Builder.hasWinter();
             for (Body b : made) {
                 boolean block = b.radius == 0f && (b.material == Body.WOOD || b.material == Body.STONE);
-                b.icy = block && ir.nextFloat() < 0.42f;
+                // the winter set brings its own ice; a grown building is iced here
+                if (!set) b.icy = block && ir.nextFloat() < 0.42f;
                 b.snowy = block && ir.nextFloat() < 0.9f;
             }
         }
@@ -379,6 +382,14 @@ final class World implements Physics.Listener {
     /** Tries seeds until the building stands still on its own for a second. */
     /** A building for a level, tested and ready, laid out at the first plinth spot. Thread-safe. */
     static ArrayList<Body> buildingFor(int lv) {
+        if (oceanLevel(lv) && Builder.hasWinter()) {
+            // out at sea, the winter set; one that will not stand this way round may the other,
+            // and should neither, a grown one instead
+            for (int turn = 0; turn < 2; turn++) {
+                ArrayList<Body> made = new Builder().winter(lv - SEA_FROM, seedOf(lv), turn == 1);
+                if (standsStill(made)) return made;
+            }
+        }
         return standingBuilding(new Builder(), lv, seedOf(lv));
     }
 

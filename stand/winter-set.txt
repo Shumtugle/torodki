@@ -1,0 +1,65 @@
+# The winter set: a few of its fifty buildings, seen close as when aiming.
+screen 1096 2560
+level 101
+wait 1.2
+down 548 1000
+wait 0.5
+shot w0
+up 548 1000
+wait 0.2
+level 107
+wait 1.2
+down 548 1000
+wait 0.5
+shot w6
+up 548 1000
+wait 0.2
+level 113
+wait 1.2
+down 548 1000
+wait 0.5
+shot w12
+up 548 1000
+wait 0.2
+level 119
+wait 1.2
+down 548 1000
+wait 0.5
+shot w18
+up 548 1000
+wait 0.2
+level 125
+wait 1.2
+down 548 1000
+wait 0.5
+shot w24
+up 548 1000
+wait 0.2
+level 131
+wait 1.2
+down 548 1000
+wait 0.5
+shot w30
+up 548 1000
+wait 0.2
+level 137
+wait 1.2
+down 548 1000
+wait 0.5
+shot w36
+up 548 1000
+wait 0.2
+level 143
+wait 1.2
+down 548 1000
+wait 0.5
+shot w42
+up 548 1000
+wait 0.2
+level 150
+wait 1.2
+down 548 1000
+wait 0.5
+shot w49
+up 548 1000
+wait 0.2

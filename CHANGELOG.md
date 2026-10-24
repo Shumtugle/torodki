@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.46
+- Out at sea the buildings are no longer grown from the street's recipes: fifty winter
+  buildings of wood, stone and ice, chosen from a published set of eight thousand
+  generated layouts, given depth, settled, tested for standing and ordered from easy to
+  stubborn. After the fiftieth they come round again, mirrored every other pass. The
+  ice in them is their own; snow still lies on their tops. Authors, source and changes
+  are in `CREDITS`; the set is under CC BY-SA 4.0.
+
 ## 0.45
 - The portal is a ring of glowing cloud now, gathering over the plinth out of a puff;
   through it shows raw winter: a grey sky, a dark sea, fog blowing across and snow

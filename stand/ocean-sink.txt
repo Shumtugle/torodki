@@ -2,7 +2,7 @@
 screen 1096 2560
 level 101
 wait 1.0
-throwat 0 1.8 53.5 14
+throwat 0 3.0 53.5 14
 wait 3.0
 shot s1
 wait 1.0
@@ -10,7 +10,7 @@ shot s2
 wait 3.0
 shot s3
 state
-throwat 0 1.5 53.5 14
+throwat 0 2.6 53.5 14
 wait 4.0
 shot s4
 state

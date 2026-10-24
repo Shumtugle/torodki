@@ -99,6 +99,56 @@ final class Builder {
         return LATE[r % LATE.length];
     }
 
+    // ---- the winter set ----
+    // Out at sea the buildings are not grown: they come from a set of fifty laid out in
+    // advance, flat in depth, of wood, stone and ice, from easy ones to stubborn ones.
+    // Each is a list of blocks: material (0 wood, 1 stone, 2 ice), middle across, bottom
+    // and size, in millimeters above the plinth top. After fifty they come round again,
+    // mirrored on every other pass.
+
+    static final float WINTER_DEPTH = 0.24f;      // half the depth of every block, meters
+    private static volatile short[][] winter;
+
+    static void readWinter(byte[] b) {
+        if (b == null || b.length < 2) return;
+        int n = ((b[0] & 0xFF) << 8) | (b[1] & 0xFF), p = 2;
+        short[][] set = new short[n][];
+        for (int i = 0; i < n; i++) {
+            if (p + 3 > b.length) return;
+            int m = b[p + 2] & 0xFF;
+            p += 3;
+            if (p + m * 9 > b.length) return;
+            short[] l = new short[m * 5];
+            for (int k = 0; k < m; k++, p += 9) {
+                l[k * 5] = b[p];
+                for (int j = 0; j < 4; j++) l[k * 5 + 1 + j] = (short) (((b[p + 1 + j * 2] & 0xFF) << 8) | (b[p + 2 + j * 2] & 0xFF));
+            }
+            set[i] = l;
+        }
+        winter = set;
+    }
+
+    static boolean hasWinter() {
+        return winter != null && winter.length > 0;
+    }
+
+    /** The n-th building of the winter set, counted from the first level at sea. */
+    ArrayList<Body> winter(int n, long seed, boolean turn) {
+        out.clear();
+        rnd = new Random(seed);
+        paintChance = 0.1f;
+        short[][] set = winter;
+        short[] l = set[n % set.length];
+        float flip = ((n / set.length) % 2 == 1) != turn ? -1f : 1f;
+        for (int k = 0; k < l.length / 5; k++) {
+            int m = l[k * 5];
+            float x = l[k * 5 + 1] * 0.001f * flip, y = l[k * 5 + 2] * 0.001f, w = l[k * 5 + 3] * 0.001f, h = l[k * 5 + 4] * 0.001f;
+            Body b = piece(x, TOP + y + h * 0.5f, BASE_CZ, w, h, WINTER_DEPTH * 2f, m == 1);
+            b.icy = m == 2;
+        }
+        return new ArrayList<Body>(out);
+    }
+
     // ---- pieces ----
 
     private int wood() {
