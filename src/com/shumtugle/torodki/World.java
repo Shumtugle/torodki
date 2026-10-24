@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.41";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.42";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -1795,12 +1795,12 @@ final class World implements Physics.Listener {
             clock += dt;
             alley.update(dt, this);
             alley.handUpdate(dt);
+            thunderStep(dt);
             if (alley != null && alley.phase == Alley.GODS) {
                 sky.update(dt);
                 if (sky.bolts != boltsHeard) {
                     boltsHeard = sky.bolts;
-                    host.sound(Synth.THUNDER, 1.0f, 0.9f + fx.nextFloat() * 0.2f);
-                    host.buzz(90);
+                    strikeHeard(sky.boltNear);
                 }
             }
             shore.traffic = alley.traffic;
@@ -1812,6 +1812,7 @@ final class World implements Physics.Listener {
         clock += dt;
         stateTime += dt;
         seaFade = Math.max(0f, seaFade - dt / 1.4f);
+        thunderStep(dt);
         // fixed physics steps, at most two a frame
         acc += dt;
         int steps = 0;
@@ -1848,8 +1849,7 @@ final class World implements Physics.Listener {
             sky.update(dt);
             if (sky.bolts != boltsHeard) {
                 boltsHeard = sky.bolts;
-                host.sound(Synth.THUNDER, 1.0f, 0.9f + fx.nextFloat() * 0.2f);
-                host.buzz(90);
+                strikeHeard(sky.boltNear);
             }
         }
         if (fromSky) {
@@ -2605,7 +2605,7 @@ final class World implements Physics.Listener {
             sky.compose(turnA.a, f.a, h, off);
             sky.drawClouds(f, off - h);
             float held = alley.phaseT - Alley.TILT_T;
-            if (alley.verdict != Sky.GLOOM && held > 0.9f && held < alley.godsHold()) drawGift(f, held - 0.9f);
+            if (alley.verdict == Sky.OVATION && held > 0.9f && held < alley.godsHold()) drawGift(f, held - 0.9f);
             if (off < h / 8) drawAlleyHud(f);
             return;
         }
@@ -3949,6 +3949,36 @@ final class World implements Physics.Listener {
             pCol[i] = SHELL[fx.nextInt(SHELL.length)];
             pDust[i] = false;
             pKind[i] = CHIP;
+        }
+    }
+
+    // thunder on its way: the farther the strike, the later it comes, the lower and softer
+    private final float[] thunderIn = {-1f, -1f, -1f, -1f};
+    private final int[] thunderId = new int[4];
+    private final float[] thunderGain = new float[4], thunderRate = new float[4];
+
+    /** A strike of lightning seen: its thunder is chosen by how near it was, and sent after it. */
+    private void strikeHeard(float near) {
+        int id;
+        if (near > 0.8f) id = Synth.thunder(fx.nextBoolean() ? 1 : 4);
+        else if (near > 0.55f) id = Synth.thunder(fx.nextInt(3) == 0 ? 0 : fx.nextBoolean() ? 2 : 5);
+        else id = Synth.thunder(3);
+        host.buzz((int) (40 + 60 * near));
+        for (int i = 0; i < thunderIn.length; i++)
+            if (thunderIn[i] < 0f) {
+                thunderIn[i] = (1f - near) * 0.9f;
+                thunderId[i] = id;
+                thunderGain[i] = 0.6f + 0.5f * near;
+                thunderRate[i] = 0.88f + 0.14f * near + fx.nextFloat() * 0.08f;
+                break;
+            }
+    }
+
+    private void thunderStep(float dt) {
+        for (int i = 0; i < thunderIn.length; i++) {
+            if (thunderIn[i] < 0f) continue;
+            thunderIn[i] -= dt;
+            if (thunderIn[i] < 0f) host.sound(thunderId[i], thunderGain[i], thunderRate[i]);
         }
     }
 

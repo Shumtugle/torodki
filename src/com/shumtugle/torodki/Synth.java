@@ -19,8 +19,16 @@ final class Synth {
     static final int LEATHER = DTMF + 16, LATCH = DTMF + 17, MATTRESS = DTMF + 18, TEAR = DTMF + 19;
     // a heavy ball rolling away down the asphalt
     static final int ROLL = DTMF + 20;
+    // more thunder, each made differently: near and sharp, rolling, far and low, a double crack, a long roll
+    static final int THUNDERS = 6;
+    private static final int THUNDER_MORE = DTMF + 21;
 
-    final float[][] bank = new float[DTMF + 21][];
+    /** One of the thunders: 0 the plain one, then the others. */
+    static int thunder(int k) {
+        return k <= 0 ? THUNDER : THUNDER_MORE + (k - 1) % (THUNDERS - 1);
+    }
+
+    final float[][] bank = new float[DTMF + 21 + THUNDERS - 1][];
 
     Synth() {
         Random r = new Random(7);
@@ -59,6 +67,16 @@ final class Synth {
         bank[MATTRESS] = mattress(r);
         bank[TEAR] = tear(r);
         bank[ROLL] = roll(r);
+        // near: a split crack, a short hard rumble
+        bank[THUNDER_MORE] = thunder(r, 2.0f, 1.1f, 0f, 0.05f, 1.6f, 1100);
+        // overhead, rolling on in waves
+        bank[THUNDER_MORE + 1] = thunder(r, 3.2f, 0.45f, 0f, 0.035f, 0.8f, 2600);
+        // far off: no crack, a low growl that swells late
+        bank[THUNDER_MORE + 2] = thunder(r, 3.6f, 0f, 0f, 0.02f, 0.55f, 3200);
+        // a double crack, then the rumble
+        bank[THUNDER_MORE + 3] = thunder(r, 2.6f, 0.8f, 0.16f, 0.04f, 1.1f, 1500);
+        // a long roll, banging about between the houses
+        bank[THUNDER_MORE + 4] = thunder(r, 4.2f, 0.35f, 0f, 0.03f, 0.45f, 2000);
         bank[GLASS] = knock(r, 0.4f, new float[]{1870f, 2950f, 4410f}, new float[]{0.6f, 0.4f, 0.3f},
                 new float[]{9f, 12f, 16f}, 0.4f, 0.8f);
     }
@@ -417,6 +435,36 @@ final class Synth {
     }
 
     /** A crack, then a long rolling rumble. */
+    /**
+     * Thunder made to measure: a crack (as loud as crack, a second one after crack2 seconds
+     * when that is above zero), a rumble of noise this dark (cut), dying away at this rate
+     * (decay), swelling and sinking afresh every so many samples (roll).
+     */
+    private static float[] thunder(Random r, float dur, float crack, float crack2, float cut, float decay, int roll) {
+        int n = (int) (dur * RATE);
+        float[] s = new float[n];
+        float lp = 0, lp2 = 0, swell = 1f, target = 1f;
+        float attack = crack > 0f ? 12f : 2.5f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            if (i % roll == 0) target = 0.3f + r.nextFloat() * 1.0f;
+            swell += (target - swell) * (1.6f / roll);
+            float nz = r.nextFloat() * 2f - 1f;
+            lp += (nz - lp) * cut;
+            lp2 += (lp - lp2) * cut * 1.7f;
+            float rumble = lp2 * (0.32f / cut) * swell * (float) Math.exp(-decay * t) * Math.min(1f, t * attack);
+            float c = nz * (float) Math.exp(-24f * t) * 0.55f * crack;
+            if (crack2 > 0f && t > crack2) c += nz * (float) Math.exp(-30f * (t - crack2)) * 0.45f * crack;
+            s[i] = rumble + c;
+        }
+        // as loud as the plain one at its loudest
+        float peak = 1e-6f;
+        for (float v : s) peak = Math.max(peak, Math.abs(v));
+        float k = 1.15f / peak;
+        for (int i = 0; i < n; i++) s[i] *= k;
+        return s;
+    }
+
     private static float[] thunder(Random r) {
         int n = (int) (2.8f * RATE);
         float[] s = new float[n];

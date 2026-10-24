@@ -13,7 +13,8 @@ import java.util.Random;
  * the golem, which falls back down the street and builds itself again, farther off. Five
  * times, and it is driven out of sight: back over the shore road, across the beach and into
  * the sea, and the player walks down to the water. A figure left standing after the third
- * ball sends the player back to the buildings. Each figure felled is a heavy hammer.
+ * ball sends the player back to the buildings. A figure felled with one ball is a heavy
+ * hammer, as a building felled with one throw is on the street.
  *
  * Plain Java: the world feeds it time and touches, and draws what it holds.
  */
@@ -425,13 +426,14 @@ final class Alley {
             won++;
             if (ball == 0) {
                 flash = 1f;
-                host.sound(Synth.THUNDER, 1f, 1f);
+                host.sound(Synth.thunder(1 + rnd.nextInt(Synth.THUNDERS - 1)), 1f, 1f);
                 host.buzz(90);
+                // as on the street: a heavy hammer only for a figure felled with one ball
+                w.giveHeavy(1);
             } else {
-                host.sound(Synth.THUNDER, 0.7f, 1.25f);
+                host.sound(Synth.thunder(rnd.nextInt(Synth.THUNDERS)), 0.7f, 1.2f);
                 host.buzz(50);
             }
-            w.giveHeavy(1);
             // the gods look down on it: delight for one ball, smiles for two, a nod for three
             lookUp(w, ball == 0 ? Sky.OVATION : ball == 1 ? Sky.CHEER : Sky.POLITE);
             return;

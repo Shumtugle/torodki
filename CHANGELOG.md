@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.42
+- In the alley a heavy hammer comes only for a figure felled with one ball, as on the
+  street for a building felled with one throw; the gods drop it only then.
+- Lightning is made fresh for every strike: from anywhere behind the thunderer's cloud
+  to anywhere below, now and then across to another cloud; a jagged channel with forks
+  thinning to their tips; one to four pulses down the same channel; two to four strikes,
+  near and thick or far and thin, at uneven intervals; the whole sky flashes with each.
+- Thunder of six kinds: a split crack close by, a double crack, a roll in waves, a long
+  roll between the houses, a low growl far off, and the old one. The nearer the strike,
+  the sooner and the harder it comes; a far one is heard late and low.
+
 ## 0.41
 - The golem comes apart for real now. After its last leap it sinks lower than a crouch,
   its seams open and it holds a moment; then the shell bursts off it, pieces of its stone,

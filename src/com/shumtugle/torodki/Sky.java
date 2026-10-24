@@ -27,8 +27,8 @@ final class Sky {
     private int[] strip;
     private int verdict = POLITE;
     float time;
-    int bolts;                    // how many strokes of lightning so far: the world thunders for each
-    private int boltIdx = -1;
+    int bolts;                    // how many strikes of lightning so far: the world thunders for each
+    float boltNear = 1f;          // how near the last strike was: 1 overhead, toward 0 far off
     private final java.util.Random rnd = new java.util.Random(5);
 
     // where each god settles (center, as a share of the strip), how near he is (parallax),
@@ -335,7 +335,7 @@ final class Sky {
                 if (role[e] == g && has(e, faceTo[g]) && k-- == 0) pick[g] = e;
         }
         time = 0f;
-        boltIdx = -1;
+        planStrikes();
     }
 
     private boolean has(int e, int f) {
@@ -364,22 +364,7 @@ final class Sky {
         // lightning on a great fall: three strokes from behind the thunderer once he laughs,
         // drawn first so the clouds of the gods stand in front of it
         int th = pick[THUNDERER];
-        if (verdict == OVATION && th >= 0) {
-            float bt = t - CHANGE[THUNDERER] - 0.15f;
-            if (bt > 0f) {
-                int idx = (int) (bt / 0.85f);
-                float since = bt - idx * 0.85f;
-                if (idx < 3) {
-                    if (idx != boltIdx) {
-                        boltIdx = idx;
-                        bolts++;
-                        makeBolt(AT[THUNDERER][0] * w - gw[th] * 0.38f,
-                                AT[THUNDERER][1] * sh + gh[th] * 0.2f);
-                    }
-                    if (since < 0.2f || (since > 0.3f && since < 0.4f)) drawBolt(f, shift * NEAR[THUNDERER]);
-                }
-            }
-        }
+        if (verdict == OVATION && th >= 0) lightning(f, t, shift * NEAR[THUNDERER], th);
         for (int o = 0; o < ORDER.length; o++) {
             int g = ORDER[o];
             int e = pick[g];
@@ -511,41 +496,149 @@ final class Sky {
     }
 
     // ---- lightning ----
+    // Every strike is made fresh: a channel from somewhere behind the thunderer's cloud to
+    // somewhere below, or across to another cloud, jagged by repeated midpoint displacement,
+    // with a few forks that thin out toward their tips. A strike flashes in one to four
+    // pulses down the same channel, a few hundredths of a second apart, and lights the whole
+    // sky for an instant; strikes come two to four to an ovation, at uneven intervals, some
+    // near and thick, some far and thin.
 
-    private final float[] boltX = new float[30], boltY = new float[30];
-    private int boltN;
+    private static final int STRIKES = 4, PULSES = 4, SEGS = 320;
+    private final float[] strikeAt = new float[STRIKES], strikeNear = new float[STRIKES];
+    private final float[][] pulseAt = new float[STRIKES][PULSES], pulseLen = new float[STRIKES][PULSES];
+    private final int[] pulses = new int[STRIKES];
+    private int strikes, made = -1;
+    // the channel of the strike being shown: segments, and how bright each one is (1 the main stroke)
+    private final float[] sx0 = new float[SEGS], sy0 = new float[SEGS], sx1 = new float[SEGS], sy1 = new float[SEGS],
+            sLit = new float[SEGS];
+    private int segs;
 
-    private void makeBolt(float x0, float y0) {
-        boltN = 0;
-        float x = x0, y = y0;
-        boltX[boltN] = x;
-        boltY[boltN++] = y;
-        while (boltN < boltX.length && y < sh * 1.2f) {
-            x += -7f + (rnd.nextFloat() - 0.5f) * 30f;
-            y += 16f + rnd.nextFloat() * 22f;
-            boltX[boltN] = x;
-            boltY[boltN++] = y;
+    private void planStrikes() {
+        strikes = 2 + rnd.nextInt(3);
+        float at = CHANGE[THUNDERER] + 0.15f;
+        for (int s = 0; s < strikes; s++) {
+            strikeAt[s] = at;
+            strikeNear[s] = 0.35f + rnd.nextFloat() * 0.65f;
+            pulses[s] = 1 + rnd.nextInt(PULSES);
+            float p = 0f;
+            for (int k = 0; k < pulses[s]; k++) {
+                pulseAt[s][k] = p;
+                pulseLen[s][k] = 0.04f + rnd.nextFloat() * 0.06f;
+                p += pulseLen[s][k] + 0.03f + rnd.nextFloat() * 0.09f;
+            }
+            at += 0.45f + rnd.nextFloat() * 0.8f;
+        }
+        made = -1;
+    }
+
+    private void lightning(Px f, float t, float shift, int th) {
+        for (int s = 0; s < strikes; s++) {
+            float since = t - strikeAt[s];
+            if (since < 0f || since > 0.6f) continue;
+            if (made != s) {
+                made = s;
+                bolts++;
+                boltNear = strikeNear[s];
+                makeChannel(th, strikeNear[s]);
+            }
+            for (int k = 0; k < pulses[s]; k++) {
+                float u = since - pulseAt[s][k];
+                if (u < 0f || u > pulseLen[s][k]) continue;
+                // later pulses are weaker, and light the forks less
+                float power = (1f - k * 0.2f) * (1f - u / pulseLen[s][k] * 0.4f);
+                skyFlash(f, power * strikeNear[s] * 0.16f);
+                drawChannel(f, shift, power, k == 0, strikeNear[s]);
+            }
         }
     }
 
-    private void drawBolt(Px f, float shift) {
+    /** A new channel: the main stroke, then its forks. */
+    private void makeChannel(int th, float near) {
+        segs = 0;
+        float x0 = AT[THUNDERER][0] * w + (rnd.nextFloat() - 0.5f) * gw[th] * 0.8f;
+        float y0 = AT[THUNDERER][1] * sh + gh[th] * (0.1f + rnd.nextFloat() * 0.2f);
+        float x1, y1;
+        if (rnd.nextInt(5) == 0) {
+            // across the sky to another cloud
+            int g = 1 + rnd.nextInt(GODS - 1);
+            x1 = AT[g][0] * w + (rnd.nextFloat() - 0.5f) * 30f;
+            y1 = AT[g][1] * sh;
+        } else {
+            x1 = w * (0.05f + rnd.nextFloat() * 0.9f);
+            y1 = sh * (1.15f + rnd.nextFloat() * 0.2f);
+        }
+        float rough = 0.16f + rnd.nextFloat() * 0.12f;
+        int start = segs;
+        channel(x0, y0, x1, y1, 7, rough, 1f);
+        int main = segs;
+        // the forks leave the main stroke at a slant, a third to two thirds of the way down
+        int forks = 1 + rnd.nextInt(near > 0.7f ? 5 : 3);
+        for (int k = 0; k < forks && main > start + 4; k++) {
+            int at = start + (int) ((0.15f + rnd.nextFloat() * 0.6f) * (main - start));
+            float bx = sx0[at], by = sy0[at];
+            float dx = x1 - x0, dy = y1 - y0, len = (float) Math.sqrt(dx * dx + dy * dy);
+            float ang = (float) Math.atan2(dy, dx) + (rnd.nextBoolean() ? 1f : -1f) * (0.4f + rnd.nextFloat() * 0.6f);
+            float bl = len * (0.15f + rnd.nextFloat() * 0.25f);
+            channel(bx, by, bx + (float) Math.cos(ang) * bl, by + (float) Math.sin(ang) * bl, 5, rough * 1.2f,
+                    0.55f - k * 0.06f);
+        }
+    }
+
+    /** A jagged line from one point to another: the midpoint pushed aside, again and again. */
+    private void channel(float x0, float y0, float x1, float y1, int depth, float rough, float lit) {
+        if (segs >= SEGS) return;
+        float dx = x1 - x0, dy = y1 - y0;
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (depth == 0 || len < 3f) {
+            sx0[segs] = x0;
+            sy0[segs] = y0;
+            sx1[segs] = x1;
+            sy1[segs] = y1;
+            sLit[segs] = lit;
+            segs++;
+            return;
+        }
+        float push = (rnd.nextFloat() - 0.5f) * 2f * rough * len;
+        float mx = (x0 + x1) * 0.5f - dy / len * push, my = (y0 + y1) * 0.5f + dx / len * push;
+        // a fork fades toward its tip
+        float tip = lit < 1f ? lit * 0.85f : lit;
+        channel(x0, y0, mx, my, depth - 1, rough, lit);
+        channel(mx, my, x1, y1, depth - 1, rough, tip);
+    }
+
+    /** The whole sky lit for an instant, cold white. */
+    private void skyFlash(Px f, float k) {
+        if (k <= 0.01f) return;
+        for (int i = 0; i < f.a.length; i++) f.a[i] = Backdrop.mix(f.a[i], 0xFFEEF0FF, k);
+    }
+
+    private void drawChannel(Px f, float shift, float power, boolean first, float near) {
         for (int pass = 0; pass < 2; pass++)
-            for (int i = 0; i < boltN - 1; i++) {
-                float x0 = boltX[i], y0 = boltY[i] + shift, x1 = boltX[i + 1], y1 = boltY[i + 1] + shift;
+            for (int i = 0; i < segs; i++) {
+                float lit = sLit[i];
+                // the forks show at the first pulse, and only faintly after it
+                if (lit < 1f && !first) lit *= 0.35f;
+                lit *= power;
+                if (lit < 0.08f) continue;
+                float x0 = sx0[i], y0 = sy0[i] + shift, x1 = sx1[i], y1 = sy1[i] + shift;
                 int n = (int) (Math.abs(x1 - x0) + Math.abs(y1 - y0)) + 1;
                 for (int k = 0; k <= n; k++) {
                     float q = k / (float) n;
                     float x = x0 + (x1 - x0) * q, y = y0 + (y1 - y0) * q;
-                    if (pass == 0) glow(f, x, y);
-                    else {
-                        f.set(Math.round(x), Math.round(y), 0xFFFFFFF4);
-                        f.set(Math.round(x) + 1, Math.round(y), 0xFFFFF2C0);
+                    if (pass == 0) {
+                        if (sLit[i] >= 1f || (k & 1) == 0) glow(f, x, y, lit * (0.6f + near * 0.4f));
+                    } else {
+                        int px = Math.round(x), py = Math.round(y);
+                        int core = Backdrop.mix(0xFFB8C8FF, 0xFFFFFFF6, Math.min(1f, lit));
+                        f.set(px, py, core);
+                        // the main stroke of a near strike is two pixels thick
+                        if (sLit[i] >= 1f && near > 0.6f) f.set(px + 1, py, Backdrop.mix(core, 0xFFFFF2C0, 0.4f));
                     }
                 }
             }
     }
 
-    private void glow(Px f, float x, float y) {
+    private void glow(Px f, float x, float y, float lit) {
         for (int dy = -3; dy <= 3; dy++)
             for (int dx = -3; dx <= 3; dx++) {
                 int px = Math.round(x) + dx, py = Math.round(y) + dy;
@@ -553,7 +646,7 @@ final class Sky {
                 float d = (float) Math.sqrt(dx * dx + dy * dy);
                 if (d > 3.2f) continue;
                 int k = py * f.w + px;
-                f.a[k] = Backdrop.mix(f.a[k], 0xFFFFE6A0, 0.22f * (1f - d / 3.3f));
+                f.a[k] = Backdrop.mix(f.a[k], 0xFFE8E6FF, 0.24f * lit * (1f - d / 3.3f));
             }
     }
 }
