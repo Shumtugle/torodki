@@ -412,17 +412,69 @@ final class Ocean {
         }
     }
 
+    // ---- floes ----
+
+    private final float[] fpx = new float[24], fpz = new float[24];
+
+    /**
+     * A flat floe of old ice, ragged, its top just over the water: centered at (cx, cz), its
+     * length hv along (ax, az) and its width hu across.
+     */
+    void slab(Raster r, float cx, float cz, float ax, float az, float hu, float hv, float top, int id, float seed) {
+        int n = 20;
+        for (int i = 0; i < n; i++) {
+            float a = (float) (i * Math.PI * 2 / n);
+            float k = rag(a, seed);
+            float u = (float) Math.cos(a) * hu * k, v = (float) Math.sin(a) * hv * k;
+            fpx[i] = cx + az * u + ax * v;
+            fpz[i] = cz - ax * u + az * v;
+        }
+        for (int i = 0; i < n; i++) {
+            int j = (i + 1) % n;
+            qx[0] = fpx[i];
+            qx[1] = fpx[j];
+            qx[2] = fpx[j];
+            qx[3] = fpx[i];
+            qz[0] = fpz[i];
+            qz[1] = fpz[j];
+            qz[2] = fpz[j];
+            qz[3] = fpz[i];
+            qy[0] = qy[1] = top;
+            qy[2] = qy[3] = -0.4f;
+            face(r, 4, (i % 3) == 0 ? 0xFF8DB4C8 : 0xFF9CC1D3, id, false);
+        }
+        for (int i = 0; i < n; i++) {
+            int j = (i + 1) % n;
+            qx[0] = cx;
+            qy[0] = top;
+            qz[0] = cz;
+            qx[1] = fpx[i];
+            qy[1] = top;
+            qz[1] = fpz[i];
+            qx[2] = fpx[j];
+            qy[2] = top;
+            qz[2] = fpz[j];
+            r.poly(qx, qy, qz, null, null, 3, (i & 1) == 0 ? 0xFFEAF1F5 : 0xFFE2ECF1, Raster.PAT_FLAT, id, true);
+        }
+        for (int i = 0; i < n; i += 2) {
+            float vz = r.project(fpx[i], 0.03f, fpz[i], s);
+            if (vz < 1f) continue;
+            r.haze(s[0], s[1], 0.35f * r.f / vz, 1f / (vz - 0.5f), 0xFFE6EEF2, 120);
+        }
+    }
+
     // ---- boats ----
     // Small sailing boats at anchor, both sides, rolling and pitching on the swell.
     // x, z, yaw, hull color
 
     private static final float[][] BOATS = {
             {-5.2f, 33f, 0.5f}, {-11f, 47f, -0.35f}, {-15f, 78f, 0.25f}, {-6f, 118f, 0.9f},
-            {10f, 24f, -0.6f}, {19f, 45f, 0.55f}, {31f, 74f, -0.25f}, {44f, 104f, 0.4f}};
+            {10f, 24f, -0.6f}, {19f, 45f, 0.55f}, {31f, 74f, -0.25f}, {44f, 104f, 0.4f},
+            {8f, -30f, 0.3f}, {-14f, -46f, -0.5f}, {20f, -68f, 0.7f}};
     private static final int[] HULLS = {0xFF3A2E2A, 0xFF6A2420, 0xFF22303E, 0xFFDCD8CE, 0xFF2E4A3A, 0xFFE2DED4,
-            0xFF4A3A2E, 0xFF2A3A4E};
+            0xFF4A3A2E, 0xFF2A3A4E, 0xFF5A2420, 0xFF2E3A44, 0xFFD8D2C6};
     private static final int[] SAILS = {0xFF4A423C, 0xFF5E4A3A, 0xFF34383E, 0xFF6A5644, 0xFF3E3632, 0xFF56504A,
-            0xFF4A3E34, 0xFF2E3034};
+            0xFF4A3E34, 0xFF2E3034, 0xFF5A4A3C, 0xFF3A3632, 0xFF62584C};
     private final float[] m = new float[9];
 
     void boats(Raster r, float time) {
@@ -512,6 +564,158 @@ final class Ocean {
         out[0] = bx + m[0] * -0.16f + m[1] * ly;
         out[1] = h + m[3] * -0.16f + m[4] * ly;
         out[2] = z + m[6] * -0.16f + m[7] * ly;
+    }
+
+    // ---- orcas ----
+    // A pod of killer whales goes by now and then, in front of the player and behind: each
+    // rolls up out of the swell, its tall fin first, blows, and slides under again; now and
+    // then one leaps clear and comes down in a burst of spray. Below the surface the water
+    // hides them by itself.
+
+    private static final int PODS = 2, WHALES = 3;
+    // where a pod goes: its middle line (z) and which way along x; when it starts again
+    private final float[] podZ = {26f, -24f}, podDir = {1f, -1f}, podT = {0f, 0f}, podIn = {4f, 11f};
+    private final boolean[] podOn = new boolean[PODS];
+    private final float[][] whaleLag = new float[PODS][WHALES], whaleOff = new float[PODS][WHALES], whaleSize = new float[PODS][WHALES];
+    private final boolean[][] whaleLeap = new boolean[PODS][WHALES];
+    private final Random pod = new Random(7);
+    static final float ORCA_V = 3.6f;
+
+    void orcaStep(float dt) {
+        for (int p = 0; p < PODS; p++) {
+            if (!podOn[p]) {
+                if ((podIn[p] -= dt) > 0f) continue;
+                podOn[p] = true;
+                podT[p] = 0f;
+                podDir[p] = pod.nextBoolean() ? 1f : -1f;
+                podZ[p] = p == 0 ? 20f + pod.nextFloat() * 22f : -(16f + pod.nextFloat() * 20f);
+                for (int k = 0; k < WHALES; k++) {
+                    whaleLag[p][k] = k * (1.4f + pod.nextFloat() * 1.2f);
+                    whaleOff[p][k] = (pod.nextFloat() - 0.5f) * 5f;
+                    whaleSize[p][k] = k == 0 ? 1.15f : 0.75f + pod.nextFloat() * 0.3f;
+                    whaleLeap[p][k] = pod.nextFloat() < 0.35f;
+                }
+                continue;
+            }
+            podT[p] += dt;
+            if (podT[p] * ORCA_V > 62f) {
+                podOn[p] = false;
+                podIn[p] = 8f + pod.nextFloat() * 14f;
+            }
+        }
+    }
+
+    /** The height of a whale's middle at its own time tt: up out of the swell and under again. */
+    private float rise(int p, int k, float tt) {
+        float cycle = 5.5f, ph = (tt % cycle + cycle) % cycle;
+        boolean leap = whaleLeap[p][k] && ((int) Math.floor(tt / cycle) % 3 == 1);
+        if (ph >= 2.2f) return -2.6f * whaleSize[p][k];
+        float u = ph / 2.2f;
+        float y = leap ? -1.5f + 3.6f * (float) Math.sin(Math.PI * u) : -1.25f + 1.35f * (float) Math.sin(Math.PI * u);
+        return y * whaleSize[p][k];
+    }
+
+    /**
+     * Where a point of a whale's spine is, a share s of the way from its snout (0) to its tail
+     * (1). The body is stiff: it lies along the way its middle is going, nose up as it comes
+     * out, nose down as it goes under. Returns the whale's own time.
+     */
+    private float spine(int p, int k, float s, float[] out) {
+        float t = podT[p] - whaleLag[p][k];
+        float len = 6.4f * whaleSize[p][k];
+        float mid = World.CAM_X + podZ[p] * 0.2f;
+        float x = mid - 26f * podDir[p] + podDir[p] * ORCA_V * t;
+        float y = rise(p, k, t);
+        float dy = (rise(p, k, t + 0.05f) - rise(p, k, t - 0.05f)) / 0.1f;
+        float dl = (float) Math.sqrt(ORCA_V * ORCA_V + dy * dy);
+        float ax = podDir[p] * ORCA_V / dl, ay = dy / dl;
+        float off = (0.5f - s) * len;
+        out[0] = x + ax * off;
+        out[1] = y + ay * off;
+        out[2] = podZ[p] + whaleOff[p][k];
+        return t;
+    }
+
+    private final float[] sp0 = new float[3], sp1 = new float[3];
+    private static final float[] ORCA_R = {0.28f, 0.48f, 0.62f, 0.66f, 0.6f, 0.5f, 0.38f, 0.26f, 0.17f, 0.12f};
+
+    void orcas(Raster r) {
+        for (int p = 0; p < PODS; p++) {
+            if (!podOn[p]) continue;
+            for (int k = 0; k < WHALES; k++) {
+                float size = whaleSize[p][k];
+                float t = spine(p, k, 0f, sp0);
+                if (t < 0f) continue;
+                float vz = r.depth(sp0[0], 0f, sp0[2]);
+                if (vz < 2f) continue;
+                r.project(sp0[0], 0f, sp0[2], s);
+                if (s[0] < -80f || s[0] > r.w + 80f) continue;
+                int id = (980 + p * 4 + k) << 3;
+                boolean any = false;
+                for (int i = 0; i < 40; i++) {
+                    float u = i / 39f, fi = u * (ORCA_R.length - 1);
+                    int i0 = Math.min(ORCA_R.length - 2, (int) fi);
+                    float rad = (ORCA_R[i0] + (ORCA_R[i0 + 1] - ORCA_R[i0]) * (fi - i0)) * size;
+                    spine(p, k, u, sp0);
+                    if (sp0[1] + rad < -0.05f) continue;
+                    any = true;
+                    r.ball(sp0[0], sp0[1], sp0[2], rad, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0xFF17191D, 0xFF17191D, id, true);
+                    // the white of the belly and the patch behind the eye
+                    if (i >= 4 && i <= 14)
+                        r.ball(sp0[0], sp0[1] - rad * 0.42f, sp0[2] - rad * 0.5f, rad * 0.55f,
+                                1, 0, 0, 0, 1, 0, 0, 0, 1, 0xFFE8ECEE, 0xFFE8ECEE, id, true);
+                    if (i == 5)
+                        r.ball(sp0[0] + podDir[p] * rad * 0.2f, sp0[1] + rad * 0.3f, sp0[2] - rad * 0.78f, rad * 0.26f,
+                                1, 0, 0, 0, 1, 0, 0, 0, 1, 0xFFF4F6F6, 0xFFF4F6F6, id, true);
+                }
+                // the tall fin, over the middle of the back
+                spine(p, k, 0.36f, sp0);
+                spine(p, k, 0.5f, sp1);
+                float top = sp0[1] + ORCA_R[3] * size * 0.85f;
+                float fh = 1.25f * size * (k == 0 ? 1.3f : 0.8f);
+                if (top + fh > 0f) {
+                    any = true;
+                    tx[0] = sp0[0];
+                    ty[0] = top;
+                    tz[0] = sp0[2];
+                    tx[1] = sp1[0];
+                    ty[1] = sp1[1] + ORCA_R[5] * size * 0.85f;
+                    tz[1] = sp1[2];
+                    tx[2] = sp1[0] + (sp1[0] - sp0[0]) * 0.35f;
+                    ty[2] = top + fh;
+                    tz[2] = sp0[2];
+                    r.poly(tx, ty, tz, null, null, 3, 0xFF1C1E22, Raster.PAT_FLAT, id, false);
+                }
+                // the flukes, flat, spread to both sides of the tail
+                spine(p, k, 1f, sp0);
+                spine(p, k, 0.9f, sp1);
+                if (sp0[1] > -0.1f) {
+                    any = true;
+                    float bx = sp0[0] - sp1[0], by = sp0[1] - sp1[1];
+                    for (int side = -1; side <= 1; side += 2) {
+                        tx[0] = sp1[0];
+                        ty[0] = sp1[1];
+                        tz[0] = sp1[2];
+                        tx[1] = sp0[0] + bx * 0.6f;
+                        ty[1] = sp0[1] + by * 0.6f;
+                        tz[1] = sp0[2] + side * 1.1f * size;
+                        tx[2] = sp0[0] + bx * 0.3f;
+                        ty[2] = sp0[1] + by * 0.3f;
+                        tz[2] = sp0[2];
+                        r.poly(tx, ty, tz, null, null, 3, 0xFF1C1E22, Raster.PAT_FLAT, id, false);
+                    }
+                }
+                if (!any) continue;
+                // the swell breaking round it where it cuts the surface
+                for (int i = 0; i < ORCA_R.length; i += 3) {
+                    spine(p, k, i / (float) (ORCA_R.length - 1), sp0);
+                    if (Math.abs(sp0[1]) > ORCA_R[i] * size * 1.1f) continue;
+                    float z = r.project(sp0[0], 0.05f, sp0[2], s);
+                    if (z < 1f) continue;
+                    r.haze(s[0], s[1], ORCA_R[i] * size * 2.4f * r.f / z, 1f / (z - 1f), 0xFFE8EEF2, 170);
+                }
+            }
+        }
     }
 
     // ---- the blizzard ----

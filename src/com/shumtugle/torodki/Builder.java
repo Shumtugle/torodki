@@ -145,6 +145,12 @@ final class Builder {
             float x = l[k * 5 + 1] * 0.001f * flip, y = l[k * 5 + 2] * 0.001f, w = l[k * 5 + 3] * 0.001f, h = l[k * 5 + 4] * 0.001f;
             Body b = piece(x, TOP + y + h * 0.5f, BASE_CZ, w, h, WINTER_DEPTH * 2f, m == 1);
             b.icy = m == 2;
+            // the big square blocks with a hole: a life ring or a ship's wheel, standing on edge
+            if (Math.abs(w + 0.05f - h) < 0.06f && h > 0.6f) {
+                b.look = (byte) (rnd.nextBoolean() ? 1 : 2);
+                b.icy = false;
+                b.tint = b.look == 1 ? 0xFFF2EEE6 : 0xFF8A5A34;
+            }
         }
         return new ArrayList<Body>(out);
     }

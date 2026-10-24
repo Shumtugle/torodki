@@ -1,0 +1,7 @@
+# The crossroads of five cubes, as come to through the portal from the ice.
+screen 1096 2560
+level 151
+wait 1.0
+hub
+wait 2.5
+shot h1

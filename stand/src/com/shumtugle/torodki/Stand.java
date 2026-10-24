@@ -308,6 +308,14 @@ public final class Stand implements World.Host {
         } else if (c.equals("alley")) {
             world.startAlley();
             step();
+        } else if (c.equals("skip")) {
+            // stone skipping with the ice golem, out at sea
+            world.startSkip();
+            step();
+        } else if (c.equals("hub")) {
+            // the crossroads of five cubes, as come to through the portal from the ice
+            world.startHub();
+            step();
         } else if (c.equals("bowl")) {
             // wait for the alley to be ready for a ball, then roll one: across, speed, angle
             float t0 = time;
@@ -335,7 +343,9 @@ public final class Stand implements World.Host {
             Alley a = world.alley;
             if (a == null) System.out.println(String.format("%7.2fs  no alley; heavy %d, golden cubes %d, due %d", time, world.heavyLeft, world.cubes, world.cubesDue));
             else System.out.println(String.format("%7.2fs  alley phase %d round %d ball %d won %d standing %.2f%s; heavy %d",
-                    time, a.phase, a.round, a.ball, a.won, a.standing, a.lost ? " LOST" : "", world.heavyLeft));
+                    time, a.phase, a.round, a.ball, a.won, a.standing, a.lost ? " LOST" : "", world.heavyLeft)
+                    + (a.balls.isEmpty() ? "" : String.format(", stone at %.1f %.2f %.1f (v %.1f), skips %d", a.balls.get(a.balls.size() - 1).px,
+                    a.balls.get(a.balls.size() - 1).py, a.balls.get(a.balls.size() - 1).pz, a.vOf(a.balls.get(a.balls.size() - 1).px, a.balls.get(a.balls.size() - 1).pz), a.skips)));
         } else if (c.equals("tear")) {
             world.standTear();
         } else if (c.equals("fliers")) {

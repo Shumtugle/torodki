@@ -1,0 +1,40 @@
+# The 50th building out at sea: the gods look, the ice golem comes for stone skipping, five
+# rounds; back on the floe the portal waits on the iceberg; through it, the crossroads of
+# five cubes; the cube pointing back leads on to the next building on the ice.
+screen 1096 2560
+level 150
+wait 1.0
+win 1
+wait 8.0
+alleystate
+alleyneed 0.05
+bowl 0 15 0
+wait 1.0
+shot f1_round1
+bowl 0 15 0
+alleyneed 0.05
+bowl 0 15 0
+alleyneed 0.05
+bowl 0 15 0
+alleyneed 0.05
+bowl 0 15 0
+alleyneed 0.05
+bowl 0 15 0
+alleyneed 0.05
+bowl 0 15 0
+alleystate
+wait 6.0
+shot f2_dive
+alleystate
+wait 6.0
+alleystate
+state
+shot f3_portal
+throwat 0 3.3 63.5 14
+wait 6.0
+shot f4_hub
+alleystate
+cube 3
+wait 4.0
+shot f5_back
+state

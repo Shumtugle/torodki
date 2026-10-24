@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.47
+- Killer whales out at sea: a pod goes by now and then, in front of the iceberg and behind
+  the floe, rolling up out of the swell, tall fins first, and sliding under again; now
+  and then one leaps clear and comes down in spray.
+- In the winter buildings the big square blocks with a hole are life rings, white banded
+  red with a line round them, or ships' wheels with spokes and handles.
+- Stone skipping, after the 25th building out at sea and after the 50th: the head turns
+  round to the open sea behind the floe, an ice golem springs up out of the water onto a
+  floe and bursts into pillars of ice. A swipe skips a flat stone at them: it skips while
+  it is fast enough, ringing the water, and slides on over the floe into the pillars;
+  too slow, it goes under. Five floes, each farther off, three stones to each; driven back
+  five times, the golem dives and is gone.
+- After the game at the 50th, the portal waits on the iceberg, summer showing through it.
+  Through it: the crossroads of five cubes from the alley. The middle one is a game of
+  bowling; back or forward lead on to the next building on the ice.
+- A throw at a portal no longer uses up a heavy or golden hammer.
+
 ## 0.46
 - Out at sea the buildings are no longer grown from the street's recipes: fifty winter
   buildings of wood, stone and ice, chosen from a published set of eight thousand

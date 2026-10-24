@@ -41,6 +41,13 @@ final class Golem {
     private float roll, armU = 0.35f, armF = 0.65f;
     // before it bursts: how far it sinks past its usual crouch, and how far its parts stand apart
     float slump, swell;
+    // the ice golem of the sea: made of old ice, it comes up out of the water in a leap and
+    // goes back into it the same way. How deep it is under the water, in its own units
+    boolean ice;
+    float sunk;
+    boolean diveNext;           // the next leap ends under the water
+    private float sunk0;
+    private boolean diving;
 
     // its frame: right, and toward the player
     float rx, rz, fx, fz;
@@ -120,6 +127,11 @@ final class Golem {
                         hopping = false;
                     }
                     jumpH = (kneeL + kneeR == 2 ? 3.2f : 1.8f) / G;
+                    sunk0 = sunk;
+                    diving = diveNext;
+                    diveNext = false;
+                    // out of the water it springs higher
+                    if (sunk0 > 0f) jumpH += sunk0 * 0.6f;
                 }
                 break;
             case AIR: {
@@ -128,6 +140,8 @@ final class Golem {
                 x = x0 + (x1 - x0) * k;
                 air = jumpH * 4f * k * (1f - k);
                 squat = Math.max(0f, 1f - k * 3f) * 0.6f;
+                if (sunk0 > 0f) sunk = sunk0 * (1f - k);
+                if (diving) sunk = 4.5f * k * k;
                 if (k >= 1f) {
                     air = 0f;
                     act = LAND;
@@ -200,7 +214,7 @@ final class Golem {
             r = rr;
             u = uu;
         }
-        u += air;
+        u += air - sunk;
         out[0] = x + (rx * r + fx * f) * G;
         out[1] = u * G;
         out[2] = z + (rz * r + fz * f) * G;
@@ -301,7 +315,29 @@ final class Golem {
     }
 
     private int tint(int c) {
+        if (ice) c = iced(c);
         return hurt > 0f ? Backdrop.mix(c, 0xFFFFE0B0, hurt * 0.6f) : c;
+    }
+
+    /** The ice golem's stuff for the stone golem's: pale ice, deep blue ice, packed snow. */
+    private static int iced(int c) {
+        switch (c) {
+            case STONE: return 0xFFE2F0F6;
+            case STONE2: return 0xFFC6E0EC;
+            case BRICK: return 0xFF9CC8DE;
+            case BRICK2: return 0xFF84B6D0;
+            case WOOD: return 0xFFF1F5F8;
+            case IRON: return 0xFF3E6A86;
+            case 0xFF8E8676: return 0xFF9CBCCC;
+            case EYE: return 0xFF9EF2FF;
+            case 0xFFFFA02A: return 0xFF6ADCF2;
+            case 0xFFE0502A: return 0xFF3A9CC8;
+            default: return c;
+        }
+    }
+
+    private int pat(int p) {
+        return ice ? Raster.PAT_FLAT : p;
     }
 
     /**
@@ -316,7 +352,7 @@ final class Golem {
         float wx = -rz * uy, wy = rz * ux - rx * uz, wz = rx * uy;
         at(r, (ua + ub) * 0.5f, (fa + fb) * 0.5f, t3);
         ras.box(t3[0], t3[1], t3[2], rx, ux, wx, 0f, uy, wy, rz, uz, wz, hw * G, len * 0.5f * G, hd * G,
-                tint(color), pat, id);
+                tint(color), pat(pat), id);
         if (seg < 0) return;
         for (int i = 0; i < BITS; i++) {
             float[] q = bit[seg * BITS + i];
@@ -329,7 +365,7 @@ final class Golem {
             int c = m == 0 ? (i % 2 == 0 ? STONE : STONE2) : m == 1 ? (i % 2 == 0 ? BRICK : BRICK2) : WOOD;
             int p = m == 0 ? Raster.PAT_STONE : m == 2 ? Raster.PAT_GRAIN : Raster.PAT_BRICK;
             float sw = s * (m == 1 ? 1.3f : 1f), sh = s * (m == 1 ? 0.6f : 1f);
-            ras.box(t3[0], t3[1], t3[2], rx, ux, wx, 0f, uy, wy, rz, uz, wz, sw * G, sh * G, s * G, tint(c), p, id);
+            ras.box(t3[0], t3[1], t3[2], rx, ux, wx, 0f, uy, wy, rz, uz, wz, sw * G, sh * G, s * G, tint(c), pat(p), id);
         }
     }
 
@@ -374,7 +410,7 @@ final class Golem {
             float pulse = 0.8f + 0.2f * (float) Math.sin(time * 6f + side);
             at(lr, ku, kf + 0.3f, t3);
             ras.box(t3[0], t3[1], t3[2], rx, 0f, fx, 0f, 1f, 0f, rz, 0f, fz, 0.3f * G, 0.24f * G, 0.18f * G,
-                    broken ? DARK : Backdrop.scale(GLOW, pulse * 1.2f), Raster.PAT_FLAT, id);
+                    broken ? DARK : Backdrop.scale(ice ? 0xFF6ADCF2 : GLOW, pulse * 1.2f), Raster.PAT_FLAT, id);
         }
         // the hunched body: a core of stone faced with brick, planks across it
         float l = lean(), tu = topU(), tf = topF();
@@ -385,7 +421,7 @@ final class Golem {
             float u = hip + (tu - hip) * t, f = tf * t + 0.62f;
             at(0f, u, f + 0.05f, t3);
             ras.box(t3[0], t3[1], t3[2], rx, 0f, fx, 0f, 1f, 0f, rz, 0f, fz, 0.95f * G, 0.07f * G, 0.06f * G,
-                    tint(WOOD), Raster.PAT_GRAIN, id);
+                    tint(WOOD), pat(Raster.PAT_GRAIN), id);
         }
         // shoulders: two great boulders, iron rods sticking out of them
         for (int side = -1; side <= 1; side += 2) {
@@ -411,15 +447,16 @@ final class Golem {
         at(0f, hu + 0.08f, hf, t3);
         int stone = head == 3 ? STONE : head == 2 ? STONE2 : 0xFF8E8676;
         ras.box(t3[0], t3[1], t3[2], rx, 0f, fx, 0f, 1f, 0f, rz, 0f, fz, 0.5f * G, 0.38f * G, 0.45f * G,
-                tint(stone), Raster.PAT_STONE, id);
+                tint(stone), pat(Raster.PAT_STONE), id);
         at(0f, hu - 0.36f, hf + 0.08f, t3);
         ras.box(t3[0], t3[1], t3[2], rx, 0f, fx, 0f, 1f, 0f, rz, 0f, fz, 0.42f * G, 0.14f * G, 0.38f * G,
-                tint(BRICK), Raster.PAT_BRICK, id);
+                tint(BRICK), pat(Raster.PAT_BRICK), id);
         // the brow juts over the eyes
         at(0f, hu + 0.24f, hf + 0.42f, t3);
         ras.box(t3[0], t3[1], t3[2], rx, 0f, fx, 0f, 1f, 0f, rz, 0f, fz, 0.48f * G, 0.08f * G, 0.08f * G,
-                tint(STONE2), Raster.PAT_STONE, id);
+                tint(STONE2), pat(Raster.PAT_STONE), id);
         int eye = head == 3 ? EYE : head == 2 ? 0xFFFFA02A : 0xFFE0502A;
+        if (ice) eye = iced(eye);
         for (int side = -1; side <= 1; side += 2) {
             at(side * 0.2f, hu + 0.1f, hf + 0.47f, t3);
             ras.box(t3[0], t3[1], t3[2], rx, 0f, fx, 0f, 1f, 0f, rz, 0f, fz, 0.1f * G, 0.06f * G, 0.03f * G,

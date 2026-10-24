@@ -698,20 +698,34 @@ final class Raster {
      * light bounces back off the street and the houses.
      */
     static void lightK(float nz, float ny, float ndl, float[] out) {
-        float fill = Math.max(0f, -nz) * (1f - Math.abs(ny)) * (overcast ? 0.1f : 0.42f);
+        float fill = Math.max(0f, -nz) * (1f - Math.abs(ny)) * (overcast() ? 0.1f : 0.42f);
         lightK0(ny, ndl, out);
         out[0] += fill * 1.0f;
         out[1] += fill * 0.78f;
         out[2] += fill * 0.55f;
     }
 
-    // under a heavy overcast: light from the whole sky, cold and grey, the sun only a pale glow
-    static volatile boolean overcast;
+    // under a heavy overcast: light from the whole sky, cold and grey, the sun only a pale glow.
+    // Kept per thread: a view painted in the background keeps its own light
+    private static final ThreadLocal<boolean[]> OVERCAST = new ThreadLocal<boolean[]>() {
+        @Override
+        protected boolean[] initialValue() {
+            return new boolean[1];
+        }
+    };
+
+    static void overcast(boolean on) {
+        OVERCAST.get()[0] = on;
+    }
+
+    static boolean overcast() {
+        return OVERCAST.get()[0];
+    }
 
     private static void lightK0(float ny, float ndl, float[] out) {
         float sun = Math.max(0f, ndl);
         float sky = 0.5f + 0.5f * ny;
-        if (overcast) {
+        if (overcast()) {
             out[0] = 0.30f + 0.26f * sky + 0.62f * sun;
             out[1] = 0.33f + 0.27f * sky + 0.60f * sun;
             out[2] = 0.41f + 0.30f * sky + 0.55f * sun;
@@ -815,7 +829,8 @@ final class Raster {
                 if (s < 0 || t < 0 || s >= SM || t >= SM) continue;
                 if (sm[t * SM + s] > smD(wx, wy, wz) + bias) {
                     int c = col[k];
-                    int sr = overcast ? 150 : SH_R, sg = overcast ? 160 : SH_G, sb = overcast ? 186 : SH_B;
+                    boolean oc = overcast();
+                    int sr = oc ? 150 : SH_R, sg = oc ? 160 : SH_G, sb = oc ? 186 : SH_B;
                     int r = ((c >> 16) & 0xFF) * sr >> 8, g = ((c >> 8) & 0xFF) * sg >> 8, b = (c & 0xFF) * sb >> 8;
                     col[k] = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }

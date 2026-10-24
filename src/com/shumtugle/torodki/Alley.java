@@ -16,6 +16,12 @@ import java.util.Random;
  * ball sends the player back to the buildings. No hammers are given here; but a figure
  * felled is when the gods hand over the golden cubes the player has earned on the street.
  *
+ * Out on the ice the same game is played on the water, with stones: the view turns round
+ * to the open sea behind the floe, an ice golem leaps up out of the swell onto a floe and
+ * bursts into pillars of ice; the player skips flat stones at them over the water. A stone
+ * that skips all the way to the floe slides on into the pillars; one that runs out of
+ * speed on the way goes under. Driven back five times, the golem dives and is gone.
+ *
  * Plain Java: the world feeds it time and touches, and draws what it holds.
  */
 final class Alley {
@@ -36,6 +42,9 @@ final class Alley {
     static final float K = 2f;               // figures are built at this size: they are the golem's stones
     static final float BALL_R = 0.34f;
     static final float BLOCK_MASS = 0.12f, BALL_MASS = 5f;
+    // the stones skipped at sea: flat, heavy for their size
+    static final float DISC_R = 0.22f, DISC_MASS = 8f;
+    static final int DISC = 0xFF6E6A64;
 
     /** How far down the lane the figure of a round stands, and the golem behind it. */
     static float figureV(int round) {
@@ -46,6 +55,8 @@ final class Alley {
         return figureV(round) + 5.5f;
     }
 
+    final boolean sea;                      // stone skipping on the water, with the ice golem
+    boolean hub;                            // the crossroads of five cubes, come to through the portal
     int phase = TURN_IN;
     float phaseT;
     int round, ball;
@@ -85,7 +96,12 @@ final class Alley {
     float handSpin;
 
     Alley(World.Host host, long seed) {
+        this(host, seed, false);
+    }
+
+    Alley(World.Host host, long seed, boolean sea) {
         this.host = host;
+        this.sea = sea;
         rnd = new Random(seed);
         rX = (float) Math.cos(YAW);
         rZ = -(float) Math.sin(YAW);
@@ -104,11 +120,51 @@ final class Alley {
         for (int i = 1; i < ROUNDS; i++) order[i] = rest[i - 1];
         // the first figure grows while the head turns and the golem comes
         if (host != null) prepare(0);
+        if (sea) {
+            // under the water out beyond the first floe, ready to spring up onto it
+            golem = new Golem(wx(0.5f, golemV(0) + 9f), wz(0.5f, golemV(0) + 9f));
+            golem.ice = true;
+            golem.sunk = 6.5f;
+            golem.holding = true;
+            plan(THEN_SCATTER, wx(0f, golemV(0)), wz(0f, golemV(0)));
+            emerging = true;
+            return;
+        }
         // it comes from the shore road, beyond the corner house: round the corner, up the street
         golem = new Golem(19f, Backdrop.CROSS_Z - 4f);
         golem.holding = true;
         plan(THEN_SCATTER, 8f, Backdrop.CROSS_Z - 3f, wx(0f, golemV(0) + 7f), wz(0f, golemV(0) + 7f),
                 wx(0f, golemV(0)), wz(0f, golemV(0)));
+    }
+
+    /** The crossroads alone: the five cubes rising, the golem long gone. */
+    static Alley hub(World.Host host, long seed) {
+        Alley a = new Alley(host, seed, false);
+        a.hub = true;
+        a.golem.down = true;
+        a.traffic = true;
+        a.raiseSigns();
+        return a;
+    }
+
+    private boolean emerging, skipping;
+    int skips;
+
+    /** Where the floe of a round lies along the lane: under the figure and the golem behind it. */
+    static float floeV(int round) {
+        return figureV(round) + 2.5f;
+    }
+
+    static final float FLOE_HV = 5.5f, FLOE_HU = 3.4f;
+
+    /** How far a stone must skip to come down on the floe of a round. */
+    static float landV(int round) {
+        return floeV(round) - FLOE_HV + 0.3f;
+    }
+
+    /** Back to the buildings: the head turns round; from the crossroads, a walk into the white. */
+    private void leave() {
+        go(hub ? SEA : TURN_OUT);
     }
 
     /** A point of the lane, sideways u and forward v from the player's feet, into the world. */
@@ -153,10 +209,18 @@ final class Alley {
         golem.update(dt, 0f);
         // put back together, its seams close up
         if (!golem.down && phase != SWELL && golem.swell > 0f) golem.swell = Math.max(0f, golem.swell - dt * 5f);
+        if (sea && emerging && golem.flying()) {
+            // up out of the swell, the sea pouring off it
+            emerging = false;
+            host.sound(Synth.SPLASH, 1.3f, 0.5f);
+            host.sound(Synth.ROAR, 0.8f, 0.85f);
+            host.buzz(70);
+            for (int i = 0; i < 140; i++) w.spray(golem.x, 0.2f, golem.z);
+        }
         if (golem.landings > landed) {
             landed = golem.landings;
-            boolean sea = vOf(golem.x, golem.z) > -Backdrop.SEA_Z / Math.abs(fZ) - 0.5f;
-            if (sea) {
+            boolean water = sea ? golem.sunk > 2f : vOf(golem.x, golem.z) > -Backdrop.SEA_Z / Math.abs(fZ) - 0.5f;
+            if (water) {
                 // into the sea: a great splash, and it is gone
                 golem.down = true;
                 host.sound(Synth.SPLASH, 1.3f, 0.55f);
@@ -165,10 +229,11 @@ final class Alley {
                 for (int i = 0; i < 160; i++) w.spray(golem.x, 0.2f, golem.z);
             } else {
                 host.sound(Synth.GROUND, 1.1f, 0.7f);
-                host.sound(Synth.STONE, 0.6f, 0.6f);
+                host.sound(Synth.STONE, 0.6f, sea ? 0.9f : 0.6f);
                 host.buzz(50);
                 for (int i = 0; i < 10; i++)
-                    w.dust(golem.x + (rnd.nextFloat() - 0.5f) * 2f, 0.05f, golem.z + (rnd.nextFloat() - 0.5f) * 2f);
+                    if (sea) w.snowPuff(golem.x + (rnd.nextFloat() - 0.5f) * 2f, 0.05f, golem.z + (rnd.nextFloat() - 0.5f) * 2f);
+                    else w.dust(golem.x + (rnd.nextFloat() - 0.5f) * 2f, 0.05f, golem.z + (rnd.nextFloat() - 0.5f) * 2f);
             }
         }
         switch (phase) {
@@ -180,9 +245,15 @@ final class Alley {
                 break;
             case ENTER:
                 if (golem.down && then == THEN_SINK) {
-                    if (phaseT > 1.4f) raiseSigns();
+                    // gone: at sea the head turns back to the floe; on the street the cubes rise
+                    if (phaseT > 1.4f) {
+                        if (sea) go(TURN_OUT);
+                        else raiseSigns();
+                    }
                 } else if (golem.idle() && (hopAt == 0 && phaseT > 0.5f || hopAt > 0 && golem.actT > 0.2f)) {
                     if (hopAt < hops) {
+                        // at sea the last leap of all goes down into the water
+                        if (sea && then == THEN_SINK && hopAt == hops - 1) golem.diveNext = true;
                         golem.hop(hopX[hopAt], hopZ[hopAt]);
                         hopAt++;
                         phaseT = 0f;
@@ -201,7 +272,8 @@ final class Alley {
                     // the shell flies off in pieces; the cores become the figure
                     w.chips(golem);
                     for (int i = 0; i < 14; i++)
-                        w.dust(golem.x + (rnd.nextFloat() - 0.5f) * 3f, 0.1f, golem.z + (rnd.nextFloat() - 0.5f) * 3f);
+                        if (sea) w.snowPuff(golem.x + (rnd.nextFloat() - 0.5f) * 3f, 0.1f, golem.z + (rnd.nextFloat() - 0.5f) * 3f);
+                        else w.dust(golem.x + (rnd.nextFloat() - 0.5f) * 3f, 0.1f, golem.z + (rnd.nextFloat() - 0.5f) * 3f);
                     scatter();
                     golem.slump = golem.swell = 0f;
                 }
@@ -226,8 +298,13 @@ final class Alley {
             case AIM:
                 break;
             case ROLL: {
-                phys.step(dt);
                 Body b = balls.get(balls.size() - 1);
+                if (sea && skipping) {
+                    skip(b, dt, w);
+                    if (b.gone || phaseT > 8f) go(SETTLE);
+                    break;
+                }
+                phys.step(dt);
                 float v = vOf(b.px, b.pz);
                 boolean stopped = b.speed2() < 0.09f && phaseT > 0.8f;
                 if (v > golemV(round) + 1f) {
@@ -255,9 +332,11 @@ final class Alley {
                         host.sound(Synth.ROAR, 0.9f, 0.9f);
                         go(HOLD);
                     } else if (won >= ROUNDS) {
-                        // driven out: back over the shore road, across the beach, into the sea
+                        // driven out: back over the shore road, across the beach, into the sea;
+                        // at sea, off its floe and down into the water
                         host.sound(Synth.ROAR, 0.8f, 1.3f);
-                        plan(THEN_SINK, wx(0.5f, 48f), wz(0.5f, 48f), wx(0f, 64f), wz(0f, 64f));
+                        if (sea) plan(THEN_SINK, wx(0.4f, golemV(round) + 7f), wz(0.4f, golemV(round) + 7f));
+                        else plan(THEN_SINK, wx(0.5f, 48f), wz(0.5f, 48f), wx(0f, 64f), wz(0f, 64f));
                         go(ENTER);
                     } else {
                         round++;
@@ -268,7 +347,7 @@ final class Alley {
                 }
                 break;
             case HOLD:
-                if (phaseT > 1.8f) go(TURN_OUT);
+                if (phaseT > 1.8f) leave();
                 break;
             case GODS:
                 if (phaseT >= 2f * TILT_T + godsHold()) gather();
@@ -348,7 +427,7 @@ final class Alley {
         phys.clear();
         ArrayList<Body> grown = takeGrown(round);
         if (grown != null) blocks.addAll(grown);
-        else build(order[round], figureV(round));
+        else build(sea ? 0 : order[round], figureV(round));
         prepare(round + 1);
         int n = blocks.size();
         fromX = new float[n];
@@ -541,7 +620,7 @@ final class Alley {
         }
         if (next >= 0) leaveT += dt;
         if (next >= 0 && leaveT > 0.8f) {
-            if (next == BACK) go(TURN_OUT);
+            if (next == BACK) leave();
             else if (next == FORWARD) go(SEA);
             // the middle one: the world starts the game again from the corner
         }
@@ -672,7 +751,7 @@ final class Alley {
             float dy = downY - y, dx = x - downX, secs = Math.max(0.05f, clock - downT);
             if (dy < 20f || secs > 1.5f) return;
             float pxps = (float) Math.sqrt(dx * dx + dy * dy) / secs;
-            float speed = Math.max(5f, Math.min(13f, 4f + pxps / 140f));
+            float speed = sea ? Math.max(7f, Math.min(18f, 6f + pxps / 110f)) : Math.max(5f, Math.min(13f, 4f + pxps / 140f));
             float ang = Math.max(-0.12f, Math.min(0.12f, (float) Math.atan2(dx, dy) * 0.3f));
             roll((downX - World.W * 0.5f) / World.W * 2.4f, speed, ang);
         }
@@ -689,6 +768,10 @@ final class Alley {
     void roll(float u, float speed, float ang) {
         if (phase != AIM) return;
         u = Math.max(-1.2f, Math.min(1.2f, u));
+        if (sea) {
+            throwDisc(u, speed, ang);
+            return;
+        }
         // the very ball that was in hand, turned as it was held
         Body b = Body.ball(BALL_R, handColor);
         b.scaleMass(BALL_MASS);
@@ -715,6 +798,87 @@ final class Alley {
         go(ROLL);
     }
 
+    // ---- the skipping stone ----
+
+    private float discSpin;
+
+    /** A flat stone thrown low from the hand, spinning, to skip over the water. */
+    private void throwDisc(float u, float speed, float ang) {
+        Body b = Body.ball(DISC_R, DISC);
+        b.scaleMass(DISC_MASS);
+        b.setPose(wx(u * 0.5f, 1.4f), 1.15f, wz(u * 0.5f, 1.4f), 1, 0, 0, 0);
+        float dxl = (float) Math.sin(ang), dvl = (float) Math.cos(ang);
+        b.vx = (rX * dxl + fX * dvl) * speed;
+        b.vz = (rZ * dxl + fZ * dvl) * speed;
+        b.vy = -1.0f - speed * 0.04f;
+        b.asleep = false;
+        b.ghost = false;
+        balls.add(b);
+        skipping = true;
+        skips = 0;
+        discSpin = 0f;
+        host.sound(Synth.WHOOSH, 0.8f, 1.2f + speed / 40f);
+        host.buzz(15);
+        handX = 0f;
+        go(ROLL);
+    }
+
+    /**
+     * The stone in flight over the water: each time it comes down flat and fast enough it
+     * skips up again, a little slower; on the floe it comes down to slide; too slow, it sinks.
+     */
+    private void skip(Body b, float dt, World w) {
+        b.vy += Physics.G * dt;
+        b.px += b.vx * dt;
+        b.py += b.vy * dt;
+        b.pz += b.vz * dt;
+        discSpin += dt * 26f;
+        float v = vOf(b.px, b.pz);
+        if (v >= landV(round) && v <= floeV(round) + FLOE_HV) {
+            // over the ice: from here on it is a stone among the pillars, falling, sliding, rolling
+            if (b.py < DISC_R + 0.005f) {
+                b.py = DISC_R + 0.005f;
+                b.vy = 0f;
+            }
+            b.wx = b.vz / DISC_R;
+            b.wz = -b.vx / DISC_R;
+            b.savePrev();
+            phys.add(b);
+            skipping = false;
+            host.sound(Synth.ROLL, 0.9f, 1.25f);
+            for (int i = 0; i < 6; i++) w.snowPuff(b.px, 0.05f, b.pz);
+        } else if (b.py <= DISC_R * 0.6f && b.vy < 0f) {
+            float hs = (float) Math.sqrt(b.vx * b.vx + b.vz * b.vz);
+            if (hs > 3.2f) {
+                skips++;
+                b.py = DISC_R * 0.6f;
+                b.vy = -b.vy * 0.35f + 1.3f;
+                b.vx *= 0.88f;
+                b.vz *= 0.88f;
+                w.ripple(b.px, b.pz, 0.35f);
+                for (int i = 0; i < 4; i++) w.splashBit(b.px, 0.05f, b.pz, b.vx * 0.3f, b.vz * 0.3f);
+                host.sound(Synth.SPLASH, 0.32f, 1.45f + 0.07f * Math.min(skips, 8));
+                host.buzz(8);
+            } else {
+                // out of speed: under it goes
+                b.gone = true;
+                b.ghost = true;
+                w.ripple(b.px, b.pz, 0.8f);
+                for (int i = 0; i < 10; i++) w.splashBit(b.px, 0.05f, b.pz, 0f, 0f);
+                host.sound(Synth.SPLASH, 0.6f, 0.95f);
+            }
+        }
+        // turned as it spins; setting the pose stops a body, so its speed is kept aside
+        float vx = b.vx, vy = b.vy, vz = b.vz;
+        float c = (float) Math.cos(discSpin * 0.5f), sn = (float) Math.sin(discSpin * 0.5f);
+        if (skipping) {
+            b.setPose(b.px, b.py, b.pz, c, 0f, sn, 0f);
+            b.vx = vx;
+            b.vy = vy;
+            b.vz = vz;
+        }
+    }
+
     // ---- the grower ----
     // Every figure is grown fresh, from the golem's stones, storey by storey: ranks of
     // pillars, courses of brick, portals with a lintel, towers of blocks, a bending row of
@@ -735,7 +899,7 @@ final class Alley {
         growing = new Thread(new Runnable() {
             @Override
             public void run() {
-                grownFig = new Alley(null, sd).growFigure(r, new Random(sd));
+                grownFig = new Alley(null, sd, sea).growFigure(r, new Random(sd));
             }
         });
         growing.setDaemon(true);
@@ -812,14 +976,16 @@ final class Alley {
             b.savePrev();
             p.add(b);
         }
-        Body ball = Body.ball(BALL_R, 0);
-        ball.scaleMass(BALL_MASS);
-        ball.setPose(wx(0f, 1.6f), BALL_R + 0.01f, wz(0f, 1.6f), 1, 0, 0, 0);
-        float speed = 10f;
+        Body ball = Body.ball(sea ? DISC_R : BALL_R, 0);
+        ball.scaleMass(sea ? DISC_MASS : BALL_MASS);
+        // at sea the stone comes down on the near edge of the floe, slower after its skips
+        float start = sea ? v0 - 3.0f : 1.6f, rr = sea ? DISC_R : BALL_R;
+        ball.setPose(wx(0f, start), rr + 0.01f, wz(0f, start), 1, 0, 0, 0);
+        float speed = sea ? 8f : 10f;
         ball.vx = fX * speed;
         ball.vz = fZ * speed;
-        ball.wx = ball.vz / BALL_R;
-        ball.wz = -ball.vx / BALL_R;
+        ball.wx = ball.vz / rr;
+        ball.wz = -ball.vx / rr;
         ball.asleep = false;
         ball.savePrev();
         p.add(ball);
@@ -849,6 +1015,8 @@ final class Alley {
             // flat tops come more often low down, so the figure has storeys to grow
             boolean last = s == storeys - 1;
             float[] w = {last ? 1.4f : 0.5f, 1.4f, 1.8f, last ? 1.0f : 0.3f, ground ? 0.5f : 0f, ground ? 0.5f : 0f, last ? 0.6f : 0.2f};
+            // at sea: pillars, towers of blocks, totems; nothing else
+            if (sea) w = new float[]{2.4f, 0f, 0f, 1.0f, 0f, 0f, 0.7f};
             float sum = 0f;
             for (float x : w) sum += x;
             float pick = g.nextFloat() * sum;
@@ -981,6 +1149,11 @@ final class Alley {
         Body b = new Body(hu, hy, hv, Body.STONE, color);
         // stone to look at, light enough to knock over, and free to topple
         b.scaleMass(BLOCK_MASS);
+        if (sea) {
+            // the ice golem's: old blue ice, snow on top
+            b.icy = true;
+            b.snowy = true;
+        }
         b.trueInertia();
         b.setPose(x, y * K + hy, z, q[0], 0f, q[2], 0f);
         b.homeX = b.px;
