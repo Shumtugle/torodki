@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.51
+- At the drifting iceberg the ring stays where the player puts it, and the hammer goes
+  there and nowhere else: the iceberg keeps drifting while the player aims, and the throw
+  must be laid ahead of it, to where it will be when the hammer comes down. The rocking
+  still stills while the finger is down, so the ring can be held on a spot of empty water.
+- The close view for aiming is wider at the drifting iceberg, with room to aim ahead.
+
 ## 0.50
 - Aiming out at sea can be held steady: while the finger is down the player braces his
   feet and the rocking all but stops; it comes back once the hammer is thrown.

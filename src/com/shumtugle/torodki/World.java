@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.50";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.51";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -749,6 +749,8 @@ final class World implements Physics.Listener {
         float dist = (float) Math.sqrt(dx * dx + dz * dz);
         float yaw = (float) Math.atan2(dx, dz), pitch = (float) Math.atan2(lookY - CAM_Y, dist);
         zoomZ = Math.max(1.25f, Math.min(4.6f, Builder.CZ / Builder.BASE_CZ * 0.92f));
+        // with the iceberg drifting the close view is a little wider: room to aim ahead of it
+        if (atSea && drifting(level)) zoomZ *= 0.58f;
         if (zoomRas == null) zoomRas = new Raster(W, h);
         zoomRas.camera(CAM_X, CAM_Y, 0f, yaw, pitch, focal * zoomZ, h * 0.5f);
         if (atSea) ocean.paint(zoomRas, zSeaMask);
@@ -1920,12 +1922,6 @@ final class World implements Physics.Listener {
         float dx = tx - sx, dy = ty - sy, dz = tz - sz;
         float dist = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
         float t = flight(dist, speed);
-        if (atSea && drifting(level) && state == PLAY) {
-            // the hammer is thrown where the drifting iceberg will be when it comes down
-            float lead = driftAt(driftT + t) - Builder.CX;
-            tx += lead;
-            dx += lead;
-        }
         hammer.ghost = false;
         hammer.asleep = false;
         float yaw = YAW + (fx.nextFloat() - 0.5f) * 0.6f;
@@ -3475,19 +3471,12 @@ final class World implements Physics.Listener {
     private void drift(float dt) {
         if (!atSea || !drifting(level) || golem != null) return;
         if (state != PLAY && state != WON && state != LOST) return;
-        // while the player aims, the drift all but holds, and the ring rides along with the iceberg
-        driftT += dt * (aiming ? 0.25f : 1f);
+        // it keeps drifting while the player aims: the ring stays where it was put, on the
+        // water ahead of the iceberg if need be, and the player must foresee where it will be
+        driftT += dt;
         float x = driftAt(driftT), dx = x - Builder.CX;
         if (dx == 0f) return;
         float old = Builder.CX;
-        if (aiming) {
-            float y = Builder.TOP + 1.4f;
-            ras.project(old, y, Builder.CZ, scr);
-            float sx = scr[0];
-            ras.project(x, y, Builder.CZ, scr);
-            aimX += scr[0] - sx;
-            baseX += scr[0] - sx;
-        }
         Builder.CX = x;
         plinth.px += dx;
         plinth.ppx += dx;
