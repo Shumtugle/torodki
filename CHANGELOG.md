@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.52
+- The close view at the drifting iceberg turns after it, at seven tenths of its pace: the
+  iceberg still creeps toward the edge while the player aims, so the throw must still be
+  laid ahead of it, but it never drifts out of sight. The ring keeps its spot in the world
+  as the view turns. The sea for this view is painted once, three screens wide, and each
+  frame the columns the view looks along are taken from it.
+- The killer whales in front pass beyond the iceberg, never between it and the player.
+
 ## 0.51
 - At the drifting iceberg the ring stays where the player puts it, and the hammer goes
   there and nowhere else: the iceberg keeps drifting while the player aims, and the throw

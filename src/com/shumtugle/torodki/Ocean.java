@@ -178,22 +178,28 @@ final class Ocean {
      * crests whitening as they pass, streaks of foam blown along by the wind.
      */
     void sea(Raster r, Mask m, float time) {
+        seaCols(r, m, time, 0, r.w - 1);
+    }
+
+    /** The same, for the columns x0 to x1 of the picture only. */
+    void seaCols(Raster r, Mask m, float time, int x0, int x1) {
         int[] col = r.col;
+        int w = r.w;
         float run = time * 1.25f, ox = time * 1.9f, oz = time * 0.4f;
         for (int i = 0; i < m.n; i++) {
+            int k = m.k[i], x = k % w;
+            if (x < x0 || x > x1) continue;
             int p = (int) ((m.ph[i] + run) * 162.97f) & 1023;
-            int s = SIN[p];                       // -256..256
+            int s = SIN[p];
             int c = lerp(WATER_DEEP, WATER, (s + 256) >> 1);
             if (s > 120) c = lerp(c, CREST, (s - 120) * 2 > 255 ? 255 : (s - 120) * 2);
             int cell = m.cell[i] + 128;
-            // a whitecap: on the top of a crest, where this patch of water breaks
             if (s > 228 && cell > 150) c = lerp(c, 0xFFE4ECEF, Math.min(255, (cell - 150) * 3 + (s - 228) * 4));
             else {
-                // foam streaks along the wind
                 int hh = Backdrop.hash((int) Math.floor(m.x[i] * 1.2f + ox), (int) Math.floor(m.z[i] * 0.42f + oz));
                 if (hh > 246) c = lerp(c, 0xFFD8E2E6, 120);
             }
-            col[m.k[i]] = lerp(c, FOG, m.fog[i] + 128);
+            col[k] = lerp(c, FOG, m.fog[i] + 128);
         }
     }
 
@@ -537,7 +543,8 @@ final class Ocean {
                 podOn[p] = true;
                 podT[p] = 0f;
                 podDir[p] = pod.nextBoolean() ? 1f : -1f;
-                podZ[p] = p == 0 ? 30f + pod.nextFloat() * 22f : -(26f + pod.nextFloat() * 20f);
+                // in front they pass beyond the iceberg, never between it and the player
+                podZ[p] = p == 0 ? 68f + pod.nextFloat() * 25f : -(26f + pod.nextFloat() * 20f);
                 for (int k = 0; k < WHALES; k++) {
                     whaleLag[p][k] = k * (1.4f + pod.nextFloat() * 1.2f);
                     whaleOff[p][k] = (pod.nextFloat() - 0.5f) * 5f;

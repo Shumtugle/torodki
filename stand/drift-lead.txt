@@ -1,0 +1,16 @@
+# Aiming ahead of the drifting iceberg: the close view turns after it, the ring keeps its spot of the world.
+screen 1096 2560
+level 123
+wait 9.0
+down 140 400
+wait 0.3
+move 230 400
+wait 0.6
+shot l1
+wait 1.5
+shot l2
+wait 1.5
+shot l3
+up 230 400
+wait 2.5
+shot l4

@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.51";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.52";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -310,6 +310,7 @@ final class World implements Physics.Listener {
         Builder.CX = drifting(lv) ? driftAt(0f) : 0f;
         if (atSea && skipLevel(lv) && normRas != null) paintSeaAlley();
         prepareZoom();
+        if (atSea && drifting(lv) && normRas != null) paintPano();
         phys.clear();
         pieces.clear();
         // out at sea the plinth is a block of old blue ice
@@ -753,6 +754,7 @@ final class World implements Physics.Listener {
         if (atSea && drifting(level)) zoomZ *= 0.58f;
         if (zoomRas == null) zoomRas = new Raster(W, h);
         zoomRas.camera(CAM_X, CAM_Y, 0f, yaw, pitch, focal * zoomZ, h * 0.5f);
+        zoomPitch = pitch;
         if (atSea) ocean.paint(zoomRas, zSeaMask);
         else backdrop.paint(zoomRas, 11L);
         zCol = zoomRas.col.clone();
@@ -762,6 +764,119 @@ final class World implements Physics.Listener {
         normRas.project(Builder.CX, lookY, Builder.CZ, scr);
         zPX = scr[0];
         zPY = scr[1];
+    }
+
+    // ---- the close view that follows the iceberg ----
+    // At the drifting iceberg the close view turns after it, at seven tenths of its pace:
+    // the iceberg still creeps toward the edge, but never out of sight. The sea for it is
+    // painted once, three screens wide, and each frame the columns the view now looks along
+    // are taken from it. The ring stays on its spot of the world as the view turns.
+
+    private Raster pano;
+    private final Ocean.Mask panoMask = new Ocean.Mask();
+    private volatile boolean panoDone;
+    private float panoCZ, panoYaw, zoomPitch, followYaw, lastTargetYaw;
+    private Thread panoPaint;
+    private int[] colMap;
+    private float[] colDepth;
+
+    private boolean panoReady() {
+        return panoDone && panoCZ == Builder.CZ && pano != null;
+    }
+
+    private void paintPano() {
+        if (zoomZ <= 1f) return;
+        panoDone = false;
+        if (panoPaint != null) {
+            try {
+                panoPaint.join();
+            } catch (InterruptedException e) {
+                return;
+            }
+        }
+        if (pano == null || pano.h != h) pano = new Raster(3 * W, h);
+        final Raster r = pano;
+        final float cz = Builder.CZ;
+        float mid = CAM_X + cz * (float) Math.tan(YAW);
+        panoYaw = (float) Math.atan2(mid - CAM_X, cz);
+        r.camera(CAM_X, CAM_Y, 0f, panoYaw, zoomPitch, focal * zoomZ, h * 0.5f);
+        panoPaint = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                new Ocean().paint(r, panoMask);
+                panoCZ = cz;
+                panoDone = true;
+            }
+        });
+        panoPaint.setDaemon(true);
+        panoPaint.start();
+    }
+
+    /** Where the iceberg is, as a turn of the head from the player. */
+    private float icebergYaw() {
+        return (float) Math.atan2(Builder.CX - CAM_X, Builder.CZ);
+    }
+
+    /** The close view's turn, a frame on: it follows the iceberg at seven tenths of its pace. */
+    private void follow() {
+        if (!atSea || !drifting(level) || !panoReady()) return;
+        float target = icebergYaw();
+        if (!zoomed && zoomK <= 0f) {
+            followYaw = target;
+        } else {
+            float old = followYaw;
+            followYaw += 0.7f * (target - lastTargetYaw);
+            float d = followYaw - old;
+            if (zoomed && d != 0f) {
+                // the ring keeps its place in the world
+                float F = focal * zoomZ;
+                aimX = W * 0.5f + F * (float) Math.tan(Math.atan((aimX - W * 0.5f) / F) - d);
+                baseX = W * 0.5f + F * (float) Math.tan(Math.atan((baseX - W * 0.5f) / F) - d);
+            }
+        }
+        lastTargetYaw = target;
+        zoomRas.camera(CAM_X, CAM_Y, 0f, followYaw, zoomPitch, focal * zoomZ, h * 0.5f);
+        // where the close view's middle is in the usual view, for closing in and out
+        float lookY = Builder.TOP + 1.4f, dist = (float) Math.hypot(Builder.CX - CAM_X, Builder.CZ);
+        normRas.project(CAM_X + (float) Math.sin(followYaw) * dist, lookY, (float) Math.cos(followYaw) * dist, scr);
+        zPX = scr[0];
+        zPY = scr[1];
+    }
+
+    /** The sea behind the close view, taken column by column from the wide painting. */
+    private void panoBackground() {
+        int pw = pano.w;
+        if (colMap == null || colMap.length != W) {
+            colMap = new int[W];
+            colDepth = new float[W];
+        }
+        float F = focal * zoomZ, pcx = pw * 0.5f;
+        int lo = pw, hi = 0;
+        for (int x = 0; x < W; x++) {
+            float ts = (float) Math.atan((x + 0.5f - W * 0.5f) / F);
+            float tp = followYaw + ts - panoYaw;
+            int xp = (int) (pcx + F * (float) Math.tan(tp));
+            if (xp < 0) xp = 0;
+            if (xp >= pw) xp = pw - 1;
+            colMap[x] = xp;
+            // depth along the turned view's own axis
+            colDepth[x] = (float) (Math.cos(tp) / Math.cos(ts));
+            lo = Math.min(lo, xp);
+            hi = Math.max(hi, xp);
+        }
+        ocean.seaCols(pano, panoMask, clock, lo, hi);
+        int[] pc = pano.col;
+        float[] pz = pano.zb;
+        byte[] pl = pano.lit;
+        for (int y = 0; y < h; y++) {
+            int rp = y * pw, rs = y * W;
+            for (int x = 0; x < W; x++) {
+                int k = rp + colMap[x];
+                ras.col[rs + x] = pc[k];
+                ras.zb[rs + x] = pz[k] * colDepth[x];
+                ras.lit[rs + x] = pl[k];
+            }
+        }
     }
 
     // the zoomed view follows the drifting iceberg: painted afresh in the background once it
@@ -776,7 +891,7 @@ final class World implements Physics.Listener {
     private byte[] zNextLit;
 
     private void followZoom() {
-        if (!atSea || !drifting(level) || zoomRas == null || zoomZ <= 1f) return;
+        if (!atSea || !drifting(level) || zoomRas == null || zoomZ <= 1f || panoReady()) return;
         if (zoomReady) {
             if (zoomed || zoomK > 0f) return;
             if (zNextCZ != Builder.CZ || Math.abs(zNextX - Builder.CX) > Math.abs(zoomForX - Builder.CX)) {
@@ -2093,6 +2208,7 @@ final class World implements Physics.Listener {
         if (atSea) {
             brace += ((aiming ? 1f : 0f) - brace) * Math.min(1f, dt * 6f);
             followZoom();
+            follow();
             ocean.orcaStep(dt);
             ocean.snow(dt);
             rockStep();
@@ -3523,14 +3639,18 @@ final class World implements Physics.Listener {
     private void drawStreet(Px f) {
         Raster.overcast(atSea);
         glowN = 0;
-        System.arraycopy(zoomed ? zCol : bgCol, 0, ras.col, 0, bgCol.length);
-        System.arraycopy(zoomed ? zZ : bgZ, 0, ras.zb, 0, bgZ.length);
-        System.arraycopy(zoomed ? zLit : bgLit, 0, ras.lit, 0, bgLit.length);
+        boolean panning = zoomed && atSea && drifting(level) && panoReady();
+        if (panning) panoBackground();
+        else {
+            System.arraycopy(zoomed ? zCol : bgCol, 0, ras.col, 0, bgCol.length);
+            System.arraycopy(zoomed ? zZ : bgZ, 0, ras.zb, 0, bgZ.length);
+            System.arraycopy(zoomed ? zLit : bgLit, 0, ras.lit, 0, bgLit.length);
+        }
         java.util.Arrays.fill(ras.idb, 0);
 
         float lift = 0f;
         if (atSea) {
-            ocean.sea(ras, zoomed ? zSeaMask : seaMask, clock);
+            if (!panning) ocean.sea(ras, zoomed ? zSeaMask : seaMask, clock);
             ocean.boats(ras, clock);
             ocean.orcas(ras);
             lift = floeLift();
