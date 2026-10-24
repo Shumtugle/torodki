@@ -1,0 +1,14 @@
+# The ball in hand is the ball that rolls: held, then just let go, then the next one taken up.
+screen 1096 2560
+level 20
+wait 1.0
+alley
+alleyuntil 3
+wait 0.3
+shot b1_held
+bowl 0.3 9 0
+wait 0.05
+shot b2_let_go
+alleyuntil 3
+wait 0.3
+shot b3_next_held

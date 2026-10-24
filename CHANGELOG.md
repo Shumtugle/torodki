@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.40
+- The ball that rolls is the ball that was in hand: the same color, turned as it was held.
+  The next one taken up is always another color of the set.
+
 ## 0.39
 - The turn round to the alley is a turn of the whole body now: three sweeps of the head,
   past the houses at a third of the way and at two thirds, with a nod at each.

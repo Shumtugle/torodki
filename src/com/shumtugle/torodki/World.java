@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.39";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.40";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -3953,8 +3953,9 @@ final class World implements Physics.Listener {
             // the next ball, held low in front, following the finger
             ras.viewToWorld(alley.handX * 0.22f, -0.5f, 1.05f, tmp);
             float bx = tmp[0] + Alley.CAM_X, by = tmp[1] + Alley.CAM_Y, bz = tmp[2];
-            float spin = clock * 0.6f, c = (float) Math.cos(spin), s = (float) Math.sin(spin);
-            ras.ball(bx, by, bz, 0.13f, c, 0, s, 0, 1, 0, -s, 0, c, 0xFF22357E, Backdrop.mix(0xFF22357E, 0xFFFFFFFF, 0.28f), 950 << 3);
+            float spin = alley.handSpin, c = (float) Math.cos(spin), s = (float) Math.sin(spin);
+            int col = alley.handColor;
+            ras.ball(bx, by, bz, 0.13f, c, 0, s, 0, 1, 0, -s, 0, c, col, Backdrop.mix(col, 0xFFFFFFFF, 0.28f), 950 << 3);
         }
         float minX = W, minY = h, maxX = 0, maxY = 0;
         for (int i = 0; i < 8; i++) {

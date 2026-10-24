@@ -76,6 +76,9 @@ final class Alley {
     private boolean touching;
     private float downX, downY, downT, fingerX;
     float handX;                            // where the ball in hand is, -1 left to 1 right
+    // the ball in hand: its color and how far it has been turned; the same ball is rolled
+    int handColor;
+    float handSpin;
 
     Alley(World.Host host, long seed) {
         this.host = host;
@@ -85,6 +88,7 @@ final class Alley {
         fX = (float) Math.sin(YAW);
         fZ = (float) Math.cos(YAW);
         phys.sleeping = true;
+        handColor = Builder.BALL_COLORS[rnd.nextInt(Builder.BALL_COLORS.length)];
         // the first figure is always the triangle, the rest drawn from the others
         order[0] = 0;
         int[] rest = {1, 2, 3, 4, 5, 6, 7};
@@ -416,16 +420,23 @@ final class Alley {
     void handUpdate(float dt) {
         float want = touching ? Math.max(-1f, Math.min(1f, (fingerX - World.W * 0.5f) / (World.W * 0.4f))) : 0f;
         handX += (want - handX) * Math.min(1f, dt * 10f);
+        handSpin += dt * 0.6f;
     }
 
     /** A ball rolled from u (meters right of the lane's middle) at a speed, at an angle. */
     void roll(float u, float speed, float ang) {
         if (phase != AIM) return;
         u = Math.max(-1.2f, Math.min(1.2f, u));
-        Body b = Body.ball(BALL_R, Builder.BALL_COLORS[rnd.nextInt(Builder.BALL_COLORS.length)]);
+        // the very ball that was in hand, turned as it was held
+        Body b = Body.ball(BALL_R, handColor);
         b.scaleMass(BALL_MASS);
         float x = wx(u, 1.6f), z = wz(u, 1.6f);
-        b.setPose(x, BALL_R + 0.01f, z, 1, 0, 0, 0);
+        b.setPose(x, BALL_R + 0.01f, z, (float) Math.cos(handSpin * 0.5f), 0f, (float) Math.sin(handSpin * 0.5f), 0f);
+        // and the next one taken up: another of the set, never the same color twice running
+        int c;
+        do c = Builder.BALL_COLORS[rnd.nextInt(Builder.BALL_COLORS.length)];
+        while (c == handColor);
+        handColor = c;
         float dxl = (float) Math.sin(ang), dvl = (float) Math.cos(ang);
         b.vx = (rX * dxl + fX * dvl) * speed;
         b.vz = (rZ * dxl + fZ * dvl) * speed;
