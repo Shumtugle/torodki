@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.58
+- The gods hand over the golden cubes one at a time: one for each figure felled in the
+  alley, as long as they hold any the player has earned on the street. Before, the first
+  figure felled brought every cube they held at once. What they keep waits for figures to
+  come.
+- A game saved under the old rule gives back what was handed over that way: those cubes
+  return to the gods, to be won again figure by figure.
+- The cube drops from under the thunderer's cloud, wherever it stands this time.
+
 ## 0.57
 - The marks of the heavy hammer come after the gods, not before. A building felled at one
   throw no longer shows the new marks in the corner at once: the view tips up, the gods

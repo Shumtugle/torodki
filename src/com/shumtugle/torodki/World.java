@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.57";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.58";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -220,6 +220,15 @@ final class World implements Physics.Listener {
         goldSeen = host.loadGoldSeen();
         cubes = Math.max(0, host.loadInt("cubes"));
         cubesDue = Math.max(0, host.loadInt("cubesDue"));
+        // a game saved while the gods still handed over all they held at once: what was
+        // handed over that way goes back to them, to be won again figure by figure
+        if (host.loadInt("cubeRule") == 0) {
+            cubesDue += cubes;
+            cubes = 0;
+            host.saveInt("cubes", 0);
+            host.saveInt("cubesDue", cubesDue);
+            host.saveInt("cubeRule", 1);
+        }
         atSea = oceanLevel(level);
         if (!Builder.hasWinter()) Builder.readWinter(host.asset("winter.bin"));
         readSplash(host.asset("splash.bin"));
@@ -5339,18 +5348,19 @@ final class World implements Physics.Listener {
         aiming = false;
     }
 
-    // golden cubes: those the gods have handed over, and those earned and not yet handed
+    // golden cubes: those the gods have handed over, and those earned on the street that
+    // they still hold. They give one for each figure felled in the alley, and keep the rest
     int cubes, cubesDue;
     private int cubesFalling;           // how many are coming down in the gods' hands right now
 
-    /** The gods hand over the golden cubes earned on the street. */
-    void giveCubes() {
-        cubesFalling = cubesDue;
+    /** A figure felled in the alley: the gods hand over one golden cube, if they hold any. */
+    void giveCube() {
+        cubesFalling = cubesDue > 0 ? 1 : 0;
         if (cubesDue <= 0) return;
-        cubes += cubesDue;
-        cubesDue = 0;
+        cubes++;
+        cubesDue--;
         host.saveInt("cubes", cubes);
-        host.saveInt("cubesDue", 0);
+        host.saveInt("cubesDue", cubesDue);
     }
 
 
@@ -5795,13 +5805,22 @@ final class World implements Physics.Listener {
      * The golden cubes coming down from the thunderer's cloud, a fan of them, each turning
      * over as it falls, glowing, a glint on it now and then.
      */
+    private float cubeX0, cubeY0, cubeLastT = 1e9f;
+
     private void drawCubeGift(Px f, float t, int n) {
+        // from under the thunderer's cloud, wherever it stands this time
+        if (t < cubeLastT) {
+            sky.godAt(Sky.THUNDERER, 0f, tmp);
+            cubeX0 = tmp[0];
+            cubeY0 = tmp[1] + Math.max(30, sky.godH(Sky.THUNDERER)) * 0.25f;
+        }
+        cubeLastT = t;
         int shown = Math.min(n, 9);
         for (int k = 0; k < shown; k++) {
             float tk = t - k * 0.12f;
             if (tk <= 0f) continue;
             float fall = Math.min(1.7f, tk);
-            float cx = W * 0.5f + (k - (shown - 1) * 0.5f) * 15f * (0.6f + fall), cy = h * 0.24f + 30f * fall + 220f * fall * fall;
+            float cx = cubeX0 + (k - (shown - 1) * 0.5f) * 15f * (0.6f + fall), cy = cubeY0 + 30f * fall + 220f * fall * fall;
             if (cy > h + 20) continue;
             float ang = 0.4f + tk * (3.5f + k * 0.4f), s = 7f;
             float ca = (float) Math.cos(ang), sa = (float) Math.sin(ang);

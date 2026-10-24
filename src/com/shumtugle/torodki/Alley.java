@@ -13,8 +13,9 @@ import java.util.Random;
  * the golem, which falls back down the street and builds itself again, farther off. Five
  * times, and it is driven out of sight: back over the shore road, across the beach and into
  * the sea, and the player walks down to the water. A figure left standing after the third
- * ball sends the player back to the buildings. No hammers are given here; but a figure
- * felled is when the gods hand over the golden cubes the player has earned on the street.
+ * ball sends the player back to the buildings. No hammers are given here; but for each
+ * figure felled the gods hand over one of the golden cubes the player has earned on the
+ * street, and keep the rest for figures to come.
  *
  * Out on the ice the same game is played on the water, with stones: the view turns round
  * to the open sea behind the floe, an ice golem leaps up out of the swell and bursts into
@@ -539,8 +540,8 @@ final class Alley {
                 host.buzz(50);
             }
             // the gods look down on it: delight for one ball, smiles for two, a nod for three;
-            // and now they hand over the golden cubes the player has earned on the street
-            w.giveCubes();
+            // and now they hand over one of the golden cubes the player has earned on the street
+            w.giveCube();
             lookUp(w, ball == 0 ? Sky.OVATION : ball == 1 ? Sky.CHEER : Sky.POLITE);
             return;
         }

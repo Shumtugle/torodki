@@ -1,0 +1,22 @@
+# The gods hold seven golden cubes: one for each figure felled in the alley, the rest kept.
+screen 1096 2560
+goldseen
+level 8
+wait 1.0
+cubesdue 7
+alley
+alleyneed 0
+bowl 0 10 0
+alleyuntil 11
+wait 2.3
+shot c1_one_cube
+alleyuntil 3
+alleystate
+alleyneed 0
+bowl 0 10 0
+alleyuntil 3
+alleystate
+alleyneed 0
+bowl 0 10 0
+alleyuntil 3
+alleystate

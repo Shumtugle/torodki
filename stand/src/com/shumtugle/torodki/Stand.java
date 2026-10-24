@@ -369,6 +369,7 @@ public final class Stand implements World.Host {
             if (a == null) System.out.println(String.format("%7.2fs  no alley; heavy %d, golden cubes %d, due %d", time, world.heavyLeft, world.cubes, world.cubesDue));
             else System.out.println(String.format("%7.2fs  alley phase %d round %d ball %d won %d standing %.2f%s; heavy %d",
                     time, a.phase, a.round, a.ball, a.won, a.standing, a.lost ? " LOST" : "", world.heavyLeft)
+                    + String.format(", golden cubes %d, due %d", world.cubes, world.cubesDue)
                     + (a.balls.isEmpty() ? "" : String.format(", stone at %.1f %.2f %.1f (v %.1f), skips %d", a.balls.get(a.balls.size() - 1).px,
                     a.balls.get(a.balls.size() - 1).py, a.balls.get(a.balls.size() - 1).pz, a.vOf(a.balls.get(a.balls.size() - 1).px, a.balls.get(a.balls.size() - 1).pz), a.skips)));
         } else if (c.equals("tear")) {
