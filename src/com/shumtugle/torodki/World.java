@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.49";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.50";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -621,6 +621,11 @@ final class World implements Physics.Listener {
             boolean fight = state == BOSS && bossEnd < 0f;
             boolean portal = state == PORTAL && portalIn < 0f && stateTime > PORTAL_RISE;
             if (!fight && !portal && (state != PLAY || stars <= 0) || hs != HAND) return;
+            // the close view must show the iceberg where it is now, before it closes in
+            if (atSea && drifting(level) && !zoomed && zoomK == 0f) {
+                followZoom();
+                if (Math.abs(Builder.CX - zoomForX) > 0.6f) prepareZoom();
+            }
             aiming = true;
             lastX = x;
             lastY = y;
@@ -772,7 +777,7 @@ final class World implements Physics.Listener {
         if (!atSea || !drifting(level) || zoomRas == null || zoomZ <= 1f) return;
         if (zoomReady) {
             if (zoomed || zoomK > 0f) return;
-            if (zNextCZ != Builder.CZ) {
+            if (zNextCZ != Builder.CZ || Math.abs(zNextX - Builder.CX) > Math.abs(zoomForX - Builder.CX)) {
                 // painted for another level: of no use now
                 zoomReady = false;
                 zoomPaint = null;
@@ -793,12 +798,12 @@ final class World implements Physics.Listener {
             zoomPaint = null;
             return;
         }
-        if (zoomPaint != null || Math.abs(Builder.CX - zoomForX) < 0.5f) return;
+        if (zoomPaint != null || Math.abs(driftAt(driftT + 0.4f) - zoomForX) < 0.3f) return;
         if (zoomSpare == null) zoomSpare = new Raster(W, h);
         final Raster r = zoomSpare;
         final Ocean.Mask m = zSeaMask == zMaskA ? zMaskB : zMaskA;
         // a little ahead of where it is, the way it is drifting
-        final float x = driftAt(driftT + 0.8f), cz = Builder.CZ;
+        final float x = driftAt(driftT + 0.4f), cz = Builder.CZ;
         float lookY = Builder.TOP + 1.4f, dx = x - CAM_X, dz = Builder.CZ;
         float dist = (float) Math.sqrt(dx * dx + dz * dz);
         r.camera(CAM_X, CAM_Y, 0f, (float) Math.atan2(dx, dz), (float) Math.atan2(lookY - CAM_Y, dist), focal * zoomZ, h * 0.5f);
@@ -1915,6 +1920,12 @@ final class World implements Physics.Listener {
         float dx = tx - sx, dy = ty - sy, dz = tz - sz;
         float dist = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
         float t = flight(dist, speed);
+        if (atSea && drifting(level) && state == PLAY) {
+            // the hammer is thrown where the drifting iceberg will be when it comes down
+            float lead = driftAt(driftT + t) - Builder.CX;
+            tx += lead;
+            dx += lead;
+        }
         hammer.ghost = false;
         hammer.asleep = false;
         float yaw = YAW + (fx.nextFloat() - 0.5f) * 0.6f;
@@ -2084,6 +2095,7 @@ final class World implements Physics.Listener {
         puddles(dt);
         life.update(dt);
         if (atSea) {
+            brace += ((aiming ? 1f : 0f) - brace) * Math.min(1f, dt * 6f);
             followZoom();
             ocean.orcaStep(dt);
             ocean.snow(dt);
@@ -3434,6 +3446,8 @@ final class World implements Physics.Listener {
         // the floe underfoot lies still at first; from the 110th it rocks, harder as it goes
         int n = level - SEA_FROM;
         float k = n < 8 ? 0f : Math.min(1f, 0.55f + (n - 8) * 0.05f);
+        // aiming, the player braces his feet: the rocking all but stops while the finger is down
+        k *= 1f - 0.88f * brace;
         rockA = k * (0.034f * (float) Math.sin(clock * 0.8f) + 0.012f * (float) Math.sin(clock * 1.9f + 1f));
         rockY = k * (7.5f * (float) Math.sin(clock * 1.05f + 0.4f) + 2f * (float) Math.sin(clock * 2.6f));
         rockX = k * 3f * (float) Math.sin(clock * 0.61f);
@@ -3444,7 +3458,7 @@ final class World implements Physics.Listener {
     // of the view to the right and back again, the building riding on it, so the target
     // moves as well as rocks. Everything resting on it is carried along with it.
 
-    private float driftT;
+    private float driftT, brace;
 
     static boolean drifting(int lv) {
         return lv - SEA_FROM >= 18;
@@ -3461,10 +3475,19 @@ final class World implements Physics.Listener {
     private void drift(float dt) {
         if (!atSea || !drifting(level) || golem != null) return;
         if (state != PLAY && state != WON && state != LOST) return;
-        driftT += dt;
+        // while the player aims, the drift all but holds, and the ring rides along with the iceberg
+        driftT += dt * (aiming ? 0.25f : 1f);
         float x = driftAt(driftT), dx = x - Builder.CX;
         if (dx == 0f) return;
         float old = Builder.CX;
+        if (aiming) {
+            float y = Builder.TOP + 1.4f;
+            ras.project(old, y, Builder.CZ, scr);
+            float sx = scr[0];
+            ras.project(x, y, Builder.CZ, scr);
+            aimX += scr[0] - sx;
+            baseX += scr[0] - sx;
+        }
         Builder.CX = x;
         plinth.px += dx;
         plinth.ppx += dx;

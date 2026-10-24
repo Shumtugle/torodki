@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.50
+- Aiming out at sea can be held steady: while the finger is down the player braces his
+  feet and the rocking all but stops; it comes back once the hammer is thrown.
+- The drifting iceberg all but holds while the player aims, and the ring rides along with
+  it, staying on the spot of the building it was put on. The hammer is thrown where the
+  iceberg will be when it comes down.
+- The close view for aiming is always on the iceberg: it is painted afresh close behind the
+  drift, and at the touch, should it lag, at once.
+
 ## 0.49
 - The killer whales are one smooth body each now, not a string of balls: black, the belly
   white, a white patch behind the eye, a grey saddle behind the tall fin, the flukes.

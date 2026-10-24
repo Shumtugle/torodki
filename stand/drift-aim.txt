@@ -1,0 +1,22 @@
+# Aiming at the drifting iceberg: the rocking stills, the ring rides along, the throw leads it.
+screen 1096 2560
+level 123
+wait 9.0
+shot a0
+down 548 1000
+wait 0.6
+shot a1
+wait 1.0
+shot a2
+up 548 1000
+wait 2.5
+shot a3
+wait 3.0
+state
+wait 5.0
+down 548 1000
+wait 0.6
+shot a4
+up 548 1000
+wait 5.0
+state
