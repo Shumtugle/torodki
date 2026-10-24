@@ -1,0 +1,22 @@
+# The golem bursts into a figure: it sinks, its seams open, the shell flies off in pieces
+# and the stones come out of its body in arcs, landing in a wave from the front.
+screen 1096 2560
+level 20
+wait 1.0
+alley
+alleyuntil 10
+wait 0.2
+shot u1_slump
+wait 0.15
+shot u2_seams
+wait 0.12
+shot u3_burst
+wait 0.15
+shot u4_out
+wait 0.2
+shot u5_arcs
+wait 0.25
+shot u6_landing
+wait 0.6
+shot u7_figure
+alleystate

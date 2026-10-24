@@ -1,0 +1,20 @@
+# Between rounds the gods look down on the alley: a figure felled, the view tips up, the
+# gods judge it and a heavy hammer falls; then back down, and the golem gathers itself.
+screen 1096 2560
+level 20
+wait 1.0
+alley
+alleyneed 0
+bowl 0 10 0
+alleyuntil 11
+wait 0.5
+shot d1_tilting
+wait 1.8
+shot d2_gods
+wait 1.4
+shot d3_gift
+alleyuntil 6
+shot d4_gather
+wait 0.3
+shot d5_gathering
+alleystate

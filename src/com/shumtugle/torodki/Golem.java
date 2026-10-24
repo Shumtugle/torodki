@@ -37,6 +37,10 @@ final class Golem {
     private float hopX, hopZ, x0, x1;
     float time;
     private float squat, air;   // how low it crouches, how high it is
+    // a leap rocks it onto one side, the other side the next time; the arms swing after the body
+    private float roll, armU = 0.35f, armF = 0.65f;
+    // before it bursts: how far it sinks past its usual crouch, and how far its parts stand apart
+    float slump, swell;
 
     // its frame: right, and toward the player
     float rx, rz, fx, fz;
@@ -76,6 +80,15 @@ final class Golem {
         time += dt;
         hurt = Math.max(0f, hurt - dt * 3f);
         if (down) return;
+        // the arms are heavy: they follow the body a few frames late
+        float wantU = act == AIR ? -0.9f : 0.35f + (float) Math.sin(time * 1.7f) * 0.06f;
+        float wantF = act == AIR ? -0.4f : 0.65f;
+        armU += (wantU - armU) * Math.min(1f, dt * 7f);
+        armF += (wantF - armF) * Math.min(1f, dt * 7f);
+        // the roll: out to one side through a leap, back upright as it lands
+        float side = (landings & 1) == 0 ? 1f : -1f;
+        float wantRoll = act == AIR ? side * 0.11f * (float) Math.sin(Math.PI * Math.min(1f, actT)) : 0f;
+        roll += (wantRoll - roll) * Math.min(1f, dt * 9f);
         if (stagger > 0f && act != AIR) {
             stagger -= dt;
             settle(dt);
@@ -173,6 +186,20 @@ final class Golem {
 
     /** A point from its frame (right, up, toward the player), its units, into the world. */
     void at(float r, float u, float f, float[] out) {
+        // the seams opening before a burst: everything a little farther from the middle of it
+        if (swell > 0f) {
+            float k = 1f + swell * 0.09f, mid = 2.0f;
+            r *= k;
+            u = mid + (u - mid) * k;
+            f *= k;
+        }
+        // the roll, about the hips
+        if (roll != 0f) {
+            float h = hipY(), c = (float) Math.cos(roll), s = (float) Math.sin(roll);
+            float rr = r * c - (u - h) * s, uu = h + r * s + (u - h) * c;
+            r = rr;
+            u = uu;
+        }
         u += air;
         out[0] = x + (rx * r + fx * f) * G;
         out[1] = u * G;
@@ -186,7 +213,7 @@ final class Golem {
     private float hipY() {
         float breathe = (float) Math.sin(time * 2.4f) * 0.03f;
         float low = kneeling() > 0f ? HIP - 0.95f : HIP - squat * 0.6f;
-        return low + breathe;
+        return low + breathe - slump * 0.45f;
     }
 
     /** The bend of a leg: thigh forward, shin back; deep in a crouch. */
@@ -232,13 +259,13 @@ final class Golem {
 
     private float armUpper(int side) {
         if (side > 0 && raise > 0f) return 0.35f - raise * 3.0f;
-        float swing = act == AIR ? -0.9f : 0.35f + (float) Math.sin(time * 1.7f + side) * 0.06f;
-        return swing;
+        // the arm that rolls down swings out a little farther
+        return armU + side * roll * 0.8f + slump * 0.5f;
     }
 
     private float armFore(int side) {
         if (side > 0 && raise > 0f) return 0.6f - raise * 3.2f;
-        return act == AIR ? -0.4f : 0.65f;
+        return armF + slump * 0.4f;
     }
 
     /** Distance from a world point to its bulk, for blows that hit the body. */

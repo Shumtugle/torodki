@@ -20,7 +20,10 @@ import java.util.Random;
 final class Alley {
     // the phases, in the order they come
     static final int TURN_IN = 0, ENTER = 1, SCATTER = 2, AIM = 3, ROLL = 4, SETTLE = 5, GATHER = 6, HOLD = 7,
-            SEA = 8, TURN_OUT = 9;
+            SEA = 8, TURN_OUT = 9, SWELL = 10, GODS = 11;
+    // the burst: it sinks lower than a crouch, its seams open, it holds a moment, it bursts
+    static final float SLUMP_T = 0.22f, SWELL_T = 0.14f, BURST_T = 0.42f;
+    static final float FLY_T = 0.55f, BACK_T = 0.5f;
     // the turn of the head: three sweeps, a nod between them
     static final float SWEEP = 0.42f, NOD = 0.34f, TURN_T = 3 * SWEEP + 2 * NOD;
     static final float SEA_T = 2.8f;
@@ -145,6 +148,8 @@ final class Alley {
         phaseT += dt;
         flash = Math.max(0f, flash - dt * 2.5f);
         golem.update(dt, 0f);
+        // put back together, its seams close up
+        if (!golem.down && phase != SWELL && golem.swell > 0f) golem.swell = Math.max(0f, golem.swell - dt * 5f);
         if (golem.landings > landed) {
             landed = golem.landings;
             boolean sea = vOf(golem.x, golem.z) > -Backdrop.SEA_Z / Math.abs(fZ) - 0.5f;
@@ -182,15 +187,30 @@ final class Alley {
                         golem.hop(hopX[hopAt], hopZ[hopAt]);
                         hopAt++;
                         phaseT = 0f;
-                    } else if (then == THEN_SCATTER && golem.actT > 0.5f) {
+                    } else if (then == THEN_SCATTER && golem.actT > 0.35f) {
                         traffic = true;
-                        scatter();
+                        go(SWELL);
+                        host.sound(Synth.STONE, 0.7f, 0.45f);
                     }
                 }
                 break;
+            case SWELL: {
+                float s = Math.min(1f, phaseT / SLUMP_T);
+                golem.slump = s * s * (3f - 2f * s);
+                golem.swell = Math.max(0f, Math.min(1f, (phaseT - SLUMP_T) / SWELL_T));
+                if (phaseT >= BURST_T) {
+                    // the shell flies off in pieces; the cores become the figure
+                    w.chips(golem);
+                    for (int i = 0; i < 14; i++)
+                        w.dust(golem.x + (rnd.nextFloat() - 0.5f) * 3f, 0.1f, golem.z + (rnd.nextFloat() - 0.5f) * 3f);
+                    scatter();
+                    golem.slump = golem.swell = 0f;
+                }
+                break;
+            }
             case SCATTER:
                 flyBlocks(w, false);
-                if (phaseT > lastDelay() + 0.65f) {
+                if (phaseT > lastDelay() + FLY_T + 0.35f) {
                     for (Body b : blocks) {
                         b.setPose(b.homeX, b.homeY, b.homeZ, b.homeQw, b.homeQx, b.homeQy, b.homeQz);
                         b.vx = b.vy = b.vz = b.wx = b.wy = b.wz = 0f;
@@ -226,9 +246,11 @@ final class Alley {
                 break;
             case GATHER:
                 flyBlocks(w, true);
-                if (phaseT > lastDelay() + 0.55f) {
+                if (phaseT > lastDelay() + BACK_T) {
                     blocks.clear();
                     golem.down = false;
+                    golem.swell = 1f;
+                    host.sound(Synth.STONE, 0.8f, 0.5f);
                     if (lost) {
                         // it stands there whole again, laughing at the player
                         host.sound(Synth.ROAR, 0.9f, 0.9f);
@@ -248,6 +270,9 @@ final class Alley {
                 break;
             case HOLD:
                 if (phaseT > 1.8f) go(TURN_OUT);
+                break;
+            case GODS:
+                if (phaseT >= 2f * TILT_T + godsHold()) gather();
                 break;
             default:
                 break;
@@ -272,9 +297,51 @@ final class Alley {
         return m;
     }
 
-    /** The golem falls apart, and its stones fly to their places in the figure of the round. */
+    // where in the golem each stone sits, in its frame (right, up, toward the player) and its
+    // units, lowest first, and how far it turns on its way out: shins and thighs, the torso,
+    // forearms, upper arms, shoulders, the head
+    private static final float[][] SLOTS = {
+            {-0.75f, 0.5f, 0.35f, 0.4f}, {0.75f, 0.5f, 0.35f, 0.4f}, {-0.75f, 1.0f, 0.45f, 0.5f}, {0.75f, 1.0f, 0.45f, 0.5f},
+            {0f, 1.6f, 0.35f, 0.8f}, {-1.45f, 1.3f, 0.9f, 1.6f}, {1.45f, 1.3f, 0.9f, 1.6f}, {0f, 2.1f, 0.6f, 0.9f},
+            {-1.45f, 2.3f, 0.8f, 1.8f}, {1.45f, 2.3f, 0.8f, 1.8f}, {-0.5f, 2.7f, 0.85f, 1.2f}, {0.5f, 2.7f, 0.85f, 1.2f},
+            {-1.35f, 3.0f, 0.6f, 3.1f}, {1.35f, 3.0f, 0.6f, 3.1f}, {0f, 3.35f, 1.15f, 2.4f}};
+    private float[] turnOut = new float[0];
+    private int[] slotOf = new int[0];
+
+    /** The order the stones go in: the lowest first, and of those the nearest the player. */
+    private int[] ranks() {
+        int n = blocks.size();
+        Integer[] idx = new Integer[n];
+        for (int i = 0; i < n; i++) idx[i] = i;
+        java.util.Arrays.sort(idx, new java.util.Comparator<Integer>() {
+            @Override
+            public int compare(Integer a, Integer b) {
+                Body p = blocks.get(a), q = blocks.get(b);
+                float ya = Math.round(p.homeY * 4f), yb = Math.round(q.homeY * 4f);
+                if (ya != yb) return ya < yb ? -1 : 1;
+                float va = vOf(p.homeX, p.homeZ), vb = vOf(q.homeX, q.homeZ);
+                return va < vb ? -1 : va > vb ? 1 : 0;
+            }
+        });
+        int[] rank = new int[n];
+        for (int r = 0; r < n; r++) rank[idx[r]] = r;
+        return rank;
+    }
+
+    /** The point of a stone's slot in the golem as it stands now, into from*. */
+    private void slotPoint(int i, int slot, float[] out) {
+        float[] s = SLOTS[slot % SLOTS.length];
+        // a second stone in the same slot sits a little beside the first
+        float off = (slot / SLOTS.length) * 0.3f;
+        golem.at(s[0] + off, s[1], s[2], out);
+    }
+
+    /**
+     * The golem bursts, and its stones fly to their places in the figure of the round: each
+     * from its own place in the body, the lowest and nearest first, so they come down in a
+     * wave from the point of the figure backward.
+     */
     private void scatter() {
-        golem.down = true;
         blocks.clear();
         phys.clear();
         build(order[round], figureV(round));
@@ -283,41 +350,63 @@ final class Alley {
         fromY = new float[n];
         fromZ = new float[n];
         delay = new float[n];
+        turnOut = new float[n];
+        slotOf = new int[n];
         landedAt = new boolean[n];
-        float cx = golem.x, cz = golem.z;
+        int[] rank = ranks();
+        float[] p = new float[3];
         for (int i = 0; i < n; i++) {
-            fromX[i] = cx + (rnd.nextFloat() - 0.5f) * 2.4f;
-            fromY[i] = 1.5f + rnd.nextFloat() * 4f;
-            fromZ[i] = cz + (rnd.nextFloat() - 0.5f) * 1.6f;
-            delay[i] = i * 0.045f + rnd.nextFloat() * 0.05f;
+            slotOf[i] = rank[i];
+            slotPoint(i, slotOf[i], p);
+            fromX[i] = p[0];
+            fromY[i] = p[1];
+            fromZ[i] = p[2];
+            turnOut[i] = SLOTS[slotOf[i] % SLOTS.length][3];
+            delay[i] = rank[i] * 0.037f;
         }
-        host.sound(Synth.THUNDER, 0.45f, 1.5f);
-        host.sound(Synth.WHOOSH, 0.9f, 0.8f);
+        golem.down = true;
+        host.sound(Synth.THUNDER, 0.5f, 1.5f);
+        host.sound(Synth.CRASH, 0.7f, 0.5f);
+        host.buzz(60);
         go(SCATTER);
     }
 
     /** Each block along its arc: out from the golem to its place, or (back) the other way. */
     private void flyBlocks(World w, boolean back) {
-        for (int i = 0; i < blocks.size(); i++) {
+        int n = blocks.size(), landedNow = 0;
+        for (int i = 0; i < n; i++) {
             Body b = blocks.get(i);
-            float t = (phaseT - delay[i]) / (back ? 0.5f : 0.6f);
+            float t = (phaseT - delay[i]) / (back ? BACK_T : FLY_T);
             float k = Math.max(0f, Math.min(1f, t));
             if (back) k = 1f - k;
-            // k = 0 at the golem, 1 at the place
-            float e = k * k * (3f - 2f * k);
-            float x = fromX[i] + (b.homeX - fromX[i]) * e;
-            float z = fromZ[i] + (b.homeZ - fromZ[i]) * e;
-            float y = fromY[i] + (b.homeY - fromY[i]) * e + 2.2f * 4f * e * (1f - e);
-            float spin = (1f - e) * 6f + i;
+            // k = 0 in the golem, 1 at the place: a ballistic arc, quick out of the body
+            float x = fromX[i] + (b.homeX - fromX[i]) * k;
+            float z = fromZ[i] + (b.homeZ - fromZ[i]) * k;
+            float rise = Math.max(1.2f, (fromY[i] - b.homeY) * 0.3f + 1.4f);
+            float y = fromY[i] + (b.homeY - fromY[i]) * k + rise * 4f * k * (1f - k);
+            // down, it kicks up once and settles
+            if (!back && t > 1f && t < 1.6f) {
+                float u = (t - 1f) * FLY_T;
+                y += 0.07f * K * (float) Math.exp(-u * 16f) * Math.abs((float) Math.sin(u * 26f));
+            }
+            // turning from the way it lay in the body to upright as it lands
+            float spin = (1f - k) * (turnOut.length > i ? turnOut[i] : 1f);
             float c = (float) Math.cos(spin * 0.5f), s = (float) Math.sin(spin * 0.5f);
-            // a tumble about its own across-axis while it flies, none once it is down
             float hw = b.homeQw, hx = b.homeQx, hy = b.homeQy, hz = b.homeQz;
             b.setPose(x, y, z, hw * c - hx * s, hx * c + hw * s, hy * c + hz * s, hz * c - hy * s);
-            b.shown = back ? 0.35f + 0.65f * e : Math.min(1f, 0.35f + e);
+            b.shown = back ? 0.7f + 0.3f * k : 1f;
             if (!back && t >= 1f && !landedAt[i]) {
                 landedAt[i] = true;
-                if ((i & 1) == 0) host.sound(Synth.STONE, 0.45f, 0.6f + rnd.nextFloat() * 0.3f);
-                w.dust(b.homeX, 0.05f, b.homeZ);
+                landedNow++;
+                // stone on asphalt, each a little different, the last one the heaviest
+                boolean last = true;
+                for (boolean l : landedAt) last &= l;
+                if (last) {
+                    host.sound(Synth.GROUND, 1.1f, 0.65f);
+                    host.sound(Synth.STONE, 0.9f, 0.5f);
+                    host.buzz(45);
+                } else host.sound(Synth.STONE, 0.5f, 0.55f + rnd.nextFloat() * 0.35f);
+                for (int d = 0; d < 3; d++) w.dust(b.homeX + (rnd.nextFloat() - 0.5f) * b.hx * 2f, 0.05f, b.homeZ);
             }
         }
     }
@@ -343,8 +432,8 @@ final class Alley {
                 host.buzz(50);
             }
             w.giveHeavy(1);
-            host.sound(Synth.CATCH, 0.9f, 1f);
-            gather();
+            // the gods look down on it: delight for one ball, smiles for two, a nod for three
+            lookUp(w, ball == 0 ? Sky.OVATION : ball == 1 ? Sky.CHEER : Sky.POLITE);
             return;
         }
         if (ball < BALLS - 1) {
@@ -353,7 +442,33 @@ final class Alley {
             return;
         }
         lost = true;
-        gather();
+        lookUp(w, Sky.GLOOM);
+    }
+
+    // ---- the gods, between rounds ----
+
+    static final float TILT_T = 1.0f;
+    int verdict;
+
+    private void lookUp(World w, int v) {
+        verdict = v;
+        w.godsLook(v);
+        go(GODS);
+    }
+
+    /** How long the gods hold the view, as on the street. */
+    float godsHold() {
+        return verdict == Sky.GLOOM ? 2.2f : verdict == Sky.OVATION ? 3.2f : 2.4f;
+    }
+
+    /** How far the view is tipped up into the sky: 0 the alley, 1 the gods. */
+    float tilt() {
+        if (phase != GODS) return 0f;
+        float t = phaseT, k;
+        if (t < TILT_T) k = t / TILT_T;
+        else if (t < TILT_T + godsHold()) k = 1f;
+        else k = Math.max(0f, 1f - (t - TILT_T - godsHold()) / TILT_T);
+        return k * k * (3f - 2f * k);
     }
 
     static boolean knocked(Body b) {
@@ -371,12 +486,20 @@ final class Alley {
         fromY = new float[n];
         fromZ = new float[n];
         delay = new float[n];
+        float[] p = new float[3];
+        if (slotOf.length != n) {
+            slotOf = new int[n];
+            for (int i = 0; i < n; i++) slotOf[i] = i;
+        }
+        turnOut = new float[n];
         for (int i = 0; i < n; i++) {
             Body b = blocks.get(i);
-            // the flight runs from the golem (k = 0) to where the block lies now (k = 1)
-            fromX[i] = golem.x + (rnd.nextFloat() - 0.5f) * 2f;
-            fromY[i] = 1.5f + rnd.nextFloat() * 4f;
-            fromZ[i] = golem.z + (rnd.nextFloat() - 0.5f) * 1.4f;
+            // the flight runs from its slot in the golem (k = 0) to where the block lies now (k = 1)
+            slotPoint(i, slotOf[i], p);
+            fromX[i] = p[0];
+            fromY[i] = p[1];
+            fromZ[i] = p[2];
+            turnOut[i] = SLOTS[slotOf[i] % SLOTS.length][3];
             b.homeX = b.px;
             b.homeY = b.py;
             b.homeZ = b.pz;
@@ -384,7 +507,7 @@ final class Alley {
             b.homeQx = b.qx;
             b.homeQy = b.qy;
             b.homeQz = b.qz;
-            delay[i] = rnd.nextFloat() * 0.3f;
+            delay[i] = rnd.nextFloat() * 0.25f;
         }
         for (Body b : balls) b.gone = true;
         balls.clear();

@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.40";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.41";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -161,7 +161,9 @@ final class World implements Physics.Listener {
     private final int[] pCol = new int[MAXP];
     private final boolean[] pDust = new boolean[MAXP];
     // what a particle is: a speck, a shirt or a postcard fluttering down, a spring
-    private static final int SPECK = 0, SHIRT = 1, CARD = 2, SPRING = 3;
+    private static final int SPECK = 0, SHIRT = 1, CARD = 2, SPRING = 3, CHIP = 4;
+    // what the golem's shell is made of: stone, darker stone, brick, plank, rusty iron
+    private static final int[] SHELL = {0xFFC9BEAD, 0xFFB0A592, 0xFFB4523A, 0xFF9C4632, 0xFFA87444, 0xFF6E3A22};
     private final int[] pKind = new int[MAXP];
     private int pN;
     private final Fliers fliers = new Fliers();
@@ -765,23 +767,7 @@ final class World implements Physics.Listener {
         return Math.hypot(x - scr[0], y - scr[1]) < 11f;
     }
 
-    // on the hundredth level the call box calls the player: the button blinks and the
-    // dispatcher's line rings, again and again, until someone presses it
-    static final int BECKON_LEVEL = 99;
-    private float ringAt = -9f;
-    private int hushedOn = -1;
-
-    private void beckon() {
-        if (level != BECKON_LEVEL || hushedOn == level || golem != null || booth >= 0f) return;
-        if (state != PLAY && state != WON && state != LOST) return;
-        if (clock - ringAt > 3.4f) {
-            ringAt = clock;
-            host.sound(Synth.RING, 0.6f, 1f);
-        }
-    }
-
     private void call() {
-        hushedOn = level;
         if (clock - callAt > 6f) calls = 0;
         calls++;
         callAt = clock;
@@ -804,15 +790,11 @@ final class World implements Physics.Listener {
     private void drawCallButton() {
         float vz = ras.project(CALL_X, CALL_Y, CALL_Z, scr);
         if (vz < 0.5f) return;
-        boolean lit = clock - callAt < 1.1f && ((int) ((clock - callAt) * 8f) & 1) == 0
-                || clock - ringAt < 1.1f && hushedOn != level && ((int) ((clock - ringAt) * 8f) & 1) == 0;
+        boolean lit = clock - callAt < 1.1f && ((int) ((clock - callAt) * 8f) & 1) == 0;
         float r = Math.max(1.6f, 0.1f * ras.f / vz);
         ras.disc(scr[0], scr[1], r + 0.6f, 1f / (vz - 0.25f), 0xFF3A3C40, 990 << 3);
         ras.disc(scr[0], scr[1], r, 1f / (vz - 0.3f), lit ? 0xFFFF6A4A : 0xFFC8231E, 990 << 3);
         ras.disc(scr[0] - r * 0.3f, scr[1] - r * 0.35f, Math.max(0.6f, r * 0.3f), 1f / (vz - 0.32f), 0xFFFFB0A0, 990 << 3);
-        // calling the player: the light spills round the button with every flash
-        if (lit && hushedOn != level && level == BECKON_LEVEL)
-            ras.haze(scr[0], scr[1], r * 3.2f, 1f / (vz - 0.35f), 0xFFFF5A30, 150);
     }
 
     // the booth on screen: doors, glass, and a telephone inside. The level is dialled on
@@ -1813,6 +1795,14 @@ final class World implements Physics.Listener {
             clock += dt;
             alley.update(dt, this);
             alley.handUpdate(dt);
+            if (alley != null && alley.phase == Alley.GODS) {
+                sky.update(dt);
+                if (sky.bolts != boltsHeard) {
+                    boltsHeard = sky.bolts;
+                    host.sound(Synth.THUNDER, 1.0f, 0.9f + fx.nextFloat() * 0.2f);
+                    host.buzz(90);
+                }
+            }
             shore.traffic = alley.traffic;
             shore.update(dt);
             particles(dt);
@@ -1840,7 +1830,6 @@ final class World implements Physics.Listener {
         puddles(dt);
         life.update(dt);
         fliers.update(dt, golem == null && (state == PLAY || state == WON || state == LOST || state == BUILD));
-        beckon();
         trail();
 
         windUp(dt);
@@ -2532,6 +2521,9 @@ final class World implements Physics.Listener {
                 i--;
                 continue;
             }
+            // a chip of the golem crumbles into dust as it ends
+            if (pKind[i] == CHIP && pAge[i] > pLife[i] * 0.7f && fx.nextInt(6) == 0 && pN < MAXP)
+                spawn(pX[i], pY[i] + 0.05f, pZ[i], true, 0xFFDCD3C4, 0.6f);
             if (pKind[i] == SHIRT || pKind[i] == CARD) {
                 flutter(i, dt);
                 continue;
@@ -2598,6 +2590,23 @@ final class World implements Physics.Listener {
         int ph = alley.phase;
         if (ph == Alley.SEA) {
             drawSea(f);
+            return;
+        }
+        if (ph == Alley.GODS) {
+            // the gods look down on the alley too: the view tips up to them between rounds
+            if (turnA == null || turnA.a.length != f.a.length) {
+                turnA = new Px(f.w, f.h);
+                turnB = new Px(f.w, f.h);
+            }
+            noHud = true;
+            drawAlley(turnA);
+            noHud = false;
+            int off = Math.round(alley.tilt() * h);
+            sky.compose(turnA.a, f.a, h, off);
+            sky.drawClouds(f, off - h);
+            float held = alley.phaseT - Alley.TILT_T;
+            if (alley.verdict != Sky.GLOOM && held > 0.9f && held < alley.godsHold()) drawGift(f, held - 0.9f);
+            if (off < h / 8) drawAlleyHud(f);
             return;
         }
         if (ph != Alley.TURN_IN && ph != Alley.TURN_OUT) {
@@ -3738,6 +3747,16 @@ final class World implements Physics.Listener {
         float ph = (float) Math.sin(pAge[i] * (kind == CARD ? 7f : 4.5f) + i * 2.3f);
         float lying = pVx[i] == 0f && pVy[i] == 0f && pVz[i] == 0f ? 1f : Math.abs(ph);
         int sx = Math.round(scr[0]), sy = Math.round(scr[1]);
+        if (kind == CHIP) {
+            float k = pAge[i] / pLife[i];
+            float size = 0.22f * ras.f / vz * (k < 0.7f ? 1f : 1f - (k - 0.7f) / 0.3f);
+            int s = Math.max(1, Math.round(size));
+            int c = pCol[i];
+            for (int y = 0; y < s; y++)
+                for (int x = 0; x < s; x++)
+                    lightPx(sx - s / 2 + x, sy - s / 2 + y, iz, y == 0 ? Backdrop.scale(c, 1.15f) : x == s - 1 ? Backdrop.scale(c, 0.8f) : c);
+            return;
+        }
         if (kind == SPRING) {
             int n = Math.max(2, Math.round(0.12f * ras.f / vz));
             for (int y = 0; y < n; y++) {
@@ -3905,6 +3924,38 @@ final class World implements Physics.Listener {
         heavyOn = true;
         host.saveGifts(heavyLeft);
         host.buzz(40);
+    }
+
+    /**
+     * The golem's shell bursting off it: pieces of its stone, brick, planks and iron thrown
+     * out from all over its body, falling round it, bouncing once and crumbling to dust.
+     */
+    void chips(Golem g) {
+        g.chest(tmp);
+        float cx = tmp[0], cy = tmp[1], cz = tmp[2];
+        for (int n = 0; n < 46 && pN < MAXP; n++) {
+            g.at((fx.nextFloat() - 0.5f) * 3f, 0.3f + fx.nextFloat() * 3.2f, fx.nextFloat() * 1.1f, tmp);
+            int i = pN++;
+            pX[i] = tmp[0];
+            pY[i] = tmp[1];
+            pZ[i] = tmp[2];
+            float dx = tmp[0] - cx, dy = tmp[1] - cy * 0.6f, dz = tmp[2] - cz;
+            float l = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) + 0.3f, sp = 3.5f + fx.nextFloat() * 4f;
+            pVx[i] = dx / l * sp;
+            pVy[i] = Math.abs(dy / l) * sp * 0.6f + 1.5f + fx.nextFloat() * 2f;
+            pVz[i] = dz / l * sp;
+            pLife[i] = 1.3f + fx.nextFloat() * 0.8f;
+            pAge[i] = 0f;
+            pCol[i] = SHELL[fx.nextInt(SHELL.length)];
+            pDust[i] = false;
+            pKind[i] = CHIP;
+        }
+    }
+
+    /** The gods turn to the alley with a verdict. */
+    void godsLook(int verdict) {
+        sky.begin(verdict, false);
+        boltsHeard = sky.bolts;
     }
 
     /** Sea water thrown up, for the alley. */

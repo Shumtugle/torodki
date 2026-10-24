@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.41
+- The golem comes apart for real now. After its last leap it sinks lower than a crouch,
+  its seams open and it holds a moment; then the shell bursts off it, pieces of its stone,
+  brick, planks and iron thrown all round, bouncing once and crumbling to dust, and the
+  stones of the figure come out of its own body: from the shins and thighs, the torso,
+  the arms, the shoulders and the head, each in an arc, turning upright as it flies. They
+  land in a wave from the front of the figure back, each kicking up once with a knock of
+  its own, the last one the heaviest. Gathered again, every stone flies back to its own
+  place in the body, and the golem closes up from them.
+- The golem rocks in its leaps: over onto one side, the other side next time, its arms
+  swinging a few frames behind its body. In the street fight too.
+- The gods look on in the alley as well: after every figure the view tips up to them,
+  delight for one ball, smiles for two, a nod for three, and the heavy hammer comes down;
+  a figure left standing gets their gloom before the view turns home.
+- The button on the lamp post no longer calls the player on the hundredth level.
+
 ## 0.40
 - The ball that rolls is the ball that was in hand: the same color, turned as it was held.
   The next one taken up is always another color of the set.
