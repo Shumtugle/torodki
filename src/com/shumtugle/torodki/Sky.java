@@ -24,7 +24,7 @@ final class Sky {
     private static final int MAX_PICTURES = 24;
 
     private int w, sh;
-    private int[] strip, winterStrip;
+    private int[] strip, winterStrip;       // the sky alone, without the far clouds
     boolean winter;               // over the winter ocean: a cold grey sky, the gods frosted
     private int verdict = POLITE;
     float time;
@@ -36,7 +36,6 @@ final class Sky {
     // from which side he sails in, when he arrives and when his face changes
     private static final float[][] AT = {{0.56f, 0.2f}, {0.27f, 0.42f}, {0.73f, 0.52f}, {0.72f, 0.75f}, {0.31f, 0.66f}};
     private static final float[] NEAR = {1.35f, 1.2f, 1.16f, 1.08f, 1.1f};
-    private static final float[] SIDE = {1f, -1f, 1f, 1f, -1f};
     private static final float[] DELAY = {0.1f, 0.0f, 0.15f, 0.25f, 0.2f};
     private static final float[] CHANGE = {1.25f, 1.5f, 1.75f, 2.2f, 1.95f};
     // the far ones first, the thunderer last
@@ -66,6 +65,21 @@ final class Sky {
             {false, false, true},     // idler: yawns
     };
     private final int[] faceTo = new int[GODS];
+
+    // each visit lays the sky out anew, like weather: the whole gathering may stand mirrored,
+    // every god a little off his usual place, sailing in from either side, sooner or later,
+    // bobbing and drifting at a pace of his own; the far clouds shifted and drifting too
+    private final float[][] at = new float[GODS][2];
+    private final float[] side = new float[GODS], delay = new float[GODS], change = new float[GODS];
+    private final float[] reach = new float[GODS], bobA = new float[GODS], bobF = new float[GODS], bobP = new float[GODS];
+    private final float[] driftV = new float[GODS], wispY = new float[GODS];
+    private boolean mirror;
+    private float cloudShift, cloudV;
+    private final float[] tmp2 = new float[2];
+    // the far clouds, apart from the sky behind them so they can be shifted: color and cover
+    // (0 to 255) of each pixel, laid round the strip's width as a ring, warm and cold
+    private int[] cloudC, cloudCw;
+    private byte[] cloudA, cloudAw;
 
     // the pictures as read from the asset: premultiplied ARGB, one array per expression. A god
     // may have several pictures; each visit to the sky picks one of his at random
@@ -135,7 +149,9 @@ final class Sky {
                 strip[j * w + x] = Backdrop.sky(d[0] / l, d[1] / l, d[2] / l, shx, shz);
             }
         rays();
-        farClouds(far, strip, false);
+        cloudC = new int[w * sh];
+        cloudA = new byte[w * sh];
+        farClouds(far, strip, cloudC, cloudA, false);
         // the winter sky: low cloud, grey, the same far clouds gone cold
         winterStrip = new int[w * sh];
         for (int j = 0; j < sh; j++)
@@ -144,7 +160,9 @@ final class Sky {
                 float l = (float) Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
                 winterStrip[j * w + x] = Ocean.sky(d[0] / l, d[1] / l, d[2] / l);
             }
-        farClouds(far, winterStrip, true);
+        cloudCw = new int[w * sh];
+        cloudAw = new byte[w * sh];
+        farClouds(far, winterStrip, cloudCw, cloudAw, true);
         readGods(gods);
     }
 
@@ -174,10 +192,12 @@ final class Sky {
             {0.8f, 0.86f}, {0.2f, 0.92f}, {0.62f, 0.94f}};
 
     /**
-     * Lays the far clouds into the strip, a little veiled by the air between: tinted toward
-     * the sky behind them and thinned, more so low down where the strip meets the street's sky.
+     * Lays the far clouds out, a little veiled by the air between: tinted toward the sky
+     * behind them and thinned, more so low down where the strip meets the street's sky. They
+     * go into a layer of their own, round the strip's width as a ring, so each visit can show
+     * them shifted and drifting.
      */
-    private void farClouds(byte[] b, int[] strip, boolean cold) {
+    private void farClouds(byte[] b, int[] strip, int[] cc, byte[] ca, boolean cold) {
         if (b == null || b.length < 2) return;
         int n = Math.min(FAR.length, u16(b, 0)), p = 2;
         for (int i = 0; i < n && p + 4 <= b.length; i++) {
@@ -188,8 +208,8 @@ final class Sky {
             for (int y = 0; y < hh; y++)
                 for (int x = 0; x < ww; x++, p += 4) {
                     int a = b[p + 3] & 0xFF;
-                    int sx = ox + x, sy = oy + y;
-                    if (a == 0 || sx < 0 || sy < 0 || sx >= w || sy >= sh) continue;
+                    int sx = ((ox + x) % w + w) % w, sy = oy + y;
+                    if (a == 0 || sy < 0 || sy >= sh) continue;
                     float fade = 0.88f * (1f - smooth(0.78f, 0.97f, sy / (float) sh));
                     if (fade <= 0f) continue;
                     int k = sy * w + sx;
@@ -202,7 +222,11 @@ final class Sky {
                         c = cold(c | 0xFF000000);
                         al *= 0.7f;
                     }
-                    strip[k] = Backdrop.mix(strip[k], c, al * fade);
+                    // over what is laid there already
+                    float na = al * fade, oa = (ca[k] & 0xFF) / 255f, ra = na + oa * (1f - na);
+                    if (ra <= 0f) continue;
+                    cc[k] = oa <= 0f ? c : Backdrop.mix(cc[k], c, na / ra);
+                    ca[k] = (byte) Math.round(Math.min(255f, ra * 255f));
                 }
         }
     }
@@ -349,7 +373,67 @@ final class Sky {
                 if (role[e] == g && has(e, faceTo[g]) && k-- == 0) pick[g] = e;
         }
         time = 0f;
+        layOut();
         planStrikes();
+    }
+
+    /** A new lay of the sky for this visit. */
+    private void layOut() {
+        mirror = rnd.nextBoolean();
+        // off their usual places, but never so near one another that a face is lost behind a cloud
+        for (int tries = 0; tries < 12; tries++) {
+            float spread = tries < 11 ? 1f : 0f;
+            for (int g = 0; g < GODS; g++) {
+                float x = AT[g][0] + (rnd.nextFloat() - 0.5f) * 0.12f * spread, y = AT[g][1] + (rnd.nextFloat() - 0.5f) * 0.08f * spread;
+                if (g == THUNDERER) y = Math.min(y, 0.24f);     // he stays on high: the lightning and the gifts are his
+                at[g][0] = mirror ? 1f - x : x;
+                at[g][1] = y;
+            }
+            if (apart()) break;
+        }
+        for (int g = 0; g < GODS; g++) {
+            side[g] = rnd.nextBoolean() ? 1f : -1f;
+            delay[g] = DELAY[g] + rnd.nextFloat() * 0.25f;
+            change[g] = CHANGE[g] + (rnd.nextFloat() - 0.5f) * 0.3f;
+            reach[g] = 70f + rnd.nextFloat() * 60f;
+            bobA[g] = 0.7f + rnd.nextFloat() * 1.4f;
+            bobF[g] = 0.7f + rnd.nextFloat() * 0.8f;
+            bobP[g] = rnd.nextFloat() * 6.28f;
+            driftV[g] = (rnd.nextFloat() - 0.5f) * 5f;
+            wispY[g] = (rnd.nextFloat() - 0.5f) * 10f;
+        }
+        cloudShift = rnd.nextFloat() * w;
+        cloudV = (rnd.nextBoolean() ? 1f : -1f) * (1.5f + rnd.nextFloat() * 3.5f);
+    }
+
+    /** No two gods closer than their usual spacing allows, by the size of their clouds. */
+    private boolean apart() {
+        for (int a = 0; a < GODS; a++)
+            for (int b = a + 1; b < GODS; b++) {
+                if (pick[a] < 0 || pick[b] < 0) continue;
+                float dx = (at[a][0] - at[b][0]) * w / (0.36f * (gw[pick[a]] + gw[pick[b]]));
+                float dy = (at[a][1] - at[b][1]) * sh / (0.36f * (gh[pick[a]] + gh[pick[b]]));
+                if (dx * dx + dy * dy < 1f) return false;
+            }
+        return true;
+    }
+
+    /** Where a god's cloud is now on screen, its middle, with the strip shifted by shift. */
+    void godAt(int g, float shift, float[] out) {
+        float since = time - delay[g];
+        float arrive = clamp01(since / 1.4f);
+        float ease = 1f - (1f - arrive) * (1f - arrive) * (1f - arrive);
+        out[0] = at[g][0] * w + side[g] * reach[g] * (1f - ease) + driftV[g] * Math.max(0f, since);
+        out[1] = at[g][1] * sh + 14f * (1f - ease) + shift * NEAR[g] + (float) Math.sin(time * bobF[g] + bobP[g]) * bobA[g];
+    }
+
+    /** How big a god's cloud is on screen, in pixels across and down; 0 if he has none. */
+    int godW(int g) {
+        return pick[g] >= 0 ? gw[pick[g]] : 0;
+    }
+
+    int godH(int g) {
+        return pick[g] >= 0 ? gh[pick[g]] : 0;
     }
 
     private boolean has(int e, int f) {
@@ -361,13 +445,24 @@ final class Sky {
     }
 
     void compose(int[] scene, int[] out, int h, int off) {
+        int[] base = winter ? winterStrip : strip, cc = winter ? cloudCw : cloudC;
+        byte[] ca = winter ? cloudAw : cloudA;
+        // the far clouds, shifted for this visit and drifting slowly
+        int xs = (((int) Math.floor(cloudShift + time * cloudV)) % w + w) % w;
         for (int y = 0; y < h; y++) {
             int src = y - off;
             if (src >= 0) System.arraycopy(scene, src * w, out, y * w, w);
             else {
                 int j = sh + src;
                 if (j < 0) j = 0;
-                System.arraycopy(winter ? winterStrip : strip, j * w, out, y * w, w);
+                int row = j * w, o = y * w;
+                for (int x = 0; x < w; x++) {
+                    int cx = mirror ? w - 1 - x : x;
+                    cx += xs;
+                    if (cx >= w) cx -= w;
+                    int a = ca[row + cx] & 0xFF, c = base[row + x];
+                    out[o + x] = a == 0 ? c : Backdrop.mix(c, cc[row + cx], a / 255f);
+                }
             }
         }
     }
@@ -383,14 +478,11 @@ final class Sky {
             int g = ORDER[o];
             int e = pick[g];
             if (e < 0) continue;
-            float since = t - DELAY[g];
+            float since = t - delay[g];
             if (since <= 0f) continue;
-            // sailing in: fast at first, settling softly
-            float arrive = clamp01(since / 1.4f);
-            float ease = 1f - (1f - arrive) * (1f - arrive) * (1f - arrive);
-            float cx = AT[g][0] * w + SIDE[g] * 95f * (1f - ease);
-            float cy = AT[g][1] * sh + 14f * (1f - ease) + shift * NEAR[g]
-                    + (float) Math.sin(t * 1.1f + g * 2.1f) * 1.2f;
+            // sailing in: fast at first, settling softly, then bobbing and drifting a little
+            godAt(g, shift, tmp2);
+            float cx = tmp2[0], cy = tmp2[1];
             float alpha = clamp01(since / 0.5f);
             // the face comes out of the vapour, growing to its size
             float emerge = smooth(0f, 1f, (since - 0.45f) / 0.85f);
@@ -398,7 +490,7 @@ final class Sky {
             int[] rest = face[e][0];
             int to = faceTo[g];
             if (!has(e, to)) to = 0;
-            float tc = CHANGE[g];
+            float tc = change[g];
             float swap = to == 0 ? 0f : smooth(tc - 0.12f, tc + 0.12f, t);
             int[] a, b;
             float mix;
@@ -416,8 +508,8 @@ final class Sky {
             if (to != 0 && t > tc - 0.5f && t < tc + 0.5f) {
                 float u = (t - (tc - 0.5f)) / 1f;
                 float wa = (float) Math.sin(u * Math.PI);
-                float wx = cx + (gfx[e] - gw[e] * 0.5f) * scale + (u - 0.5f) * gw[e] * 0.7f * -SIDE[g];
-                float wy = cy + (gfy[e] - gh[e] * 0.5f) * scale + 2f;
+                float wx = cx + (gfx[e] - gw[e] * 0.5f) * scale + (u - 0.5f) * gw[e] * 0.7f * -side[g];
+                float wy = cy + (gfy[e] - gh[e] * 0.5f) * scale + 2f + wispY[g];
                 drawWisp(f, e, wx, wy, Math.min(1f, wa * 1.15f));
             }
         }
@@ -550,7 +642,7 @@ final class Sky {
 
     private void planStrikes() {
         strikes = 2 + rnd.nextInt(3);
-        float at = CHANGE[THUNDERER] + 0.15f;
+        float at = change[THUNDERER] + 0.15f;
         for (int s = 0; s < strikes; s++) {
             strikeAt[s] = at;
             strikeNear[s] = 0.35f + rnd.nextFloat() * 0.65f;
@@ -590,14 +682,14 @@ final class Sky {
     /** A new channel: the main stroke, then its forks. */
     private void makeChannel(int th, float near) {
         segs = 0;
-        float x0 = AT[THUNDERER][0] * w + (rnd.nextFloat() - 0.5f) * gw[th] * 0.8f;
-        float y0 = AT[THUNDERER][1] * sh + gh[th] * (0.1f + rnd.nextFloat() * 0.2f);
+        float x0 = at[THUNDERER][0] * w + driftV[THUNDERER] * Math.max(0f, time - delay[THUNDERER]) + (rnd.nextFloat() - 0.5f) * gw[th] * 0.8f;
+        float y0 = at[THUNDERER][1] * sh + gh[th] * (0.1f + rnd.nextFloat() * 0.2f);
         float x1, y1;
         if (rnd.nextInt(5) == 0) {
             // across the sky to another cloud
             int g = 1 + rnd.nextInt(GODS - 1);
-            x1 = AT[g][0] * w + (rnd.nextFloat() - 0.5f) * 30f;
-            y1 = AT[g][1] * sh;
+            x1 = at[g][0] * w + (rnd.nextFloat() - 0.5f) * 30f;
+            y1 = at[g][1] * sh;
         } else {
             x1 = w * (0.05f + rnd.nextFloat() * 0.9f);
             y1 = sh * (1.15f + rnd.nextFloat() * 0.2f);

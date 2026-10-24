@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.57
+- The marks of the heavy hammer come after the gods, not before. A building felled at one
+  throw no longer shows the new marks in the corner at once: the view tips up, the gods
+  laugh, the hammer drops from the thunderer's cloud, and only when the view is back down
+  do the marks come in, one after another, each dropping from above the edge into its
+  place with a little bounce, a glint and a soft knock.
+- The gift falls its own way every time, as no two strokes of lightning are alike: from
+  anywhere under the thunderer's cloud, near and big or far and small, tossed to either
+  side or up first, turning either way at its own pace, swaying as it goes. The golden and
+  the diamond hammer fall the same way.
+- The sky is laid out anew on every visit. The whole gathering may stand mirrored; each god
+  stands a little off his usual place, never so near another that a face is lost, sails in
+  from either side, from nearer or farther, sooner or later, changes his face at his own
+  moment, bobs and drifts at a pace of his own; the haze crosses each face at a height of
+  its own. The far clouds stand shifted and drift slowly across, one way or the other.
+  The lightning leaves the thunderer wherever he is.
+
 ## 0.56
 - At the drifting iceberg the ring starts where the finger goes down. Before, it started
   at the spot of the last throw, kept in the world: the iceberg had long drifted away from

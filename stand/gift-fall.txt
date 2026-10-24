@@ -1,0 +1,53 @@
+# Three ovations in a row: each sky laid out anew, each gift falling its own way, the marks after.
+screen 1096 2560
+level 2
+wait 0.5
+win 1
+wait 4.4
+shot v1a_sky
+wait 0.45
+shot v1b_fall
+wait 0.45
+shot v1c_fall
+wait 2.0
+shot v1d_marks
+wait 0.3
+shot v1e_marks
+wait 0.3
+shot v1f_marks
+wait 1.5
+state
+level 4
+wait 0.5
+win 1
+wait 4.4
+shot v2a_sky
+wait 0.45
+shot v2b_fall
+wait 0.45
+shot v2c_fall
+wait 2.0
+shot v2d_marks
+wait 0.3
+shot v2e_marks
+wait 0.3
+shot v2f_marks
+wait 1.5
+state
+level 6
+wait 0.5
+win 1
+wait 4.4
+shot v3a_sky
+wait 0.45
+shot v3b_fall
+wait 0.45
+shot v3c_fall
+wait 2.0
+shot v3d_marks
+wait 0.3
+shot v3e_marks
+wait 0.3
+shot v3f_marks
+wait 1.5
+state

@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.56";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.57";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -154,6 +154,12 @@ final class World implements Physics.Listener {
     static final int HEAVY_MAX = 9;           // gifts add up, as far as the marks fit
     static final float HEAVY_MASS = 2.5f;     // times the light one
     int heavyLeft;
+    // the marks in the corner lag behind the gift: they come in once the view is back down
+    // from the sky, where the gods were seen to throw it, one after another, each dropping
+    // into its place with a little bounce and a glint
+    private int heavyShown, marksLanded;
+    private float markT = -1f;
+    private static final float MARK_FALL = 0.32f, MARK_GAP = 0.24f;
     boolean heavyOn;
     private boolean heavyThrow;               // the throw in flight is a heavy one
     private boolean tapOnHammer;
@@ -209,6 +215,7 @@ final class World implements Physics.Listener {
         level = Math.max(0, host.loadLevel());
         if (host.loadInt("best") < level + 1) host.saveInt("best", level + 1);
         heavyLeft = Math.max(0, Math.min(HEAVY_MAX, host.loadGifts()));
+        heavyShown = heavyLeft;
         fails = Math.max(0, host.loadFails());
         goldSeen = host.loadGoldSeen();
         cubes = Math.max(0, host.loadInt("cubes"));
@@ -2398,6 +2405,7 @@ final class World implements Physics.Listener {
             backT += dt;
             if (backT >= TILT + 0.2f) fromSky = false;
         }
+        marksStep(dt);
         // now and then, before a building, the view turns round to the alley behind
         if (state == PLAY && golem == null && !atSea && alleyLevel(level) && host.loadInt("alley") != level + 1 && stateTime > 0.8f
                 && hs == HAND && !aiming && throwsMade == 0) {
@@ -2598,6 +2606,7 @@ final class World implements Physics.Listener {
         // the first building is the gods' welcome: they all laugh aloud
         sky.begin(verdict, (level == 0 || fromBoss) && verdict == Sky.OVATION);
         giftShown = -1f;
+        giftT0 = -1f;
         goldGift = false;
         diamondGift = false;
         bossNext = false;
@@ -2640,6 +2649,31 @@ final class World implements Physics.Listener {
         holdFor = verdict == Sky.GLOOM ? 2.2f : verdict == Sky.OVATION ? 3.2f : 2.4f;
         boltsHeard = sky.bolts;
         setState(SKY_UP);
+    }
+
+    /** The gift's marks coming into the corner, once the corner is in sight again. */
+    private void marksStep(float dt) {
+        if (heavyShown > heavyLeft) heavyShown = heavyLeft;
+        if (heavyShown == heavyLeft) {
+            markT = -1f;
+            return;
+        }
+        if (markT < 0f) {
+            if (state == SKY_UP || state == SKY_HOLD || tilt() >= h / 8) return;
+            markT = 0f;
+            marksLanded = 0;
+        }
+        markT += dt;
+        int n = heavyLeft - heavyShown;
+        while (marksLanded < n && markT >= marksLanded * MARK_GAP + MARK_FALL) {
+            host.sound(Synth.CATCH, 0.45f, 1.05f + marksLanded * 0.14f);
+            host.buzz(12);
+            marksLanded++;
+        }
+        if (markT >= (n - 1) * MARK_GAP + MARK_FALL + 0.45f) {
+            heavyShown = heavyLeft;
+            markT = -1f;
+        }
     }
 
     /** How far the view is tipped up into the sky, in rows (0 = looking at the street). */
@@ -5624,7 +5658,29 @@ final class World implements Physics.Listener {
             star(f, x + i * 15 + 6, y + 6, 6.6f, on ? (flash ? 0xFFFFFFFF : 0xFFFFC93A) : 0x00000000, 0xFF8A5A12, on);
         }
         // the heavy throws left: small dark hammers under the stars, ringed in gold when in hand
-        for (int i = 0; i < heavyLeft; i++) heavyMark(f, x + i * 13 + 1, y + 16, heavyOn);
+        for (int i = 0; i < heavyShown; i++) heavyMark(f, x + i * 13 + 1, y + 16, heavyOn);
+        // the new ones, dropping in one after another: falling from above the screen's edge,
+        // a bounce on landing, ringed in a bright glint for a moment
+        if (markT >= 0f)
+            for (int i = heavyShown; i < heavyLeft; i++) {
+                float tk = markT - (i - heavyShown) * MARK_GAP;
+                if (tk <= 0f) continue;
+                float yy;
+                if (tk < MARK_FALL) {
+                    float u = tk / MARK_FALL;
+                    yy = y + 16 - 30f * (1f - u * u);
+                } else {
+                    float b = tk - MARK_FALL;
+                    yy = y + 16 - 4f * (float) Math.abs(Math.sin(b * 14f)) * (float) Math.exp(-b * 9f);
+                }
+                int mx = x + i * 13 + 1, my = Math.round(yy);
+                float since = tk - MARK_FALL;
+                if (since > 0f && since < 0.3f) {
+                    int a = Math.round(2f + 3f * (1f - since / 0.3f));
+                    f.rect(mx - a, my - a, mx + 11 + a, my + 8 + a, 0xFFFFF0B0);
+                }
+                heavyMark(f, mx, my, heavyOn);
+            }
         // the golden cubes the gods have handed over, in the row beside the stars
         int cx = x + starsMax() * 15 + 3;
         if (cubes <= 6) for (int i = 0; i < cubes; i++) cubeMark(f, cx + i * 11, y + 2);
@@ -5671,10 +5727,11 @@ final class World implements Physics.Listener {
      * down past the gods toward the street, a glint on its head.
      */
     private void drawGift(Px f, float t) {
-        float fall = Math.min(1.6f, t);
-        float cx = W * 0.5f - 30f * fall, cy = h * 0.24f + 40f * fall + 230f * fall * fall;
-        if (cy > h + 30) return;
-        float ang = 0.6f + t * 5.2f, s = 24f;
+        if (giftT0 < 0f) planGift();
+        float cx = giftX + giftVx * t + giftSway * (float) Math.sin(t * 2.3f + giftPhase);
+        float cy = giftY + giftVy * t + 0.5f * giftG * t * t;
+        if (cy > h + 40 || cx < -40 || cx > W + 40) return;
+        float ang = giftAng + t * giftSpin, s = giftS;
         if (goldGift) {
             float ca0 = (float) Math.cos(ang), sa0 = (float) Math.sin(ang);
             glowAt(cx + ca0 * s * 0.41f, cy + sa0 * s * 0.41f, s * 0.5f, -1, -1);
@@ -5705,6 +5762,33 @@ final class World implements Physics.Listener {
             f.set(gx, gy - 1, 0xFFFFF0C0);
             f.set(gx, gy + 1, 0xFFFFF0C0);
         }
+    }
+
+    // the gift's fall, new each time, as no two strokes of lightning are alike: where under
+    // the thunderer's cloud it drops from, how big it looks (how near it falls), which way it
+    // is tossed, how fast it turns and which way, how it sways in the air
+    private float giftT0 = -1f, giftX, giftY, giftVx, giftVy, giftG, giftS, giftAng, giftSpin, giftSway, giftPhase;
+    private final java.util.Random giftRnd = new java.util.Random(0x61F7L);
+
+    private void planGift() {
+        java.util.Random r = giftRnd;
+        giftT0 = 0f;
+        sky.godAt(Sky.THUNDERER, 0f, tmp);
+        int gw = Math.max(40, sky.godW(Sky.THUNDERER)), gh = Math.max(30, sky.godH(Sky.THUNDERER));
+        giftX = tmp[0] + (r.nextFloat() - 0.5f) * gw * 0.6f;
+        giftY = tmp[1] + gh * (0.1f + r.nextFloat() * 0.25f);
+        // a near one is bigger and falls faster across the screen
+        float near = r.nextFloat();
+        giftS = 17f + near * 15f;
+        giftG = 300f + near * 260f + r.nextFloat() * 80f;
+        // tossed toward the middle of the sky more often than away from it, sometimes up first
+        float toMid = Math.signum(W * 0.5f - giftX);
+        giftVx = (r.nextFloat() < 0.75f ? toMid : -toMid) * (15f + r.nextFloat() * 70f);
+        giftVy = -60f + r.nextFloat() * 110f;
+        giftAng = r.nextFloat() * 6.28f;
+        giftSpin = (r.nextBoolean() ? 1f : -1f) * (3f + r.nextFloat() * 5f);
+        giftSway = r.nextFloat() * 9f;
+        giftPhase = r.nextFloat() * 6.28f;
     }
 
     /**
