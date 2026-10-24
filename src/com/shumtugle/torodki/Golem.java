@@ -46,6 +46,7 @@ final class Golem {
     boolean ice;
     float sunk;
     boolean diveNext;           // the next leap ends under the water
+    float wade;                 // how deep it stands in the water between leaps
     private float sunk0;
     private boolean diving;
 
@@ -140,8 +141,8 @@ final class Golem {
                 x = x0 + (x1 - x0) * k;
                 air = jumpH * 4f * k * (1f - k);
                 squat = Math.max(0f, 1f - k * 3f) * 0.6f;
-                if (sunk0 > 0f) sunk = sunk0 * (1f - k);
-                if (diving) sunk = 4.5f * k * k;
+                if (sunk0 > 0f || wade > 0f) sunk = sunk0 + (wade - sunk0) * k;
+                if (diving) sunk = sunk0 + (4.5f - sunk0) * k * k;
                 if (k >= 1f) {
                     air = 0f;
                     act = LAND;

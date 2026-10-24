@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.48
+- The game opens on a picture: the golem bursting into the street in a storm of rubble, the
+  view drifting slowly from its glowing head toward the fist coming at the player, the
+  game's name rising golden out of the dust. A tap goes straight on; the picture fades into
+  the street.
+- The golem is never far: in the blink of the turn round to the alley it stands right there,
+  looming beside the player; on the ice, the ice golem wades in the sea by the floe.
+- The killer whales are kept far off and low: dark backs and tall fins rolling in the swell,
+  seldom more, as the cars and the passers-by were on the street.
+- Stone skipping is played on the waves themselves: ice floats, so the pillars stand on the
+  water with no floe under them, rising and sinking a little with the swell; a fallen one
+  splashes down and floats low. The golem wades to the thighs between its leaps. A stone
+  spent among the pillars goes under.
+
 ## 0.47
 - Killer whales out at sea: a pod goes by now and then, in front of the iceberg and behind
   the floe, rolling up out of the swell, tall fins first, and sliding under again; now

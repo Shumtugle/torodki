@@ -1,0 +1,13 @@
+# The opening picture: the golem bursting into the street, the name over the dust, the fade into the game.
+screen 1096 2560
+splash
+wait 0.2
+shot o1
+wait 1.5
+shot o2
+wait 2.0
+shot o3
+wait 0.35
+shot o4_fade
+wait 1.0
+shot o5_game

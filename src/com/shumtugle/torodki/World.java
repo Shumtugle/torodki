@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.47";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.48";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -209,6 +209,7 @@ final class World implements Physics.Listener {
         cubesDue = Math.max(0, host.loadInt("cubesDue"));
         atSea = oceanLevel(level);
         if (!Builder.hasWinter()) Builder.readWinter(host.asset("winter.bin"));
+        readSplash(host.asset("splash.bin"));
         phys.listener = this;
     }
 
@@ -561,6 +562,11 @@ final class World implements Physics.Listener {
     // ---- input ----
 
     void touch(int type, float x, float y) {
+        if (splashing()) {
+            // a tap goes straight on to the game
+            if (type == DOWN) splashT = SPLASH_T;
+            return;
+        }
         if (booth >= 0f) {
             boothTouch(type, x, y);
             return;
@@ -1889,6 +1895,15 @@ final class World implements Physics.Listener {
     // ---- simulation ----
 
     void update(float dt) {
+        if (splashT >= 0f) {
+            splashT += dt;
+            if (splashT >= SPLASH_T + SPLASH_FADE) {
+                splashT = -1f;
+                splashImg = null;
+            }
+            // the game waits behind the picture, and starts as it fades
+            if (splashing()) return;
+        }
         if (booth >= 0f) {
             booth += dt;
             return;
@@ -2727,8 +2742,92 @@ final class World implements Physics.Listener {
 
     // ---- drawing ----
 
+    // ---- the opening picture ----
+    // When the game starts: the golem bursting into the street, the view drifting slowly from
+    // its glowing head toward the fist coming at the player, the game's name over the dust.
+    // A tap goes straight on; the picture fades into the street.
+
+    static final float SPLASH_T = 3.8f, SPLASH_FADE = 0.7f;
+    private float splashT = -1f;
+    private byte[] splashImg;
+    private int splashW, splashH;
+    private static final int[] TITLE_ROWS = {0xFFFFF0B8, 0xFFFFE08A, 0xFFFFD060, 0xFFF6BC40, 0xFFE8A030, 0xFFD88A24, 0xFFC2721C};
+
+    private void readSplash(byte[] b) {
+        if (b == null || b.length < 4) return;
+        int ww = ((b[0] & 0xFF) << 8) | (b[1] & 0xFF), hh = ((b[2] & 0xFF) << 8) | (b[3] & 0xFF);
+        if (b.length < 4 + ww * hh * 3) return;
+        splashImg = b;
+        splashW = ww;
+        splashH = hh;
+        splashT = 0f;
+    }
+
+    /** For the desktop stand: no opening picture, or the opening picture again. */
+    void skipSplash() {
+        splashT = -1f;
+    }
+
+    void showSplash() {
+        readSplash(host.asset("splash.bin"));
+    }
+
+    private boolean splashing() {
+        return splashT >= 0f && splashT < SPLASH_T;
+    }
+
+    private void drawSplash(Px f, float alpha) {
+        float t = Math.min(1f, splashT / SPLASH_T), e = t * t * (3f - 2f * t);
+        // the picture fills the height; the window drifts from the head toward the fist, closing in a little
+        float zoom = 1f + 0.06f * e, sc = h * zoom / splashH;
+        float center = 0.62f + (0.44f - 0.62f) * e;
+        float left = center * splashW * sc - W * 0.5f, top = (h * zoom - h) * 0.5f;
+        float inv = 1f / sc;
+        byte[] img = splashImg;
+        int a = (int) (alpha * 256f);
+        for (int y = 0; y < h; y++) {
+            int iy = Math.min(splashH - 1, (int) ((y + top) * inv));
+            int row = 4 + iy * splashW * 3;
+            for (int x = 0; x < W; x++) {
+                int ix = Math.max(0, Math.min(splashW - 1, (int) ((x + left) * inv)));
+                int p = row + ix * 3;
+                int c = 0xFF000000 | ((img[p] & 0xFF) << 16) | ((img[p + 1] & 0xFF) << 8) | (img[p + 2] & 0xFF);
+                int k = y * W + x;
+                f.a[k] = a >= 256 ? c : Backdrop.mix(f.a[k], c, alpha);
+            }
+        }
+        // the name, rising out of the dust
+        float show = Math.max(0f, Math.min(1f, (splashT - 0.5f) / 0.6f)) * alpha;
+        if (show <= 0f) return;
+        String name = "TORODKI";
+        int scale = 5, tw = PixelFont.width(name, scale), tx = (W - tw) / 2;
+        int ty = Math.round(h * 0.78f + (1f - show) * 14f);
+        if (show < 1f) {
+            // fading in: drawn into a copy, blended back
+            int[] keep = f.a.clone();
+            title(f, name, tx, ty, scale);
+            for (int k = 0; k < keep.length; k++) if (f.a[k] != keep[k]) f.a[k] = Backdrop.mix(keep[k], f.a[k], show);
+        } else title(f, name, tx, ty, scale);
+    }
+
+    private static void title(Px f, String name, int tx, int ty, int scale) {
+        for (int dy = -2; dy <= 3; dy++)
+            for (int dx = -2; dx <= 2; dx++)
+                if (dx != 0 || dy != 0) PixelFont.draw(f, name, tx + dx, ty + dy, scale, 0xFF2A140A);
+        PixelFont.draw(f, name, tx, ty, scale, 0, TITLE_ROWS);
+    }
+
     void draw(Px f) {
         if (ras == null) return;
+        if (splashing() && splashImg != null) {
+            drawSplash(f, 1f);
+            return;
+        }
+        drawWorld(f);
+        if (splashT >= SPLASH_T && splashImg != null) drawSplash(f, 1f - (splashT - SPLASH_T) / SPLASH_FADE);
+    }
+
+    private void drawWorld(Px f) {
         if (alley == null) {
             drawStreet(f);
             if (state == PORTAL && portalIn >= 0f) portalWarp(f);
@@ -4499,6 +4598,7 @@ final class World implements Physics.Listener {
                     v.camera(CAM_X + (Alley.CAM_X - CAM_X) * k, CAM_Y + (Alley.CAM_Y - CAM_Y) * k, 0f,
                             YAW + (Alley.YAW - YAW) * k, PITCH + (Alley.PITCH - PITCH) * k, focal, h * 0.5f);
                     new Backdrop().paint(v, 11L);
+                    if (i == 2) glimpse(v, YAW + (Alley.YAW - YAW) * k, false);
                     turnCols[i] = v.col;
                 }
             }
@@ -4559,6 +4659,7 @@ final class World implements Physics.Listener {
                     v.camera(CAM_X + (Alley.CAM_X - CAM_X) * k, CAM_Y + (Alley.CAM_Y - CAM_Y) * k, 0f,
                             YAW + (Alley.YAW - YAW) * k, PITCH + (Alley.PITCH - PITCH) * k, focal, h * 0.5f);
                     o.paint(v, turnMask);
+                    if (i == 2) glimpse(v, YAW + (Alley.YAW - YAW) * k, true);
                     seaTurn[i] = v.col;
                 }
                 sZ = r.zb.clone();
@@ -4569,6 +4670,20 @@ final class World implements Physics.Listener {
         });
         seaPaint.setDaemon(true);
         seaPaint.start();
+    }
+
+    /**
+     * The golem is never far: in the blink of the turn it stands right there, beside the
+     * player, looming over him; on the ice it wades in the sea at the edge of the floe.
+     */
+    private static void glimpse(Raster v, float yaw, boolean ice) {
+        float d = 13f, a = yaw + 0.1f;
+        Golem g = new Golem(CAM_X + (float) Math.sin(a) * d, (float) Math.cos(a) * d);
+        g.ice = ice;
+        if (ice) g.sunk = 0.8f;
+        g.update(0.4f, 0f);
+        g.draw(v, 700 << 3);
+        v.outlines(0, 0, v.w - 1, v.h - 1, 1);
     }
 
     void startSkip() {
@@ -4818,12 +4933,6 @@ final class World implements Physics.Listener {
             ocean.sea(ras, seaAlleyMask, clock);
             ocean.boats(ras, clock);
             ocean.orcas(ras);
-            // a floe for each round, the pillars on it and the golem behind them
-            for (int r = 0; r < Alley.ROUNDS; r++) {
-                float v = Alley.floeV(r);
-                ocean.slab(ras, alley.wx(0f, v), alley.wz(0f, v), alley.fx(), alley.fz(), Alley.FLOE_HU, Alley.FLOE_HV,
-                        0.05f, FLOE_ID << 3, r * 1.7f);
-            }
             drawRipples();
         }
         float fv = Alley.figureV(alley.round) + 1f;
@@ -4832,7 +4941,9 @@ final class World implements Physics.Listener {
         for (int i = 0; i < alley.blocks.size(); i++) {
             Body b = alley.blocks.get(i);
             if (b.gone) continue;
-            drawBody(b, b.shown, 0f, 40 + i);
+            // ice floats: on the swell the pillars rise and sink a little, and a fallen one lies low in it
+            float bob = sea && b.shown >= 1f ? Ocean.heave(b.px, b.pz, clock) * 0.8f - (Alley.knocked(b) ? 0.12f : 0f) : 0f;
+            drawBody(b, b.shown, bob, 40 + i);
             if (Alley.isPin(b) && b.shown >= 1f && !sea)
                 for (int k = 0; k < 2; k++) {
                     toWorld(b, 0f, b.hy * (0.32f + k * 0.16f), 0f, 0f, wp);

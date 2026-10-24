@@ -135,6 +135,7 @@ public final class Stand implements World.Host {
 
     private void start() {
         world = new World(this);
+        world.skipSplash();
         int h = Math.max(1, screenH * World.W / screenW);
         frame = new Px(World.W, h);
         world.resize(h);
@@ -192,6 +193,7 @@ public final class Stand implements World.Host {
         StringBuilder lost = new StringBuilder();
         for (int run = 0; run < runs; run++) {
             World w = new World(this);
+            w.skipSplash();
             int hh = Math.max(1, screenH * World.W / screenW);
             w.resize(hh);
             w.startLevel(30, false);
@@ -307,6 +309,10 @@ public final class Stand implements World.Host {
             world.standForget();
         } else if (c.equals("alley")) {
             world.startAlley();
+            step();
+        } else if (c.equals("splash")) {
+            // the opening picture, as when the game starts
+            world.showSplash();
             step();
         } else if (c.equals("skip")) {
             // stone skipping with the ice golem, out at sea

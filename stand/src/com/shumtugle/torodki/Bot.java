@@ -51,6 +51,7 @@ public final class Bot implements World.Host {
 
     private static World fresh(int lv) {
         World w = new World(new Bot());
+        w.skipSplash();
         w.resize(640);
         w.startLevel(lv, false);
         return w;

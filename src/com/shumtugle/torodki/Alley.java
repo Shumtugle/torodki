@@ -17,10 +17,11 @@ import java.util.Random;
  * felled is when the gods hand over the golden cubes the player has earned on the street.
  *
  * Out on the ice the same game is played on the water, with stones: the view turns round
- * to the open sea behind the floe, an ice golem leaps up out of the swell onto a floe and
- * bursts into pillars of ice; the player skips flat stones at them over the water. A stone
- * that skips all the way to the floe slides on into the pillars; one that runs out of
- * speed on the way goes under. Driven back five times, the golem dives and is gone.
+ * to the open sea behind the floe, an ice golem leaps up out of the swell and bursts into
+ * pillars of ice standing on the waves themselves, for ice floats; the player skips flat
+ * stones at them over the water. A stone that skips all the way to the pillars knocks into
+ * them; one that runs out of speed on the way goes under. Driven back five times, the
+ * golem dives and is gone.
  *
  * Plain Java: the world feeds it time and touches, and draws what it holds.
  */
@@ -125,6 +126,7 @@ final class Alley {
             golem = new Golem(wx(0.5f, golemV(0) + 9f), wz(0.5f, golemV(0) + 9f));
             golem.ice = true;
             golem.sunk = 6.5f;
+            golem.wade = 0.8f;
             golem.holding = true;
             plan(THEN_SCATTER, wx(0f, golemV(0)), wz(0f, golemV(0)));
             emerging = true;
@@ -150,17 +152,14 @@ final class Alley {
     private boolean emerging, skipping;
     int skips;
 
-    /** Where the floe of a round lies along the lane: under the figure and the golem behind it. */
-    static float floeV(int round) {
-        return figureV(round) + 2.5f;
-    }
-
-    static final float FLOE_HV = 5.5f, FLOE_HU = 3.4f;
-
-    /** How far a stone must skip to come down on the floe of a round. */
+    /** How near the pillars of a round a stone must come before it strikes among them. */
     static float landV(int round) {
-        return floeV(round) - FLOE_HV + 0.3f;
+        return figureV(round) - 3.2f;
     }
+
+    // the pillars standing on the water rise and sink a little with the swell, and a fallen
+    // one floats; each falls into the water once, with a splash
+    private boolean[] splashed = new boolean[0];
 
     /** Back to the buildings: the head turns round; from the crossroads, a walk into the white. */
     private void leave() {
@@ -219,7 +218,7 @@ final class Alley {
         }
         if (golem.landings > landed) {
             landed = golem.landings;
-            boolean water = sea ? golem.sunk > 2f : vOf(golem.x, golem.z) > -Backdrop.SEA_Z / Math.abs(fZ) - 0.5f;
+            boolean water = sea ? golem.sunk > 2.5f : vOf(golem.x, golem.z) > -Backdrop.SEA_Z / Math.abs(fZ) - 0.5f;
             if (water) {
                 // into the sea: a great splash, and it is gone
                 golem.down = true;
@@ -231,8 +230,13 @@ final class Alley {
                 host.sound(Synth.GROUND, 1.1f, 0.7f);
                 host.sound(Synth.STONE, 0.6f, sea ? 0.9f : 0.6f);
                 host.buzz(50);
+                if (sea) {
+                    // down into the swell to the thighs: the sea thrown up round it
+                    host.sound(Synth.SPLASH, 1f, 0.6f);
+                    for (int i = 0; i < 60; i++) w.spray(golem.x, 0.2f, golem.z);
+                }
                 for (int i = 0; i < 10; i++)
-                    if (sea) w.snowPuff(golem.x + (rnd.nextFloat() - 0.5f) * 2f, 0.05f, golem.z + (rnd.nextFloat() - 0.5f) * 2f);
+                    if (sea) w.ripple(golem.x + (rnd.nextFloat() - 0.5f) * 3f, golem.z + (rnd.nextFloat() - 0.5f) * 3f, 0.8f);
                     else w.dust(golem.x + (rnd.nextFloat() - 0.5f) * 2f, 0.05f, golem.z + (rnd.nextFloat() - 0.5f) * 2f);
             }
         }
@@ -272,7 +276,7 @@ final class Alley {
                     // the shell flies off in pieces; the cores become the figure
                     w.chips(golem);
                     for (int i = 0; i < 14; i++)
-                        if (sea) w.snowPuff(golem.x + (rnd.nextFloat() - 0.5f) * 3f, 0.1f, golem.z + (rnd.nextFloat() - 0.5f) * 3f);
+                        if (sea) w.spray(golem.x + (rnd.nextFloat() - 0.5f) * 3f, 0.1f, golem.z + (rnd.nextFloat() - 0.5f) * 3f);
                         else w.dust(golem.x + (rnd.nextFloat() - 0.5f) * 3f, 0.1f, golem.z + (rnd.nextFloat() - 0.5f) * 3f);
                     scatter();
                     golem.slump = golem.swell = 0f;
@@ -306,6 +310,13 @@ final class Alley {
                 }
                 phys.step(dt);
                 float v = vOf(b.px, b.pz);
+                if (sea && !b.gone && b.speed2() < 1.5f) {
+                    // spent among the pillars: down it goes
+                    b.gone = true;
+                    b.ghost = true;
+                    w.ripple(b.px, b.pz, 0.5f);
+                    host.sound(Synth.SPLASH, 0.4f, 1.1f);
+                }
                 boolean stopped = b.speed2() < 0.09f && phaseT > 0.8f;
                 if (v > golemV(round) + 1f) {
                     // gone on down the street, out of the game
@@ -318,6 +329,7 @@ final class Alley {
             case SETTLE:
                 phys.step(dt);
                 standing = 1f - knockedShare();
+                if (sea) splashes(w);
                 if (phaseT > 1.1f && (still() || phaseT > 2.6f)) count(w);
                 break;
             case GATHER:
@@ -437,6 +449,7 @@ final class Alley {
         turnOut = new float[n];
         slotOf = new int[n];
         landedAt = new boolean[n];
+        splashed = new boolean[n];
         int[] rank = ranks();
         float[] p = new float[3];
         for (int i = 0; i < n; i++) {
@@ -490,7 +503,11 @@ final class Alley {
                     host.sound(Synth.STONE, 0.9f, 0.5f);
                     host.buzz(45);
                 } else host.sound(Synth.STONE, 0.5f, 0.55f + rnd.nextFloat() * 0.35f);
-                for (int d = 0; d < 3; d++) w.dust(b.homeX + (rnd.nextFloat() - 0.5f) * b.hx * 2f, 0.05f, b.homeZ);
+                if (sea) {
+                    // down onto the water: it floats, the sea splashing up round it
+                    w.ripple(b.homeX, b.homeZ, 0.5f);
+                    for (int d = 0; d < 3; d++) w.splashBit(b.homeX, 0.05f, b.homeZ, 0f, 0f);
+                } else for (int d = 0; d < 3; d++) w.dust(b.homeX + (rnd.nextFloat() - 0.5f) * b.hx * 2f, 0.05f, b.homeZ);
             }
         }
     }
@@ -834,8 +851,8 @@ final class Alley {
         b.pz += b.vz * dt;
         discSpin += dt * 26f;
         float v = vOf(b.px, b.pz);
-        if (v >= landV(round) && v <= floeV(round) + FLOE_HV) {
-            // over the ice: from here on it is a stone among the pillars, falling, sliding, rolling
+        if (v >= landV(round) && v <= golemV(round) + 1f) {
+            // among the pillars: from here on it is a stone that strikes them, falls and rolls
             if (b.py < DISC_R + 0.005f) {
                 b.py = DISC_R + 0.005f;
                 b.vy = 0f;
@@ -845,8 +862,10 @@ final class Alley {
             b.savePrev();
             phys.add(b);
             skipping = false;
-            host.sound(Synth.ROLL, 0.9f, 1.25f);
-            for (int i = 0; i < 6; i++) w.snowPuff(b.px, 0.05f, b.pz);
+            if (b.py < DISC_R + 0.05f) {
+                w.ripple(b.px, b.pz, 0.35f);
+                host.sound(Synth.SPLASH, 0.35f, 1.3f);
+            }
         } else if (b.py <= DISC_R * 0.6f && b.vy < 0f) {
             float hs = (float) Math.sqrt(b.vx * b.vx + b.vz * b.vz);
             if (hs > 3.2f) {
@@ -876,6 +895,19 @@ final class Alley {
             b.vx = vx;
             b.vy = vy;
             b.vz = vz;
+        }
+    }
+
+    /** A pillar that has fallen into the water throws it up, once. */
+    private void splashes(World w) {
+        if (splashed.length != blocks.size()) splashed = new boolean[blocks.size()];
+        for (int i = 0; i < blocks.size(); i++) {
+            Body b = blocks.get(i);
+            if (splashed[i] || !knocked(b) || b.minY > 0.3f) continue;
+            splashed[i] = true;
+            w.ripple(b.px, b.pz, 0.6f);
+            for (int k = 0; k < 8; k++) w.splashBit(b.px, 0.1f, b.pz, b.vx * 0.2f, b.vz * 0.2f);
+            host.sound(Synth.SPLASH, 0.5f, 0.9f + rnd.nextFloat() * 0.3f);
         }
     }
 

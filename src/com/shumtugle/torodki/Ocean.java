@@ -412,57 +412,6 @@ final class Ocean {
         }
     }
 
-    // ---- floes ----
-
-    private final float[] fpx = new float[24], fpz = new float[24];
-
-    /**
-     * A flat floe of old ice, ragged, its top just over the water: centered at (cx, cz), its
-     * length hv along (ax, az) and its width hu across.
-     */
-    void slab(Raster r, float cx, float cz, float ax, float az, float hu, float hv, float top, int id, float seed) {
-        int n = 20;
-        for (int i = 0; i < n; i++) {
-            float a = (float) (i * Math.PI * 2 / n);
-            float k = rag(a, seed);
-            float u = (float) Math.cos(a) * hu * k, v = (float) Math.sin(a) * hv * k;
-            fpx[i] = cx + az * u + ax * v;
-            fpz[i] = cz - ax * u + az * v;
-        }
-        for (int i = 0; i < n; i++) {
-            int j = (i + 1) % n;
-            qx[0] = fpx[i];
-            qx[1] = fpx[j];
-            qx[2] = fpx[j];
-            qx[3] = fpx[i];
-            qz[0] = fpz[i];
-            qz[1] = fpz[j];
-            qz[2] = fpz[j];
-            qz[3] = fpz[i];
-            qy[0] = qy[1] = top;
-            qy[2] = qy[3] = -0.4f;
-            face(r, 4, (i % 3) == 0 ? 0xFF8DB4C8 : 0xFF9CC1D3, id, false);
-        }
-        for (int i = 0; i < n; i++) {
-            int j = (i + 1) % n;
-            qx[0] = cx;
-            qy[0] = top;
-            qz[0] = cz;
-            qx[1] = fpx[i];
-            qy[1] = top;
-            qz[1] = fpz[i];
-            qx[2] = fpx[j];
-            qy[2] = top;
-            qz[2] = fpz[j];
-            r.poly(qx, qy, qz, null, null, 3, (i & 1) == 0 ? 0xFFEAF1F5 : 0xFFE2ECF1, Raster.PAT_FLAT, id, true);
-        }
-        for (int i = 0; i < n; i += 2) {
-            float vz = r.project(fpx[i], 0.03f, fpz[i], s);
-            if (vz < 1f) continue;
-            r.haze(s[0], s[1], 0.35f * r.f / vz, 1f / (vz - 0.5f), 0xFFE6EEF2, 120);
-        }
-    }
-
     // ---- boats ----
     // Small sailing boats at anchor, both sides, rolling and pitching on the swell.
     // x, z, yaw, hull color
@@ -567,10 +516,10 @@ final class Ocean {
     }
 
     // ---- orcas ----
-    // A pod of killer whales goes by now and then, in front of the player and behind: each
-    // rolls up out of the swell, its tall fin first, blows, and slides under again; now and
-    // then one leaps clear and comes down in a burst of spray. Below the surface the water
-    // hides them by itself.
+    // A pod of killer whales goes by now and then, far off, in front of the player and
+    // behind: little more than black backs and tall fins rolling up out of the swell and
+    // sliding under again, as the cars and the passers-by were on the street. Below the
+    // surface the water hides them by itself.
 
     private static final int PODS = 2, WHALES = 3;
     // where a pod goes: its middle line (z) and which way along x; when it starts again
@@ -588,12 +537,12 @@ final class Ocean {
                 podOn[p] = true;
                 podT[p] = 0f;
                 podDir[p] = pod.nextBoolean() ? 1f : -1f;
-                podZ[p] = p == 0 ? 20f + pod.nextFloat() * 22f : -(16f + pod.nextFloat() * 20f);
+                podZ[p] = p == 0 ? 30f + pod.nextFloat() * 22f : -(26f + pod.nextFloat() * 20f);
                 for (int k = 0; k < WHALES; k++) {
                     whaleLag[p][k] = k * (1.4f + pod.nextFloat() * 1.2f);
                     whaleOff[p][k] = (pod.nextFloat() - 0.5f) * 5f;
                     whaleSize[p][k] = k == 0 ? 1.15f : 0.75f + pod.nextFloat() * 0.3f;
-                    whaleLeap[p][k] = pod.nextFloat() < 0.35f;
+                    whaleLeap[p][k] = false;
                 }
                 continue;
             }
@@ -611,7 +560,8 @@ final class Ocean {
         boolean leap = whaleLeap[p][k] && ((int) Math.floor(tt / cycle) % 3 == 1);
         if (ph >= 2.2f) return -2.6f * whaleSize[p][k];
         float u = ph / 2.2f;
-        float y = leap ? -1.5f + 3.6f * (float) Math.sin(Math.PI * u) : -1.25f + 1.35f * (float) Math.sin(Math.PI * u);
+        // the back just breaks the surface; mostly the fin shows
+        float y = leap ? -1.5f + 3.6f * (float) Math.sin(Math.PI * u) : -1.05f + 0.95f * (float) Math.sin(Math.PI * u);
         return y * whaleSize[p][k];
     }
 
@@ -652,21 +602,14 @@ final class Ocean {
                 if (s[0] < -80f || s[0] > r.w + 80f) continue;
                 int id = (980 + p * 4 + k) << 3;
                 boolean any = false;
-                for (int i = 0; i < 40; i++) {
-                    float u = i / 39f, fi = u * (ORCA_R.length - 1);
+                for (int i = 0; i < 16; i++) {
+                    float u = i / 15f, fi = u * (ORCA_R.length - 1);
                     int i0 = Math.min(ORCA_R.length - 2, (int) fi);
                     float rad = (ORCA_R[i0] + (ORCA_R[i0 + 1] - ORCA_R[i0]) * (fi - i0)) * size;
                     spine(p, k, u, sp0);
                     if (sp0[1] + rad < -0.05f) continue;
                     any = true;
                     r.ball(sp0[0], sp0[1], sp0[2], rad, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0xFF17191D, 0xFF17191D, id, true);
-                    // the white of the belly and the patch behind the eye
-                    if (i >= 4 && i <= 14)
-                        r.ball(sp0[0], sp0[1] - rad * 0.42f, sp0[2] - rad * 0.5f, rad * 0.55f,
-                                1, 0, 0, 0, 1, 0, 0, 0, 1, 0xFFE8ECEE, 0xFFE8ECEE, id, true);
-                    if (i == 5)
-                        r.ball(sp0[0] + podDir[p] * rad * 0.2f, sp0[1] + rad * 0.3f, sp0[2] - rad * 0.78f, rad * 0.26f,
-                                1, 0, 0, 0, 1, 0, 0, 0, 1, 0xFFF4F6F6, 0xFFF4F6F6, id, true);
                 }
                 // the tall fin, over the middle of the back
                 spine(p, k, 0.36f, sp0);
