@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.44
+- The 101st building down, and the gods have looked: no new building comes. The stones
+  of the golem's shell fly up from the plinth into a ring standing on its edge, its inside
+  turning gold and ice. Throws at it cost nothing. A hammer through the ring pulls the view
+  in after it, swirling into white, and the next level is out on the ocean. Played again,
+  the 101st opens the ring again.
+- From the 102nd level on: a winter ocean. A low heavy sky, neither night nor day; fog
+  that swallows the horizon and drifts across it in banks; a grey sea running in long
+  swells toward the player, whitecaps breaking on the crests, foam blown along. The player
+  stands on a floe that rocks under him, the picture leaning and rising with it; the
+  building stands on a block of blue ice on a floe of its own that rides the swell.
+  Sailing boats at anchor on both sides, rolling. Snow drives across slantwise, and now
+  and then a whirl winds it round. The light is cold and even, the shadows faint.
+- Out there the distances begin again from near. What lands in open water splashes and
+  sinks. The call box rides on a red buoy; its booth dials any level reached, the street
+  ones too, but neither the golem nor the alley answers at sea. The golem does not come
+  out on the ice: ten misses running bring the golden hammer, and it stays.
+
 ## 0.43
 - Every figure in the alley is grown fresh from the golem's stones, storey by storey:
   ranks of pillars, courses of brick, portals with a lintel, towers of blocks, a bending

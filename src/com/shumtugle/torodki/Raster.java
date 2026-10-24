@@ -698,16 +698,25 @@ final class Raster {
      * light bounces back off the street and the houses.
      */
     static void lightK(float nz, float ny, float ndl, float[] out) {
-        float fill = Math.max(0f, -nz) * (1f - Math.abs(ny)) * 0.42f;
+        float fill = Math.max(0f, -nz) * (1f - Math.abs(ny)) * (overcast ? 0.1f : 0.42f);
         lightK0(ny, ndl, out);
         out[0] += fill * 1.0f;
         out[1] += fill * 0.78f;
         out[2] += fill * 0.55f;
     }
 
+    // under a heavy overcast: light from the whole sky, cold and grey, the sun only a pale glow
+    static volatile boolean overcast;
+
     private static void lightK0(float ny, float ndl, float[] out) {
         float sun = Math.max(0f, ndl);
         float sky = 0.5f + 0.5f * ny;
+        if (overcast) {
+            out[0] = 0.52f + 0.30f * sky + 0.22f * sun;
+            out[1] = 0.55f + 0.31f * sky + 0.21f * sun;
+            out[2] = 0.61f + 0.34f * sky + 0.19f * sun;
+            return;
+        }
         out[0] = 0.27f + 0.10f * sky + 1.08f * sun;
         out[1] = 0.30f + 0.11f * sky + 0.84f * sun;
         out[2] = 0.40f + 0.16f * sky + 0.60f * sun;
@@ -806,7 +815,8 @@ final class Raster {
                 if (s < 0 || t < 0 || s >= SM || t >= SM) continue;
                 if (sm[t * SM + s] > smD(wx, wy, wz) + bias) {
                     int c = col[k];
-                    int r = ((c >> 16) & 0xFF) * SH_R >> 8, g = ((c >> 8) & 0xFF) * SH_G >> 8, b = (c & 0xFF) * SH_B >> 8;
+                    int sr = overcast ? 200 : SH_R, sg = overcast ? 204 : SH_G, sb = overcast ? 214 : SH_B;
+                    int r = ((c >> 16) & 0xFF) * sr >> 8, g = ((c >> 8) & 0xFF) * sg >> 8, b = (c & 0xFF) * sb >> 8;
                     col[k] = 0xFF000000 | (r << 16) | (g << 8) | b;
                 }
             }

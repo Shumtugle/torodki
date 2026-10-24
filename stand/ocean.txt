@@ -1,0 +1,18 @@
+# Out on the winter ocean: the first level past the portal, a throw, and a farther one.
+screen 1096 2560
+level 101
+wait 1.5
+shot o1
+wait 0.7
+shot o2
+down 140 430
+wait 1.0
+shot o3aim
+up 140 430
+wait 0.5
+shot o4flight
+wait 3.0
+shot o5after
+level 140
+wait 1.5
+shot o6far

@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.43";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.44";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -67,6 +67,17 @@ final class World implements Physics.Listener {
     private float[] bgZ;
     private byte[] bgLit;
     private final Backdrop backdrop = new Backdrop();
+    // the winter ocean beyond the portal: the levels after the 101st are played there
+    static final int SEA_FROM = 101;
+    private final Ocean ocean = new Ocean();
+    private final Ocean.Mask seaMask = new Ocean.Mask(), zSeaMask = new Ocean.Mask();
+    boolean atSea;
+    private boolean bgSea, zoomSea, alleyStale;
+    private final float[] callAt3 = new float[3];
+
+    static boolean oceanLevel(int lv) {
+        return lv >= SEA_FROM;
+    }
     final Physics phys = new Physics();
     private Body plinth;
     private final Body[] cars = new Body[Life.parked()];
@@ -95,6 +106,8 @@ final class World implements Physics.Listener {
 
     // the game
     static final int BUILD = 0, PLAY = 1, WON = 2, LOST = 3, VANISH = 4, SKY_UP = 5, SKY_HOLD = 6, SKY_DOWN = 7, BOSS = 8;
+    // past the 101st building the plinth holds a ring of stone: a hammer through it opens the way out to sea
+    static final int PORTAL = 9;
     static final float TILT = 1.0f;          // seconds to tip up into the sky, and back
     static final int HAND = 0, FLY = 1, BACK = 2;
     int state = VANISH;
@@ -189,6 +202,7 @@ final class World implements Physics.Listener {
         goldSeen = host.loadGoldSeen();
         cubes = Math.max(0, host.loadInt("cubes"));
         cubesDue = Math.max(0, host.loadInt("cubesDue"));
+        atSea = oceanLevel(level);
         phys.listener = this;
     }
 
@@ -202,12 +216,16 @@ final class World implements Physics.Listener {
         zoomK = 0f;
         focal = W * 1.9f;
         ras.camera(CAM_X, CAM_Y, 0f, YAW, PITCH, focal, h * 0.5f);
-        backdrop.paint(ras, 11L);
-        bgCol = ras.col.clone();
-        bgZ = ras.zb.clone();
-        bgLit = ras.lit.clone();
+        ocean.snowFor(W, h);
+        // the street is painted first, for the gods' sky to be made from; the alley behind it
+        // waits while the light is the ocean's
+        Raster.overcast = false;
+        paintBg(false);
         sky.build(ras, host.asset("gods.bin"), host.asset("clouds.bin"));
-        paintAlley();
+        if (atSea) {
+            alleyStale = true;
+            paintBg(true);
+        } else paintAlley();
         if (firstBuild) {
             firstBuild = false;
             startLevel(level, true);
@@ -253,6 +271,17 @@ final class World implements Physics.Listener {
         return r;
     }
 
+    /** The backdrop for the usual camera: the street, or the ocean. */
+    private void paintBg(boolean sea) {
+        Raster.overcast = sea;
+        bgSea = sea;
+        if (sea) ocean.paint(normRas, seaMask);
+        else backdrop.paint(normRas, 11L);
+        bgCol = normRas.col.clone();
+        bgZ = normRas.zb.clone();
+        bgLit = normRas.lit.clone();
+    }
+
     /** Raises the building for a level: tested for standing still, asleep, ready to fall. */
     void startLevel(int lv, boolean animate) {
         if (alley != null) endAlley();
@@ -269,11 +298,21 @@ final class World implements Physics.Listener {
         seed = seedOf(lv);
         if (zoomed) setZoomed(false);
         zoomK = 0f;
-        Builder.CZ = Builder.BASE_CZ + Builder.farther(lv);
+        atSea = oceanLevel(lv);
+        if (bgSea != atSea && normRas != null) {
+            paintBg(atSea);
+            if (!atSea && alleyStale) {
+                alleyStale = false;
+                paintAlley();
+            }
+        }
+        // out on the ice the distances begin again
+        Builder.CZ = Builder.BASE_CZ + (atSea ? Builder.farther(lv - SEA_FROM + 1) : Builder.farther(lv));
         prepareZoom();
         phys.clear();
         pieces.clear();
-        plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0xFFF2E3C6);
+        // out at sea the plinth is a block of old blue ice
+        plinth = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, atSea ? 0xFFB9D4E2 : 0xFFF2E3C6);
         plinth.setPose(0f, Builder.TOP * 0.5f, Builder.CZ, 1, 0, 0, 0);
         phys.add(plinth);
         golem = null;
@@ -283,7 +322,9 @@ final class World implements Physics.Listener {
         for (int i = 0; i < cars.length; i++) {
             cars[i] = new Body(0.95f, 0.65f, 2.3f, Body.CAR, 0);
             cars[i].setPose(life.parkX(i), 0.65f, life.parkZ(i), 1, 0, 0, 0);
-            phys.add(cars[i]);
+            // no cars out at sea
+            if (atSea) cars[i].setPose(life.parkX(i), -60f, life.parkZ(i), 1, 0, 0, 0);
+            else phys.add(cars[i]);
         }
         ArrayList<Body> made = takePrepared(lv);
         if (made == null) made = buildingFor(lv);
@@ -532,6 +573,12 @@ final class World implements Physics.Listener {
             alley.touch(type, x, y, clock);
             return;
         }
+        if (atSea && golem == null) {
+            // the picture rocks with the floe: the finger means the point in the steady one
+            unrock(x, y, scr);
+            x = scr[0];
+            y = scr[1];
+        }
         if (type == DOWN && state == PLAY && hs == HAND && onCallButton(x, y)) {
             call();
             return;
@@ -543,7 +590,8 @@ final class World implements Physics.Listener {
         } else tapFar = Math.max(tapFar, (float) Math.hypot(x - tapX, y - tapY));
         if (type == DOWN) {
             boolean fight = state == BOSS && bossEnd < 0f;
-            if (!fight && (state != PLAY || stars <= 0) || hs != HAND) return;
+            boolean portal = state == PORTAL && portalIn < 0f && stateTime > PORTAL_RISE;
+            if (!fight && !portal && (state != PLAY || stars <= 0) || hs != HAND) return;
             aiming = true;
             lastX = x;
             lastY = y;
@@ -659,15 +707,17 @@ final class World implements Physics.Listener {
             zoomZ = 1f;
             return;
         }
-        if (Builder.CZ == zoomFor) return;
+        if (Builder.CZ == zoomFor && zoomSea == atSea) return;
         zoomFor = Builder.CZ;
+        zoomSea = atSea;
         float lookY = Builder.TOP + 1.4f, dx = -CAM_X, dz = Builder.CZ;
         float dist = (float) Math.sqrt(dx * dx + dz * dz);
         float yaw = (float) Math.atan2(dx, dz), pitch = (float) Math.atan2(lookY - CAM_Y, dist);
         zoomZ = Math.max(1.25f, Math.min(4.6f, Builder.CZ / Builder.BASE_CZ * 0.92f));
         if (zoomRas == null) zoomRas = new Raster(W, h);
         zoomRas.camera(CAM_X, CAM_Y, 0f, yaw, pitch, focal * zoomZ, h * 0.5f);
-        backdrop.paint(zoomRas, 11L);
+        if (atSea) ocean.paint(zoomRas, zSeaMask);
+        else backdrop.paint(zoomRas, 11L);
         zCol = zoomRas.col.clone();
         zZ = zoomRas.zb.clone();
         zLit = zoomRas.lit.clone();
@@ -697,7 +747,7 @@ final class World implements Physics.Listener {
 
     /** Closes in while a throw is aimed and in flight, opens out once the hammer is back. */
     private void zoomStep(float dt) {
-        boolean want = zoomZ > 1f && zoomRas != null && state == PLAY && (aiming || hs != HAND);
+        boolean want = zoomZ > 1f && zoomRas != null && (state == PLAY || state == PORTAL) && (aiming || hs != HAND || portalIn >= 0f);
         zoomK = Math.max(0f, Math.min(1f, zoomK + (want ? dt : -dt) / ZOOM_T));
         if (zoomK >= 1f) setZoomed(true);
         else setZoomed(false);
@@ -751,7 +801,7 @@ final class World implements Physics.Listener {
 
     /** A throw without a finger, for the bot: aim at a screen point at a given speed. */
     boolean throwAt(float sx, float sy, float speed) {
-        if (state != PLAY || hs != HAND || stars <= 0) return false;
+        if (state != PLAY && state != PORTAL || hs != HAND || stars <= 0) return false;
         aimX = sx;
         aimY = sy;
         tremX = tremY = 0f;
@@ -783,8 +833,14 @@ final class World implements Physics.Listener {
         return Math.max(level + 1, host.loadInt("best"));
     }
 
+    /** Where the call box is now: on the lamp post, or on the buoy as it sways. */
+    private float callScreen(Raster r, float[] out) {
+        if (atSea) return r.project(callAt3[0], callAt3[1], callAt3[2], out);
+        return r.project(CALL_X, CALL_Y, CALL_Z, out);
+    }
+
     private boolean onCallButton(float x, float y) {
-        float vz = ras.project(CALL_X, CALL_Y, CALL_Z, scr);
+        float vz = callScreen(ras, scr);
         if (vz < 0.5f) return false;
         return Math.hypot(x - scr[0], y - scr[1]) < 11f;
     }
@@ -810,7 +866,8 @@ final class World implements Physics.Listener {
 
     /** The button on the post: red, and lit for a moment after each press. */
     private void drawCallButton() {
-        float vz = ras.project(CALL_X, CALL_Y, CALL_Z, scr);
+        if (atSea) ocean.buoy(ras, CALL_X, CALL_Y, CALL_Z, clock, callAt3);
+        float vz = callScreen(ras, scr);
         if (vz < 0.5f) return;
         boolean lit = clock - callAt < 1.1f && ((int) ((clock - callAt) * 8f) & 1) == 0;
         float r = Math.max(1.6f, 0.1f * ras.f / vz);
@@ -880,14 +937,15 @@ final class World implements Physics.Listener {
             return;
         }
         int gy = golemY();
-        if (y >= gy && y < gy + 34 && x >= BX0 + 14 && x < W / 2 - 3) {
+        // out at sea neither the golem nor the alley answers
+        if (!atSea && y >= gy && y < gy + 34 && x >= BX0 + 14 && x < W / 2 - 3) {
             dialled.setLength(0);
             booth = -1f;
             host.sound(Synth.ROAR, 0.8f, 1f);
             startBoss(level);
             return;
         }
-        if (y >= gy && y < gy + 34 && x >= W / 2 + 3 && x < BX1 - 14) {
+        if (!atSea && y >= gy && y < gy + 34 && x >= W / 2 + 3 && x < BX1 - 14) {
             dialled.setLength(0);
             booth = -1f;
             host.sound(Synth.DOOR, 0.8f, 1.15f);
@@ -992,6 +1050,9 @@ final class World implements Physics.Listener {
         f.rect(W / 2 + 3, gy, BX1 - 14, gy + 34, 0xFF14243A);
         f.rect(W / 2 + 5, gy + 2, BX1 - 16, gy + 32, 0xFF2F5D8C);
         glyph(f, BOWL, (W / 2 + 3 + BX1 - 14) / 2, gy + 17, 3, 0xFFF3EDE0);
+        if (atSea)
+            for (int yy = gy; yy < gy + 34; yy++)
+                for (int xx = BX0 + 14; xx < BX1 - 14; xx++) f.a[yy * W + xx] = Backdrop.mix(f.a[yy * W + xx], 0xFF2A2E33, 0.75f);
         f.rect(W / 2 - 46, gy + 46, W / 2 + 46, gy + 66, 0xFF1E1C1A);
         f.rect(W / 2 - 40, gy + 42, W / 2 + 40, gy + 50, 0xFF2E2C2A);
         PixelFont.draw(f, "HOME", W / 2 - PixelFont.width("HOME", 1) / 2, gy + 54, 1, 0xFFE8E2D6);
@@ -1038,7 +1099,7 @@ final class World implements Physics.Listener {
     /** For the desktop stand: where the call button is on screen. */
     float[] standCallButton() {
         float[] o = new float[2];
-        ras.project(CALL_X, CALL_Y, CALL_Z, o);
+        callScreen(ras, o);
         return o;
     }
 
@@ -1733,8 +1794,10 @@ final class World implements Physics.Listener {
         hammer.wx = 0.6f;
         hammer.savePrev();
         flightTime = t;
-        stars--;
-        throwsMade++;
+        if (state != PORTAL) {
+            stars--;
+            throwsMade++;
+        }
         offAtThrow = 1f - onPlinth();
         thundered = false;
         hs = FLY;
@@ -1861,6 +1924,17 @@ final class World implements Physics.Listener {
         particles(dt);
         puddles(dt);
         life.update(dt);
+        if (atSea) {
+            ocean.snow(dt);
+            rockStep();
+            sinking(dt);
+            // the swell slaps at the floes now and then, low and heavy
+            if ((slapIn -= dt) <= 0f) {
+                slapIn = 2.2f + fx.nextFloat() * 3.5f;
+                host.sound(Synth.SPLASH, 0.22f + fx.nextFloat() * 0.15f, 0.45f + fx.nextFloat() * 0.15f);
+            }
+        }
+        if (state == PORTAL) portalStep(dt);
         fliers.update(dt, golem == null && (state == PLAY || state == WON || state == LOST || state == BUILD));
         trail();
 
@@ -1888,7 +1962,7 @@ final class World implements Physics.Listener {
             if (backT >= TILT + 0.2f) fromSky = false;
         }
         // now and then, before a building, the view turns round to the alley behind
-        if (state == PLAY && golem == null && alleyLevel(level) && host.loadInt("alley") != level + 1 && stateTime > 0.8f
+        if (state == PLAY && golem == null && !atSea && alleyLevel(level) && host.loadInt("alley") != level + 1 && stateTime > 0.8f
                 && hs == HAND && !aiming && throwsMade == 0) {
             host.saveInt("alley", level + 1);
             startAlley();
@@ -1923,6 +1997,8 @@ final class World implements Physics.Listener {
                     if (bossNext) {
                         startBoss(level + nextAfterVanish);
                         buildFromSky = false;
+                    } else if (level == SEA_FROM - 1 && nextAfterVanish == 1 && !atSea) {
+                        openPortal();
                     } else {
                         // the gods have thrown the blocks: the next building falls into place as we look down
                         startLevel(level + nextAfterVanish, true);
@@ -2095,8 +2171,8 @@ final class World implements Physics.Listener {
                     goldSeen = true;
                     host.saveGoldSeen(true);
                     giftShown = 0f;
-                } else {
-                    // ever after, the golem comes instead
+                } else if (!atSea) {
+                    // ever after, the golem comes instead; out at sea the golden hammer stays
                     bossNext = true;
                     fails = 0;
                     host.saveFails(0);
@@ -2236,7 +2312,8 @@ final class World implements Physics.Listener {
                 host.sound(street, gain * (street == Synth.CLANG ? 0.85f : 1f), rate * (0.92f + fx.nextFloat() * 0.16f));
             }
         } else if (b == null || other == null) {
-            if (speed > 1.6f) host.sound(Synth.GROUND, gain * 0.9f, 0.9f + fx.nextFloat() * 0.2f);
+            boolean water = atSea && b == null && !Ocean.onFloe(x, z) && !Ocean.onTarget(x, z, Builder.CZ);
+            if (speed > 1.6f) host.sound(water ? Synth.SPLASH : Synth.GROUND, gain * 0.9f, 0.9f + fx.nextFloat() * 0.2f);
         } else {
             boolean stone = a.material == Body.STONE || b.material == Body.STONE || other.material == Body.PLINTH
                     || a.material == Body.BALL || b.material == Body.BALL;
@@ -2253,11 +2330,11 @@ final class World implements Physics.Listener {
         } else if (speed > 2.2f && other != null && other.material != Body.WATER) {
             int n = (int) Math.min(14f, speed * 1.2f);
             boolean dusty = other.material == Body.STONE || other.material == Body.PLINTH || other.material == Body.SANDBAG;
-            int dust = other.material == Body.SANDBAG ? 0xFFDCC79C : 0xFFE6DCC8;
+            int dust = other.material == Body.SANDBAG ? 0xFFDCC79C : atSea && other.material == Body.PLINTH ? 0xFFE4F0F6 : 0xFFE6DCC8;
             for (int i = 0; i < n; i++)
                 spawn(x, y, z, dusty && (i & 1) == 0, dusty ? dust : Backdrop.scale(other.tint, 0.8f), speed * 0.35f);
         } else if (speed > 3f && b == null) {
-            for (int i = 0; i < 4; i++) spawn(x, 0.02f, z, true, 0xFFD8CFC0, 1f);
+            for (int i = 0; i < 4; i++) spawn(x, 0.02f, z, true, atSea ? 0xFFE8F0F4 : 0xFFD8CFC0, 1f);
         }
     }
 
@@ -2621,6 +2698,7 @@ final class World implements Physics.Listener {
         if (ras == null) return;
         if (alley == null) {
             drawStreet(f);
+            if (state == PORTAL && portalIn >= 0f) portalWarp(f);
             if (seaFade > 0f) {
                 // back from the sea: the white of the glare clears off the street
                 float k = seaFade * seaFade;
@@ -2795,6 +2873,229 @@ final class World implements Physics.Listener {
         }
     }
 
+    // ---- the portal ----
+    // When the 101st building is down and the gods have looked, no new building comes: the
+    // stones of the golem's shell fly up from the plinth into a ring standing on its edge,
+    // and the inside of the ring turns, gold and ice. Throws cost nothing now. A hammer
+    // through the ring pulls the view in after it, and the next level is out on the ocean.
+
+    static final float PORTAL_R = 1.55f, PORTAL_RISE = 1.9f, PORTAL_IN = 1.5f;
+    private static final int RING = 16, PORTAL_ID = 996;
+    private float portalIn = -1f;            // seconds since the hammer went through, or -1
+    private float prevHX, prevHY, prevHZ;
+
+    private float portalY() {
+        return Builder.TOP + PORTAL_R + 0.25f;
+    }
+
+    private void openPortal() {
+        for (Body b : pieces)
+            if (!b.gone) {
+                b.gone = true;
+                b.ghost = true;
+            }
+        if (goldCube != null) {
+            goldCube.gone = true;
+            goldCube.ghost = true;
+        }
+        stars = STARS;
+        throwsMade = 0;
+        portalIn = -1f;
+        pN = 0;
+        setState(PORTAL);
+        // the aim starts in the middle of the ring
+        normRas.project(0f, portalY(), Builder.CZ, scr);
+        aimX = baseX = scr[0];
+        aimY = baseY = scr[1];
+        aimedBefore = true;
+        host.sound(Synth.ROLL, 0.8f, 0.7f);
+    }
+
+    private void portalStep(float dt) {
+        if (portalIn >= 0f) {
+            portalIn += dt;
+            if (portalIn >= PORTAL_IN) {
+                portalIn = -1f;
+                startLevel(SEA_FROM, true);
+                seaFade = 1f;
+            }
+            return;
+        }
+        if (hs == FLY) {
+            // through the ring: the hammer crossed its plane inside it this frame
+            float z0 = prevHZ - Builder.CZ, z1 = hammer.pz - Builder.CZ;
+            if (hsTime > 0.05f && z0 < 0f && z1 >= 0f) {
+                float k = z0 / (z0 - z1);
+                float x = prevHX + (hammer.px - prevHX) * k, y = prevHY + (hammer.py - prevHY) * k - portalY();
+                if (x * x + y * y < PORTAL_R * PORTAL_R * 0.8f) {
+                    portalIn = 0f;
+                    hammer.ghost = true;
+                    hammer.vx = hammer.vy = hammer.vz = 0f;
+                    hammer.px = 0f;
+                    hammer.py = -50f;
+                    host.sound(Synth.WHOOSH, 1.1f, 0.6f);
+                    host.sound(Synth.THUNDER, 0.7f, 1.6f);
+                    host.buzz(120);
+                }
+            }
+        }
+        prevHX = hammer.px;
+        prevHY = hammer.py;
+        prevHZ = hammer.pz;
+    }
+
+    /** The ring: stones flying up into place, then the turning light inside. */
+    private void drawPortal() {
+        float t = stateTime - 0.5f, cy = portalY(), cz = Builder.CZ;
+        for (int i = 0; i < RING; i++) {
+            float a = (float) (i * Math.PI * 2 / RING) + 0.1f;
+            float tx = (float) Math.cos(a) * PORTAL_R, ty = cy + (float) Math.sin(a) * PORTAL_R;
+            float k = Math.max(0f, Math.min(1f, (t - i * 0.05f) / 0.7f));
+            if (k <= 0f) continue;
+            float e = 1f - (1f - k) * (1f - k) * (1f - k);
+            // from a spot on the plinth top, up an arc into the ring
+            float sx = ((i * 37) % 11 - 5) * 0.2f, sy = Builder.TOP + 0.2f;
+            float x = sx + (tx - sx) * e, y = sy + (ty - sy) * e + (float) Math.sin(Math.PI * k) * 1.2f;
+            float spin = (1f - e) * 6f;
+            float ca = (float) Math.cos(a + spin), sa = (float) Math.sin(a + spin);
+            ras.box(x, y, cz, ca, -sa, 0, sa, ca, 0, 0, 0, 1, 0.24f, 0.34f, 0.3f,
+                    SHELL[i % SHELL.length], Raster.PAT_STONE, PORTAL_ID << 3);
+        }
+        float open = Math.max(0f, Math.min(1f, (t - RING * 0.05f - 0.4f) / 0.8f));
+        if (open <= 0f) return;
+        float vz = ras.project(0f, cy, cz, scr);
+        if (vz < 0.5f) return;
+        float pr = PORTAL_R * 0.86f * ras.f / vz * open, cx = scr[0], cyS = scr[1];
+        float iz = 1f / (vz + 0.05f);
+        int x0 = Math.max(0, (int) (cx - pr)), x1 = Math.min(W - 1, (int) (cx + pr)) ;
+        int y0 = Math.max(0, (int) (cyS - pr)), y1 = Math.min(h - 1, (int) (cyS + pr));
+        float spin = clock * 4.2f;
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) {
+                float dx = x + 0.5f - cx, dy = y + 0.5f - cyS;
+                float r = (float) Math.sqrt(dx * dx + dy * dy) / pr;
+                if (r >= 1f) continue;
+                int k = y * W + x;
+                if (iz <= ras.zb[k]) continue;
+                float ang = (float) Math.atan2(dy, dx);
+                float v = (float) Math.sin(ang * 3f + r * 9f - spin) * 0.5f + 0.5f;
+                int c = Backdrop.mix(0xFF9CC4DC, 0xFFF2C14A, v);
+                c = Backdrop.mix(c, 0xFFFFFBEE, (1f - r) * (1f - r) * 0.9f);
+                c = Backdrop.mix(c, 0xFF3A4A5A, Math.max(0f, r - 0.8f) * 2.5f);
+                ras.col[k] = c;
+                ras.zb[k] = iz;
+                ras.idb[k] = PORTAL_ID << 3;
+                ras.lit[k] = 0;
+            }
+        glowAt(cx, cyS, PORTAL_R * 1.3f * ras.f / vz, PORTAL_ID << 3, (PORTAL_ID + 1) << 3);
+    }
+
+    /** Pulled in after the hammer: the picture swirls into the ring and goes white. */
+    private void portalWarp(Px f) {
+        float t = Math.min(1f, portalIn / PORTAL_IN);
+        float e = t * t;
+        ras.project(0f, portalY(), Builder.CZ, scr);
+        float cx = scr[0], cy = scr[1];
+        int n = W * h;
+        if (rockBuf == null || rockBuf.length != n) rockBuf = new int[n];
+        System.arraycopy(f.a, 0, rockBuf, 0, n);
+        float zk = 1f + 9f * e, turn = 2.6f * e;
+        float white = Math.max(0f, (t - 0.45f) / 0.55f);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < W; x++) {
+                float dx = x + 0.5f - W * 0.5f, dy = y + 0.5f - h * 0.5f;
+                float r = (float) Math.sqrt(dx * dx + dy * dy);
+                // nearer the middle, the more it is wound round
+                float a = turn * (1f - Math.min(1f, r / (W * 0.9f)));
+                float c = (float) Math.cos(a), s = (float) Math.sin(a);
+                int sx = (int) (cx + (c * dx - s * dy) / zk), sy = (int) (cy + (s * dx + c * dy) / zk);
+                if (sx < 0) sx = 0;
+                else if (sx >= W) sx = W - 1;
+                if (sy < 0) sy = 0;
+                else if (sy >= h) sy = h - 1;
+                f.a[y * W + x] = Backdrop.mix(rockBuf[sy * W + sx], 0xFFFFFFFF, white);
+            }
+    }
+
+    // ---- out on the ice ----
+
+    static final int FLOE_ID = 994;
+
+    /** How high the target floe's top rides now, on the swell. */
+    private float floeLift() {
+        return 0.12f + Ocean.heave(0f, Builder.CZ, clock);
+    }
+
+    /**
+     * Where a piece is drawn, up or down, out at sea: on the target floe it rides with it,
+     * on the player's floe it stays put, in the water it sinks.
+     */
+    private float seaDrop(Body b, float lift) {
+        if (b.sunk > 0f) return -b.sunk + 0.04f * (float) Math.sin(clock * 2f + b.px);
+        if (Ocean.onTarget(b.px, b.pz, Builder.CZ)) return lift;
+        return 0f;
+    }
+
+    /** Pieces that came down in open water go under, slowly, and are gone. */
+    private void sinking(float dt) {
+        for (Body b : pieces) {
+            if (b.gone || b.material == Body.BALLOON || b == goldCube) continue;
+            if (b.sunk <= 0f) {
+                if (b.minY > 0.25f || Ocean.onTarget(b.px, b.pz, Builder.CZ) || Ocean.onFloe(b.px, b.pz)) continue;
+                b.sunk = 0.001f;
+                for (int i = 0; i < 10; i++) spawn(b.px, 0.05f, b.pz, true, 0xFFE8F0F4, 1.6f);
+                continue;
+            }
+            b.sunk += dt * 0.45f;
+            if (b.sunk > b.maxY - b.minY + 0.3f) {
+                b.gone = true;
+                b.ghost = true;
+            }
+        }
+    }
+
+    private int[] rockBuf;
+    private float slapIn = 3f;
+    private float rockA, rockX, rockY;
+    private static final float ROCK_S = 1.05f;
+
+    /** The floe underfoot rocks: the view leans a little and rises and sinks with it. */
+    private void rockStep() {
+        rockA = 0.016f * (float) Math.sin(clock * 0.83f) + 0.007f * (float) Math.sin(clock * 1.9f + 1f);
+        rockY = 3.4f * (float) Math.sin(clock * 1.05f + 0.4f);
+        rockX = 1.3f * (float) Math.sin(clock * 0.61f);
+    }
+
+    /** Where a point shown on the rocking screen lies in the steady picture. */
+    private void unrock(float x, float y, float[] out) {
+        float u = (x - W * 0.5f) / ROCK_S, v = (y - h * 0.5f) / ROCK_S;
+        float c = (float) Math.cos(rockA), s = (float) Math.sin(rockA);
+        out[0] = W * 0.5f + c * u + s * v - rockX;
+        out[1] = h * 0.5f - s * u + c * v - rockY;
+    }
+
+    private void rock(Px f) {
+        int n = W * h;
+        if (rockBuf == null || rockBuf.length != n) rockBuf = new int[n];
+        System.arraycopy(f.a, 0, rockBuf, 0, n);
+        float c = (float) Math.cos(rockA) / ROCK_S, s = (float) Math.sin(rockA) / ROCK_S;
+        for (int y = 0; y < h; y++) {
+            float v = y + 0.5f - h * 0.5f, u = 0.5f - W * 0.5f;
+            float sx = W * 0.5f + c * u + s * v - rockX, sy = h * 0.5f - s * u + c * v - rockY;
+            int row = y * W;
+            for (int x = 0; x < W; x++) {
+                int ix = (int) sx, iy = (int) sy;
+                if (ix < 0) ix = 0;
+                else if (ix >= W) ix = W - 1;
+                if (iy < 0) iy = 0;
+                else if (iy >= h) iy = h - 1;
+                f.a[row + x] = rockBuf[iy * W + ix];
+                sx += c;
+                sy -= s;
+            }
+        }
+    }
+
     private void drawStreet(Px f) {
         glowN = 0;
         System.arraycopy(zoomed ? zCol : bgCol, 0, ras.col, 0, bgCol.length);
@@ -2802,12 +3103,20 @@ final class World implements Physics.Listener {
         System.arraycopy(zoomed ? zLit : bgLit, 0, ras.lit, 0, bgLit.length);
         java.util.Arrays.fill(ras.idb, 0);
 
-        if (golem == null) drawBody(plinth, 1f, 0f, 1);
+        float lift = 0f;
+        if (atSea) {
+            ocean.sea(ras, zoomed ? zSeaMask : seaMask, clock);
+            ocean.boats(ras, clock);
+            lift = floeLift();
+            ocean.targetFloe(ras, Builder.CZ, lift, FLOE_ID << 3);
+        }
+        if (golem == null) drawBody(plinth, 1f, lift, 1);
+        if (state == PORTAL) drawPortal();
         drawCallButton();
         float st = stagger();
         ras.shadowBegin(6f, Builder.CZ + 1f, 12f);
         if (golem == null)
-            ras.shadowBox(plinth.px, plinth.py, plinth.pz, 1, 0, 0, 0, 1, 0, 0, 0, 1, plinth.hx, plinth.hy, plinth.hz);
+            ras.shadowBox(plinth.px, plinth.py + lift, plinth.pz, 1, 0, 0, 0, 1, 0, 0, 0, 1, plinth.hx, plinth.hy, plinth.hz);
         else drawFight();
         for (int i = 0; i < pieces.size(); i++) {
             Body b = pieces.get(i);
@@ -2834,6 +3143,7 @@ final class World implements Physics.Listener {
                 if (scale < 0.02f) continue;
             }
             if (b.gone) continue;
+            if (atSea) drop += seaDrop(b, lift);
             if (b.material == Body.WATER) drawBottle(b, scale, drop, i + 2);
             else if (b.material == Body.BARREL) drawDrum(b, scale, drop, i + 2);
             else if (b.material == Body.CONE) drawCone(b, scale, drop, i + 2);
@@ -2846,9 +3156,11 @@ final class World implements Physics.Listener {
             else ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
                     b.hx * scale, b.hy * scale, b.hz * scale);
         }
-        streetShadows();
-        drawPuddles();
-        life.draw(ras);
+        if (!atSea) {
+            streetShadows();
+            drawPuddles();
+            life.draw(ras);
+        }
         drawTrail();
         drawHammer();
         drawParticles();
@@ -2864,6 +3176,7 @@ final class World implements Physics.Listener {
         }
         ras.shadowApply((int) minX, (int) minY, (int) maxX + 1, (int) maxY + 1);
         ras.outlines(0, (int) Math.max(0, minY - 40), W - 1, h - 1, 1);
+        if (atSea) ocean.mist(ras, clock);
         if (golem == null) fliers.draw(ras);
         for (int i = 0; i < glowN; i++) glow(ras.col, h, glowX[i], glowY[i], glowR[i], i * 3, glowLo[i], glowHi[i]);
         glowN = 0;
@@ -2885,6 +3198,10 @@ final class World implements Physics.Listener {
         } else {
             if (!zoomed && zoomK > 0f) closingIn(f);
             else System.arraycopy(ras.col, 0, f.a, 0, Math.min(f.a.length, ras.col.length));
+            if (atSea) {
+                rock(f);
+                ocean.drawSnow(f);
+            }
             if (golem != null) shakeFrame(f);
             grade(f, 0);
             if (golem != null) {
@@ -3086,7 +3403,7 @@ final class World implements Physics.Listener {
             }
             return;
         }
-        int pat = b.material == Body.STONE ? Raster.PAT_STONE : b.material == Body.PLINTH ? Raster.PAT_STONE : Raster.PAT_GRAIN;
+        int pat = b.material == Body.STONE ? Raster.PAT_STONE : b.material == Body.PLINTH ? (atSea ? Raster.PAT_FLAT : Raster.PAT_STONE) : Raster.PAT_GRAIN;
         int tint = b.tint;
         for (int k = 0; k < 1; k++)
             ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,

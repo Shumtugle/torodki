@@ -49,6 +49,7 @@ final class Body {
     float still;                    // seconds spent nearly motionless
     boolean ghost;                  // collides with nothing
     boolean gone;                   // burst: no longer part of the building
+    float sunk;                     // meters gone under the water, out at sea
     float lastHit;                  // game time of the last sound it made
     float homeX, homeY, homeZ;      // where the generator put it
     float homeQw = 1f, homeQx, homeQy, homeQz;  // and turned how, where that matters

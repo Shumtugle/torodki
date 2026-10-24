@@ -1,0 +1,24 @@
+# After the 101st building: the gods look, the ring of stones rises on the plinth, a throw
+# through it pulls the view in, and the next level is out on the ocean.
+screen 1096 2560
+level 100
+wait 1.0
+win 1
+wait 7.0
+shot p1_ring_rising
+wait 1.0
+shot p2_ring
+wait 1.5
+shot p3_ring_open
+throwat 0 2.8 55.5 13
+wait 1.5
+shot p4_flight
+wait 2.25
+shot p5_warp
+wait 0.5
+shot p6_warp
+wait 0.6
+shot p7_sea
+wait 1.5
+shot p8_sea
+state

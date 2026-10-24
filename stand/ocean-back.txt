@@ -1,0 +1,8 @@
+# From the ocean back to the street: the street comes back in its own light.
+screen 1096 2560
+level 101
+wait 1.0
+shot b1_sea
+level 49
+wait 1.5
+shot b2_street

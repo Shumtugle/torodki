@@ -1,0 +1,16 @@
+# Out at sea: a hard throw at the building, the pieces that fly into the water sink.
+screen 1096 2560
+level 101
+wait 1.0
+throwat 0 1.6 11.5 14
+wait 0.6
+shot s1
+wait 1.0
+shot s2
+wait 3.0
+shot s3
+state
+throwat 0 1.4 11.5 14
+wait 4.0
+shot s4
+state

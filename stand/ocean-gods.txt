@@ -1,0 +1,9 @@
+# Out at sea the gods look down too, from their own evening sky.
+screen 1096 2560
+level 104
+wait 1.0
+win 1
+wait 3.6
+shot g1_up
+wait 4.0
+shot g2_back
