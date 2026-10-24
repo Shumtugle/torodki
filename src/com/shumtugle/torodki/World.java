@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.52";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.53";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -351,7 +351,10 @@ final class World implements Physics.Listener {
             for (Body b : made) {
                 boolean block = b.radius == 0f && (b.material == Body.WOOD || b.material == Body.STONE);
                 // the winter set brings its own ice; a grown building is iced here
-                if (!set) b.icy = block && ir.nextFloat() < 0.42f;
+                if (!set && block && ir.nextFloat() < 0.42f) {
+                    b.icy = true;
+                    b.tint = ir.nextBoolean() ? 0xFFB3D5E5 : 0xFFC6E1EC;
+                }
                 b.snowy = block && ir.nextFloat() < 0.9f;
             }
         }
@@ -3966,8 +3969,7 @@ final class World implements Physics.Listener {
         int pat = b.material == Body.STONE ? Raster.PAT_STONE : b.material == Body.PLINTH ? (atSea ? Raster.PAT_FLAT : Raster.PAT_STONE) : Raster.PAT_GRAIN;
         int tint = b.tint;
         if (b.icy) {
-            // old ice: blue, a shade lighter or darker block by block
-            tint = (id & 1) == 0 ? 0xFFB3D5E5 : 0xFFC6E1EC;
+            // ice: its own color, smooth
             pat = Raster.PAT_FLAT;
         }
         ras.box(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22,
@@ -5001,7 +5003,9 @@ final class World implements Physics.Listener {
         aiming = false;
         pN = 0;
         for (int i = 0; i < RIPPLES; i++) ripT[i] = -1f;
-        alley = new Alley(host, seed ^ 0x5C1BL ^ clock2long(), true);
+        // two games of stones in fifty buildings, each with figures of its own
+        int n = (level - SEA_FROM) % 50;
+        alley = new Alley(host, seed ^ 0x5C1BL ^ clock2long(), true, n >= 25 && n < 49 ? 0 : 1);
         alley.phys.listener = this;
         host.sound(Synth.WHOOSH, 0.8f, 0.7f);
     }
@@ -5062,6 +5066,32 @@ final class World implements Physics.Listener {
     }
 
     private final float[] dsx = new float[14], dsz = new float[14], dsy = new float[14];
+
+    /** Now and then a corner of an ice block catches the light: a small star, there and gone. */
+    private void glint(Body b, float drop, int i) {
+        float ph = clock * 1.3f + i * 2.71f;
+        float k = (float) Math.sin(ph) * (float) Math.sin(ph * 2.3f + i);
+        if (k < 0.82f) return;
+        int corner = (int) (Math.floor(ph / Math.PI) + i) & 7;
+        toWorld(b, ((corner & 1) == 0 ? -1 : 1) * b.hx, ((corner & 2) == 0 ? 1 : 0.3f) * b.hy, ((corner & 4) == 0 ? -1 : 1) * b.hz, drop, wp);
+        float vz = ras.project(wp[0], wp[1], wp[2], scr);
+        if (vz < 1f) return;
+        float a = (k - 0.82f) / 0.18f, r = 1.2f + 2.2f * a;
+        int x = Math.round(scr[0]), y = Math.round(scr[1]);
+        float iz = 1f / (vz - 0.3f);
+        for (int d = -Math.round(r); d <= Math.round(r); d++) {
+            int al = (int) (255 * a * (1f - Math.abs(d) / (r + 0.5f)));
+            glintDot(x + d, y, iz, al);
+            glintDot(x, y + d, iz, al);
+        }
+    }
+
+    private void glintDot(int x, int y, float iz, int a) {
+        if (x < 0 || y < 0 || x >= W || y >= h || a <= 0) return;
+        int k = y * W + x;
+        if (ras.zb[k] > iz * 1.05f) return;
+        ras.col[k] = Backdrop.mix(ras.col[k], 0xFFFFFFFF, Math.min(1f, a / 255f));
+    }
 
     /** A flat stone: a round slab, grey, thicker in the middle, turning about its middle. */
     private void drawDisc(float x, float y, float z, float spin, float r, int id) {
@@ -5243,6 +5273,7 @@ final class World implements Physics.Listener {
             // ice floats: on the swell the pillars rise and sink a little, and a fallen one lies low in it
             float bob = sea && b.shown >= 1f ? Ocean.heave(b.px, b.pz, clock) * 0.8f - (Alley.knocked(b) ? 0.12f : 0f) : 0f;
             drawBody(b, b.shown, bob, 40 + i);
+            if (sea && b.shown >= 1f) glint(b, bob, i);
             if (Alley.isPin(b) && b.shown >= 1f && !sea)
                 for (int k = 0; k < 2; k++) {
                     toWorld(b, 0f, b.hy * (0.32f + k * 0.16f), 0f, 0f, wp);

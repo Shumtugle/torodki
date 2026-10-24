@@ -1,0 +1,30 @@
+# The ice figures of the stone games, one after another (each round given).
+screen 1096 2560
+level 150
+wait 1.0
+skip
+alleyuntil 3
+wait 0.4
+shot f0
+alleyneed 0
+bowl 0 7 0
+alleyuntil 3
+wait 0.4
+shot f1
+alleyneed 0
+bowl 0 7 0
+alleyuntil 3
+wait 0.4
+shot f2
+alleyneed 0
+bowl 0 7 0
+alleyuntil 3
+wait 0.4
+shot f3
+alleyneed 0
+bowl 0 7 0
+alleyuntil 3
+wait 0.4
+shot f4
+alleyneed 0
+bowl 0 7 0

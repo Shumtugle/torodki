@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.53
+- The stone games at sea get ten figures of their own, cut from ice, five for each game,
+  from the easiest to the hardest. The first game: a gate of two towers under a lintel
+  and a spire, guarded by two posts; a crown of icicles round a stacked spire; a stepped
+  pyramid of four tiers; a colonnade of five columns under slabs; a ship frozen solid,
+  with a mast and a yard. The second game: a ring of stones under lintels; three
+  obelisks; a stair of slabs winding upward; a forest of icicles; a castle with corner
+  towers and a keep.
+- Ice comes in five shades, from milky white to deep blue and sea green, with snow caps;
+  every block catches a glint of light now and then.
+- A figure that will not stand by itself is drawn again; if it still fails, an ordinary
+  one is grown, and that too is made of ice.
+
 ## 0.52
 - The close view at the drifting iceberg turns after it, at seven tenths of its pace: the
   iceberg still creeps toward the edge while the player aims, so the throw must still be

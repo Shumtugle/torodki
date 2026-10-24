@@ -146,6 +146,8 @@ final class Builder {
             float x = l[k * 5 + 1] * 0.001f * flip, y = l[k * 5 + 2] * 0.001f, w = l[k * 5 + 3] * 0.001f, h = l[k * 5 + 4] * 0.001f;
             Body b = piece(x, TOP + y + h * 0.5f, BASE_CZ, w, h, WINTER_DEPTH * 2f, m == 1);
             b.icy = m == 2;
+            // old ice: blue, a shade lighter or darker block by block
+            if (b.icy) b.tint = (k & 1) == 0 ? 0xFFB3D5E5 : 0xFFC6E1EC;
             // the big square blocks with a hole: a life ring or a ship's wheel, standing on edge
             if (Math.abs(w + 0.05f - h) < 0.06f && h > 0.6f) {
                 b.look = (byte) (rnd.nextBoolean() ? 1 : 2);

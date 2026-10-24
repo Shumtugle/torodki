@@ -57,6 +57,7 @@ final class Alley {
     }
 
     final boolean sea;                      // stone skipping on the water, with the ice golem
+    final int figures;                      // at sea: which five ice figures, of the two sets
     boolean hub;                            // the crossroads of five cubes, come to through the portal
     int phase = TURN_IN;
     float phaseT;
@@ -101,8 +102,13 @@ final class Alley {
     }
 
     Alley(World.Host host, long seed, boolean sea) {
+        this(host, seed, sea, 0);
+    }
+
+    Alley(World.Host host, long seed, boolean sea, int figures) {
         this.host = host;
         this.sea = sea;
+        this.figures = figures;
         rnd = new Random(seed);
         rX = (float) Math.cos(YAW);
         rZ = -(float) Math.sin(YAW);
@@ -931,7 +937,7 @@ final class Alley {
         growing = new Thread(new Runnable() {
             @Override
             public void run() {
-                grownFig = new Alley(null, sd, sea).growFigure(r, new Random(sd));
+                grownFig = new Alley(null, sd, sea, figures).growFigure(r, new Random(sd));
             }
         });
         growing.setDaemon(true);
@@ -954,12 +960,18 @@ final class Alley {
     ArrayList<Body> growFigure(int r, Random g) {
         float want = 0.55f - 0.05f * r, bestGap = 9f;
         ArrayList<Body> best = null;
-        for (int attempt = 0; attempt < 6; attempt++) {
+        for (int attempt = 0; attempt < (sea ? 8 : 6); attempt++) {
+            if (sea && attempt == 6 && best != null) break; // an ice figure stood: keep it
             blocks.clear();
-            grow(g, r, figureV(r));
+            // at sea: the ice figure of the round, a little different each try; the grower
+            // only if none of them will stand
+            if (sea && attempt < 6) iceFigure(ICE_ORDER[figures & 1][r], g, figureV(r));
+            else grow(g, r, figureV(r));
             if (blocks.size() < 6 || !standsAlone()) continue;
             float s = probe();
-            if (s < 0.12f || s > 0.9f) continue;
+            // a figure of ice may fall easily or hard; a grown one must be neither too easy nor too hard
+            boolean made = sea && attempt < 6;
+            if (s < (made ? 0.05f : 0.12f) || s > (made ? 1f : 0.9f)) continue;
             float gap = Math.abs(s - want);
             if (gap < bestGap) {
                 bestGap = gap;
@@ -971,7 +983,7 @@ final class Alley {
     }
 
     /** Let it stand a second: nothing may slide or lean. It starts the game as it settled. */
-    private boolean standsAlone() {
+    boolean standsAlone() {
         Physics p = new Physics();
         p.sleeping = false;
         for (Body b : blocks) {
@@ -1000,7 +1012,7 @@ final class Alley {
     }
 
     /** One ball, fair and square at the middle: the share it brings down. Everything put back after. */
-    private float probe() {
+    float probe() {
         Physics p = new Physics();
         p.sleeping = true;
         for (Body b : blocks) {
@@ -1160,6 +1172,162 @@ final class Alley {
         }
     }
 
+    // ---- the ice figures ----
+    // Ten figures of ice for the two games of stones out at sea, five to each: a gate of two
+    // towers, a crown of icicles round a spire, a stepped ziggurat, a colonnade, a frozen
+    // ship; a ring of stacked blocks like an igloo's, three obelisks, a spiral of standing
+    // slabs that fall one into the next, a forest of icicles, a castle with towers and keep.
+    // Pale ice, blue ice, deep glacier blue and green, caps of snow.
+
+    // bright, for the grey light out there takes a good deal off them
+    static final int ICE_A = 0xFFF0FAFF, ICE_B = 0xFFAEE2FA, ICE_C = 0xFF74C6F0, ICE_D = 0xFF62E8DC, ICE_E = 0xFF4A98E0,
+            SNOW = 0xFFFFFFFF;
+
+    // the order the figures come in, the readiest to fall first: the ziggurat, the gate, the
+    // crown, the ship, the colonnade; the spiral, the henge, the castle, the icicles, the obelisks
+    private static final int[][] ICE_ORDER = {{2, 0, 1, 4, 3}, {7, 5, 9, 8, 6}};
+
+    private float jit;
+
+    private float j(Random g) {
+        return (g.nextFloat() - 0.5f) * jit;
+    }
+
+    /** A stack of cubes from y, each a little smaller; returns the height of its top. */
+    private float stack(float u, float dv, float y, int n, float s, float shrink, int c1, int c2) {
+        for (int i = 0; i < n; i++) {
+            cube(u, dv, y, s, (i & 1) == 0 ? c1 : c2);
+            y += 2f * s;
+            s *= shrink;
+        }
+        return y;
+    }
+
+    void iceFigure(int kind, Random g, float v) {
+        v0 = v;
+        jit = 0.04f;
+        switch (kind % 10) {
+            case 0: { // the gate: two towers, a lintel, a spire on it, two guards before it
+                float s = 0.17f, x = 0.25f + j(g) * 0.2f;
+                float top = Math.max(stack(-x, 0f, 0f, 3, s, 1f, ICE_B, ICE_C), stack(x, 0f, 0f, 3, s, 1f, ICE_C, ICE_B));
+                block(0f, 0f, top, x + s + 0.02f, 0.06f, 0.2f, ICE_A, 0f);
+                top += 0.12f;
+                block(0f, 0f, top, 0.1f, 0.32f, 0.1f, ICE_D, 0f);
+                cube(-x, 0f, top, 0.12f, SNOW);
+                cube(x, 0f, top, 0.12f, SNOW);
+                for (int i = -1; i <= 1; i += 2) block(i * 0.52f + j(g), -0.3f, 0f, 0.1f, 0.34f, 0.1f, ICE_E, 0f);
+                break;
+            }
+            case 1: { // the crown: a ring of icicles round a spire of blocks
+                int n = 9;
+                float rad = 0.62f + j(g);
+                for (int i = 0; i < n; i++) {
+                    double a = i * Math.PI * 2 / n;
+                    float hy = 0.3f + 0.12f * (i % 3);
+                    block((float) Math.cos(a) * rad, (float) Math.sin(a) * rad, 0f, 0.1f, hy, 0.1f, (i & 1) == 0 ? ICE_B : ICE_D, (float) a);
+                }
+                float top = stack(0f, 0f, 0f, 3, 0.16f, 0.85f, ICE_C, ICE_A);
+                block(0f, 0f, top, 0.07f, 0.28f, 0.07f, SNOW, 0f);
+                break;
+            }
+            case 2: { // the ziggurat: four tiers, a spire
+                float s = 0.14f, y = 0f;
+                for (int t = 0; t < 4; t++) {
+                    int n = 4 - t;
+                    for (int i = 0; i < n; i++)
+                        cube((i - (n - 1) * 0.5f) * 2f * s, 0f, y, s - 0.004f, t == 0 ? ICE_E : t == 1 ? ICE_C : t == 2 ? ICE_B : ICE_A);
+                    y += 2f * s;
+                }
+                block(0f, 0f, y, 0.08f, 0.3f, 0.08f, ICE_D, 0f);
+                break;
+            }
+            case 3: { // the colonnade: two rows of columns, slabs across, a row of blocks on them
+                int n = 5;
+                float gap = 0.42f + j(g);
+                for (int i = 0; i < n; i++) {
+                    float u = (i - (n - 1) * 0.5f) * gap;
+                    block(u, -0.22f, 0f, 0.09f, 0.4f, 0.09f, ICE_B, 0f);
+                    block(u, 0.22f, 0f, 0.09f, 0.4f, 0.09f, ICE_C, 0f);
+                    block(u, 0f, 0.8f, 0.14f, 0.05f, 0.34f, ICE_A, 0f);
+                    cube(u, 0f, 0.9f, 0.12f, (i & 1) == 0 ? ICE_D : SNOW);
+                }
+                break;
+            }
+            case 4: { // the frozen ship: a hull of blocks, raised bow and stern, a mast and its yard
+                float s = 0.14f;
+                for (int i = -3; i <= 3; i++) cube(i * 2f * s, 0f, 0f, s - 0.004f, ICE_E);
+                for (int i = -2; i <= 2; i++) block(i * 2f * s, 0f, 2f * s, s - 0.004f, 0.05f, s * 1.2f, ICE_B, 0f);
+                stack(-6f * s, 0f, 2f * s, 2, s, 0.85f, ICE_C, ICE_A);
+                stack(6f * s, 0f, 2f * s, 1, s, 1f, ICE_C, ICE_A);
+                float deck = 2f * s + 0.1f;
+                block(0f, 0f, deck, 0.06f, 0.55f, 0.06f, ICE_A, 0f);
+                block(0f, 0f, deck + 1.1f, 0.42f, 0.035f, 0.05f, SNOW, 0f);
+                block(-0.55f, 0f, deck, 0.05f, 0.3f, 0.05f, ICE_D, 0f);
+                break;
+            }
+            case 5: { // the henge: a ring of short stacks, lintels across pairs of them, a spire within
+                int n = 8;
+                float s = 0.13f, rad = 0.6f;
+                float[] px = new float[n], pz = new float[n];
+                for (int i = 0; i < n; i++) {
+                    double a = i * Math.PI * 2 / n;
+                    px[i] = (float) Math.cos(a) * rad;
+                    pz[i] = (float) Math.sin(a) * rad;
+                    stack(px[i], pz[i], 0f, 2, s, 1f, ICE_C, ICE_B);
+                }
+                for (int i = 0; i < n; i += 2) {
+                    float mx = (px[i] + px[i + 1]) * 0.5f, mz = (pz[i] + pz[i + 1]) * 0.5f;
+                    float dx = px[i + 1] - px[i], dz = pz[i + 1] - pz[i], len = (float) Math.sqrt(dx * dx + dz * dz);
+                    block(mx, mz, 4f * s, len * 0.5f + 0.1f, 0.05f, 0.11f, (i & 2) == 0 ? ICE_A : SNOW, -(float) Math.atan2(dz, dx));
+                }
+                block(0f, 0f, 0f, 0.08f, 0.5f, 0.08f, ICE_D, 0f);
+                break;
+            }
+            case 6: { // three obelisks, of different heights, a point of snow on each
+                float[][] at = {{-0.5f, 0f, 4}, {0.5f, 0.05f, 5}, {0f, 0.45f, 6}};
+                for (float[] o : at) {
+                    float top = stack(o[0] + j(g), o[1], 0f, (int) o[2], 0.15f, 0.9f, ICE_C, ICE_B);
+                    block(o[0], o[1], top, 0.05f, 0.14f, 0.05f, SNOW, 0f);
+                }
+                break;
+            }
+            case 7: { // a spiral of standing slabs, each a little taller: knock the first and they fall one into the next
+                int n = 15;
+                for (int i = 0; i < n; i++) {
+                    float a = 0.4f + i * 0.42f, rad = 0.35f + i * 0.045f;
+                    float u = (float) Math.cos(a) * rad, dv = (float) Math.sin(a) * rad - 0.1f;
+                    block(u, dv, 0f, 0.12f, 0.16f + i * 0.026f, 0.045f, i % 3 == 0 ? ICE_D : (i & 1) == 0 ? ICE_B : ICE_A, -a);
+                }
+                break;
+            }
+            case 8: { // a forest of icicles, staggered, taller toward the back
+                for (int row = 0; row < 4; row++) {
+                    int n = 5 - (row & 1);
+                    for (int i = 0; i < n; i++) {
+                        float u = (i - (n - 1) * 0.5f) * 0.36f + j(g), hy = 0.26f + row * 0.07f + g.nextFloat() * 0.08f;
+                        block(u, row * 0.3f - 0.4f, 0f, 0.07f, hy, 0.07f, row == 0 ? ICE_A : row == 1 ? ICE_B : row == 2 ? ICE_C : ICE_E, 0f);
+                    }
+                }
+                break;
+            }
+            default: { // the castle: a crenellated wall, two corner towers, a keep behind
+                float s = 0.13f;
+                for (int i = -2; i <= 2; i++) {
+                    cube(i * 2f * s, 0f, 0f, s - 0.004f, ICE_B);
+                    cube(i * 2f * s, 0f, 2f * s, s - 0.004f, ICE_A);
+                    if ((i & 1) == 0) cube(i * 2f * s, 0f, 4f * s, s * 0.8f, SNOW);
+                }
+                for (int side = -1; side <= 1; side += 2) {
+                    float top = stack(side * 0.82f, 0f, 0f, 4, 0.15f, 0.95f, ICE_C, ICE_B);
+                    block(side * 0.82f, 0f, top, 0.06f, 0.18f, 0.06f, ICE_D, 0f);
+                }
+                float top = stack(0f, 0.5f, 0f, 5, 0.16f, 0.92f, ICE_E, ICE_C);
+                block(0f, 0.5f, top, 0.07f, 0.25f, 0.07f, SNOW, 0f);
+                break;
+            }
+        }
+    }
+
     // ---- the figures ----
     // Written small, in lane units: u across, dv along from the figure's place, y up, and
     // built K times bigger, every block set square to the lane. The golem's own stones:
@@ -1178,6 +1346,9 @@ final class Alley {
         float a = YAW + turn;
         q[0] = (float) Math.cos(a * 0.5f);
         q[2] = (float) Math.sin(a * 0.5f);
+        // at sea the golem's stone and brick are ice
+        if (sea) color = color == STONE ? ICE_B : color == STONE2 ? ICE_C : color == BRICK ? ICE_E
+                : color == BRICK2 ? ICE_C : color == PIN ? ICE_A : color;
         Body b = new Body(hu, hy, hv, Body.STONE, color);
         // stone to look at, light enough to knock over, and free to topple
         b.scaleMass(BLOCK_MASS);
