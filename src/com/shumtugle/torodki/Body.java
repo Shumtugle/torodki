@@ -53,6 +53,7 @@ final class Body {
     boolean icy;                    // out at sea: a block of ice, not of wood or stone
     boolean snowy;                  // out at sea: a cap of snow on its top, till it is knocked off
     byte look;                      // out at sea: drawn as a life ring (1) or a ship's wheel (2)
+    byte row;                       // with two buildings on the plinth: 0 the front one, 1 the one behind
     float lastHit;                  // game time of the last sound it made
     float homeX, homeY, homeZ;      // where the generator put it
     float homeQw = 1f, homeQx, homeQy, homeQz;  // and turned how, where that matters

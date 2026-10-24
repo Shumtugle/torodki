@@ -34,7 +34,13 @@ final class Builder {
         if (n < 80) return Math.min(30f, 24f + 2f * ((n - 50) / 5));
         return Math.min(46f, 36f + 2f * ((n - 80) / 5));
     }
-    static final float PHX = 1.42f * S, PHZ = 0.78f * S;
+    static final float PHX = 1.42f * S, PHZ1 = 0.78f * S;
+    // half the plinth's depth for the level being played: out at sea, from the 130th on, it
+    // carries two buildings one behind the other and is deeper; tests run on the single one
+    static float PHZ = PHZ1;
+    // two rows: each stands this far before or behind the plinth's middle, and the plinth
+    // reaches this far past each of them, front and back
+    static final float ROW = 0.7f, ROW_LIP = 0.9f, PHZ2 = ROW + ROW_LIP;
 
     // in the order they first appear: the first ones fall easily, the pyramid is the stubborn one;
     // the last three carry heavy polished balls and come in from the 15th level
@@ -126,7 +132,35 @@ final class Builder {
             }
             set[i] = l;
         }
+        sortRows(set);
         winter = set;
+    }
+
+    // for two rows: the low buildings of the set stand in front, the tall ones behind, so the
+    // back row shows over the front one
+    private static volatile int[] lowRow, tallRow;
+
+    private static void sortRows(short[][] set) {
+        int[] low = new int[set.length], tall = new int[set.length];
+        int nl = 0, nt = 0;
+        for (int i = 0; i < set.length; i++) {
+            int top = 0;
+            for (int k = 0; k < set[i].length / 5; k++) top = Math.max(top, set[i][k * 5 + 2] + set[i][k * 5 + 4]);
+            if (top <= 3050) low[nl++] = i;
+            else if (top >= 4400) tall[nt++] = i;
+        }
+        lowRow = java.util.Arrays.copyOf(low, nl);
+        tallRow = java.util.Arrays.copyOf(tall, nt);
+    }
+
+    /**
+     * Which two of the winter set stand on the plinth for the n-th level at sea: the front
+     * one, low, and the one behind it, tall. They never come round together in step.
+     */
+    static int[] rowsFor(int n) {
+        int[] low = lowRow, tall = tallRow;
+        if (low == null || low.length == 0 || tall.length == 0) return new int[]{n, n + 25};
+        return new int[]{low[n % low.length], tall[(n * 3 + 1) % tall.length]};
     }
 
     static boolean hasWinter() {
@@ -135,12 +169,18 @@ final class Builder {
 
     /** The n-th building of the winter set, counted from the first level at sea. */
     ArrayList<Body> winter(int n, long seed, boolean turn) {
+        short[][] set = winter;
+        return winterOne(n % set.length, seed, ((n / set.length) % 2 == 1) != turn);
+    }
+
+    /** One building of the winter set by its place in it, mirrored or not. */
+    ArrayList<Body> winterOne(int i, long seed, boolean mirror) {
         out.clear();
         rnd = new Random(seed);
         paintChance = 0.1f;
         short[][] set = winter;
-        short[] l = set[n % set.length];
-        float flip = ((n / set.length) % 2 == 1) != turn ? -1f : 1f;
+        short[] l = set[i % set.length];
+        float flip = mirror ? -1f : 1f;
         for (int k = 0; k < l.length / 5; k++) {
             int m = l[k * 5];
             float x = l[k * 5 + 1] * 0.001f * flip, y = l[k * 5 + 2] * 0.001f, w = l[k * 5 + 3] * 0.001f, h = l[k * 5 + 4] * 0.001f;

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.54
+- From the 130th level on, out at sea, the iceberg carries two buildings, one behind the
+  other: a low one in front and a tall one behind it, standing in its shade and showing
+  over it. The iceberg is longer to hold them both.
+- Both have to come down: at one throw that breaks through the front one into the one
+  behind, or the front one first and then the one behind. Each needs three quarters of its
+  weight off the iceberg, wherever on it the pieces lie.
+- The bar in the corner splits in two on these levels: the building behind above, the
+  front one below, each with its own line to fall below.
+
 ## 0.53
 - The stone games at sea get ten figures of their own, cut from ice, five for each game,
   from the easiest to the hardest. The first game: a gate of two towers under a lintel

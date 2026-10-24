@@ -273,6 +273,24 @@ public final class Stand implements World.Host {
             float[] o = world.screenOf(f(p[1]), f(p[2]), f(p[3]));
             world.throwAt(o[0], o[1], f(p[4]));
             step();
+        } else if (c.equals("rowbot")) {
+            // throws at whichever row stands more, the front one first, until won or out of stars
+            float speed = f(p[1]);
+            float t0 = time, ready = time + 0.3f;
+            while (time - t0 < 40f && world.state == World.PLAY) {
+                if (world.hs == World.HAND && time >= ready) {
+                    int row = !world.rows || world.onPlinth(0) > 1f - World.CLEAR ? 0 : 1;
+                    if (world.standThrowRow(row, speed))
+                        System.out.println(String.format("%7.2fs  throw at row %d, standing front %.2f back %.2f",
+                                time, row, world.onPlinth(0), world.onPlinth(1)));
+                    else break;
+                }
+                if (world.hs != World.HAND) ready = time + 1.6f;
+                step();
+            }
+            for (int i = 0; i < 30; i++) step();
+            System.out.println(String.format("%7.2fs  rowbot: state %d, stars %d, front %.2f, back %.2f, level %d",
+                    time, world.state, world.stars, world.onPlinth(0), world.onPlinth(1), world.level + 1));
         } else if (c.equals("fight")) {
             // the fight bot's hand in this scene: so many seconds, this much spread
             float secs = f(p[1]), spread = f(p[2]);

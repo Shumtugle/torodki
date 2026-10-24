@@ -250,7 +250,7 @@ final class Ocean {
     // rings from the top down: height, how far out past the plinth, how much that varies
     private static final float[][] RINGS = {{0f, 0.06f, 0.08f}, {-0.14f, 0.2f, 0.14f}, {-0.55f, 0.42f, 0.4f}, {-1.15f, 0.7f, 0.5f}};
     private final float[][] ringX = new float[RINGS.length][RIM], ringZ = new float[RINGS.length][RIM];
-    private float meshFor = Float.NaN;
+    private float meshFor = Float.NaN, meshDepth;
     // crags: x and z off the plinth's middle, base radius, height, sides; then their points
     private static final float[][] CRAGS = {{-1.9f, 1.7f, 1.15f, 2.7f}, {0.6f, 2.0f, 1.35f, 3.6f}, {2.6f, 1.0f, 1.0f, 2.2f}, {-2.9f, 0.3f, 0.8f, 1.6f}};
     private static final int CRAG_SIDES = 6;
@@ -259,8 +259,11 @@ final class Ocean {
     private final float[] qx = new float[4], qy = new float[4], qz = new float[4];
 
     private void mesh(float cz) {
-        if (cz == meshFor) return;
+        // a deeper plinth, for two rows, makes a longer iceberg, and the crags stand back with it
+        if (cz == meshFor && meshDepth == Builder.PHZ) return;
         meshFor = cz;
+        meshDepth = Builder.PHZ;
+        float back = Builder.PHZ - Builder.PHZ1;
         Random r = new Random((long) (cz * 1000f) ^ 0x1CEB3L);
         float hx = Builder.PHX, hz = Builder.PHZ;
         float per = 4f * (hx + hz);
@@ -291,7 +294,7 @@ final class Ocean {
                 ringZ[ring][i] = cz + z + nz / nl * out;
             }
         for (int c = 0; c < CRAGS.length; c++) {
-            float bx = CRAGS[c][0], bz = cz + CRAGS[c][1], rad = CRAGS[c][2];
+            float bx = CRAGS[c][0], bz = cz + CRAGS[c][1] + back, rad = CRAGS[c][2];
             for (int i = 0; i < CRAG_SIDES; i++) {
                 float a = (float) (i * Math.PI * 2 / CRAG_SIDES) + r.nextFloat() * 0.5f;
                 float rr = rad * (0.7f + r.nextFloat() * 0.5f);

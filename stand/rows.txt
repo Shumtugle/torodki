@@ -1,0 +1,23 @@
+# From the 130th on: two buildings on the iceberg, a low one before a tall one.
+screen 1096 2560
+level 129
+wait 1.5
+shot r0
+down 548 1000
+wait 0.6
+shot r1aim
+up 548 1000
+wait 3.5
+shot r2after
+level 135
+wait 1.5
+shot r3
+down 548 1000
+wait 0.6
+shot r4aim
+up 548 1000
+wait 0.2
+level 129
+wait 1.0
+rowbot 13.5
+shot r5bot

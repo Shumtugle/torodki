@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.53";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.54";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -304,6 +304,8 @@ final class World implements Physics.Listener {
         if (zoomed) setZoomed(false);
         zoomK = 0f;
         atSea = oceanLevel(lv);
+        rows = twoRows(lv);
+        Builder.PHZ = rows ? Builder.PHZ2 : Builder.PHZ1;
         if (bgSea != atSea && normRas != null) paintBg(atSea);
         Builder.CZ = Builder.BASE_CZ + (atSea ? seaFar(lv - SEA_FROM) : Builder.farther(lv));
         driftT = 0f;
@@ -337,12 +339,14 @@ final class World implements Physics.Listener {
             b.homeX += Builder.CX;
         }
         totalMass = 0f;
+        rowMass[0] = rowMass[1] = 0f;
         for (Body b : made) {
             b.setPose(b.homeX, b.homeY, b.homeZ, 1, 0, 0, 0);
             b.asleep = true;
             phys.add(b);
             pieces.add(b);
             totalMass += b.mass;
+            rowMass[b.row] += b.mass;
         }
         if (atSea) {
             // out at sea a good part of every building is ice, and snow lies on its tops
@@ -384,6 +388,10 @@ final class World implements Physics.Listener {
     /** Tries seeds until the building stands still on its own for a second. */
     /** A building for a level, tested and ready, laid out at the first plinth spot. Thread-safe. */
     static ArrayList<Body> buildingFor(int lv) {
+        if (twoRows(lv) && Builder.hasWinter()) {
+            ArrayList<Body> both = twoBuildings(lv);
+            if (both != null) return both;
+        }
         if (oceanLevel(lv) && Builder.hasWinter()) {
             // out at sea, the winter set; one that will not stand this way round may the other,
             // and should neither, a grown one instead
@@ -393,6 +401,42 @@ final class World implements Physics.Listener {
             }
         }
         return standingBuilding(new Builder(), lv, seedOf(lv));
+    }
+
+    // ---- two rows ----
+    // From the 130th on, out at sea, the plinth carries two buildings, one behind the other:
+    // a low one in front and a tall one behind it, showing over it. Both have to come down:
+    // at one throw, or the front one first and then the one behind.
+
+    static boolean twoRows(int lv) {
+        return oceanLevel(lv) && lv - SEA_FROM >= 28 && !skipLevel(lv);
+    }
+
+    /** The two buildings, each tested on its own, set before and behind the plinth's middle. */
+    static ArrayList<Body> twoBuildings(int lv) {
+        int n = lv - SEA_FROM;
+        int[] pick = Builder.rowsFor(n);
+        long sd = seedOf(lv);
+        ArrayList<Body> both = new ArrayList<Body>();
+        for (int r = 0; r < 2; r++) {
+            ArrayList<Body> one = null;
+            // mirrored on alternate rounds of the set, the back row the other way from the front
+            boolean mirror = ((n / 50) % 2 == 1) != (r == 1);
+            for (int turn = 0; turn < 2 && one == null; turn++) {
+                ArrayList<Body> made = new Builder().winterOne(pick[r], sd + r * 104729L, mirror != (turn == 1));
+                if (standsStill(made)) one = made;
+            }
+            if (one == null) return null;
+            float dz = r == 0 ? -Builder.ROW : Builder.ROW;
+            for (Body b : one) {
+                b.homeZ += dz;
+                b.row = (byte) r;
+                // the row behind stands in the front one's shade: a shade darker, a touch bluer
+                if (r == 1) b.tint = Backdrop.mix(b.tint, 0xFF34465A, 0.3f);
+            }
+            both.addAll(one);
+        }
+        return both;
     }
 
     private static ArrayList<Body> standingBuilding(Builder builder, int lv, long sd) {
@@ -436,7 +480,7 @@ final class World implements Physics.Listener {
     static float probe(ArrayList<Body> made) {
         Physics p = new Physics();
         p.sleeping = false;
-        Body pl = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0);
+        Body pl = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ1, Body.PLINTH, 0);
         pl.setPose(0f, Builder.TOP * 0.5f, Builder.BASE_CZ, 1, 0, 0, 0);
         p.add(pl);
         float mx = 0f, my = 0f, mz = 0f, m = 0f, front = 1e9f;
@@ -467,7 +511,7 @@ final class World implements Physics.Listener {
         for (int i = 0; i < steps; i++) p.step(1f / 60f);
         float on = 0f;
         for (Body b : made)
-            if (Math.abs(b.px) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.BASE_CZ) < Builder.PHZ + 0.05f
+            if (Math.abs(b.px) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.BASE_CZ) < Builder.PHZ1 + 0.05f
                     && b.py > Builder.TOP - 0.05f && b.py < Builder.TOP + 8f) on += b.mass;
         for (Body b : made) {
             b.setPose(b.homeX, b.homeY, b.homeZ, 1, 0, 0, 0);
@@ -479,7 +523,7 @@ final class World implements Physics.Listener {
     static boolean standsStill(ArrayList<Body> made) {
         Physics p = new Physics();
         p.sleeping = false;
-        Body pl = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ, Body.PLINTH, 0);
+        Body pl = new Body(Builder.PHX, Builder.TOP * 0.5f, Builder.PHZ1, Body.PLINTH, 0);
         pl.setPose(0f, Builder.TOP * 0.5f, Builder.BASE_CZ, 1, 0, 0, 0);
         p.add(pl);
         for (Body b : made) {
@@ -565,9 +609,29 @@ final class World implements Physics.Listener {
     float onPlinth() {
         float m = 0f;
         for (Body b : pieces)
-            if (!b.gone && b != goldCube && Math.abs(b.px - Builder.CX) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.CZ) < Builder.PHZ + 0.05f
-                    && b.py > Builder.TOP - 0.05f) m += b.mass;
+            if (stillOn(b)) m += b.mass;
         return totalMass > 0f ? m / totalMass : 0f;
+    }
+
+    boolean rows;                     // two buildings on the plinth this level
+    final float[] rowMass = new float[2];
+
+    private boolean stillOn(Body b) {
+        return !b.gone && b != goldCube && Math.abs(b.px - Builder.CX) < Builder.PHX + 0.05f && Math.abs(b.pz - Builder.CZ) < Builder.PHZ + 0.05f
+                && b.py > Builder.TOP - 0.05f;
+    }
+
+    /** With two rows: the share of one of them still on the plinth, wherever on it. */
+    float onPlinth(int row) {
+        float m = 0f;
+        for (Body b : pieces)
+            if (b.row == row && stillOn(b)) m += b.mass;
+        return rowMass[row] > 0f ? m / rowMass[row] : 0f;
+    }
+
+    /** What has yet to fall: with two rows, the one that stands more. */
+    float standing() {
+        return rows ? Math.max(onPlinth(0), onPlinth(1)) : onPlinth();
     }
 
     // ---- input ----
@@ -1025,6 +1089,35 @@ final class World implements Physics.Listener {
         throwHammer();
         forcedSpeed = -1f;
         return true;
+    }
+
+    /**
+     * For the stand's bot: a throw at the middle of one row (or of the building), led for the
+     * drift as a player would lead it. At the row behind it aims over the front one.
+     */
+    boolean standThrowRow(int row, float speed) {
+        float mx = 0f, my = 0f, mz = 0f, m = 0f, frontTop = 0f, top = 0f;
+        for (Body b : pieces) {
+            if (!stillOn(b)) continue;
+            if (rows && b.row == 0) frontTop = Math.max(frontTop, b.maxY);
+            if (rows && b.row != row) continue;
+            mx += b.px * b.mass;
+            my += b.py * b.mass;
+            mz += b.pz * b.mass;
+            m += b.mass;
+            top = Math.max(top, b.maxY);
+        }
+        if (m == 0f) return false;
+        mx /= m;
+        my /= m;
+        mz /= m;
+        if (rows && row == 1 && frontTop + 0.4f < top) my = Math.max(my, frontTop + 0.4f);
+        handPoint(tmp);
+        float dx = mx - tmp[0], dy = my - tmp[1], dz = mz - tmp[2];
+        float t = flight((float) Math.sqrt(dx * dx + dy * dy + dz * dz), speed);
+        if (atSea && drifting(level)) mx += driftAt(driftT + t) - Builder.CX;
+        float[] o = screenOf(mx, my, mz);
+        return throwAt(o[0], o[1], speed);
     }
 
     /** How badly the parked cars are damaged, all told, for the desktop stand. */
@@ -2404,7 +2497,7 @@ final class World implements Physics.Listener {
             host.sound(Synth.THUNDER, 1.1f, 1f);
             host.buzz(160);
         }
-        if (off >= CLEAR && state != WON) {
+        if (1f - standing() >= CLEAR && state != WON) {
             if (!thundered && throwsMade == 1) {
                 thundered = true;
                 host.sound(Synth.THUNDER, 1.1f, 1f);
@@ -5464,13 +5557,22 @@ final class World implements Physics.Listener {
             cubeMark(f, cx, y + 2);
             PixelFont.draw(f, String.valueOf(cubes), cx + 12, y + 3, 1, 0xFFFFE89A);
         }
-        // weight still on the plinth, with the line it has to fall below
-        float on = onPlinth();
+        // weight still on the plinth, with the line it has to fall below; with two rows, a bar
+        // for each: the one behind above, the front one below
         int bw = 58, bx = W - bw - 7, by = 9;
         f.rect(bx - 1, by - 1, bx + bw + 1, by + 7, 0xFF8A5A12);
         f.rect(bx, by, bx + bw, by + 6, 0xFFF3E9D2);
-        int fill = Math.round(bw * on);
-        f.rect(bx, by, bx + fill, by + 6, on <= 1f - CLEAR ? 0xFF6FBF5A : 0xFFE8963C);
+        if (rows) {
+            for (int r = 0; r < 2; r++) {
+                float on = onPlinth(r);
+                int y0 = r == 1 ? by : by + 4;
+                f.rect(bx, y0, bx + Math.round(bw * on), y0 + 2, on <= 1f - CLEAR ? 0xFF6FBF5A : 0xFFE8963C);
+            }
+            f.rect(bx, by + 2, bx + bw, by + 4, 0xFF8A5A12);
+        } else {
+            float on = onPlinth();
+            f.rect(bx, by, bx + Math.round(bw * on), by + 6, on <= 1f - CLEAR ? 0xFF6FBF5A : 0xFFE8963C);
+        }
         int mark = bx + Math.round(bw * (1f - CLEAR));
         f.rect(mark, by - 3, mark + 1, by + 9, 0xFF5A3A0E);
         levelPlate(f, bx + bw + 1, by + 11);
