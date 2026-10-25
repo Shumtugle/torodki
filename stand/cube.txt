@@ -2,7 +2,7 @@
 # then, and whatever is knocked from under it, it comes down onto the plinth.
 screen 1096 2560
 goldseen
-level 8
+level 7
 wait 2.0
 shot u0_crowned
 state

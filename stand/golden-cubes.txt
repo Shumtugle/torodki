@@ -2,7 +2,7 @@
 # the alley they hand it over with the first figure felled; it shows beside the stars.
 screen 1096 2560
 goldseen
-level 8
+level 7
 wait 2.0
 shot k0_crowned
 win 1

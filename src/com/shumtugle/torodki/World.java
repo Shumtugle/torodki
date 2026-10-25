@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.64";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.65";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -175,7 +175,6 @@ final class World implements Physics.Listener {
     // It never falls to the street: whatever happens, it comes to rest on the plinth
     boolean goldSeen;
     Body goldCube;
-    static final float CUBE_CHANCE = 0.25f;
     private boolean aimedBefore;
     private float flightTime;
     private float retX, retY, retZ;
@@ -262,6 +261,25 @@ final class World implements Physics.Listener {
 
     static long seedOf(int level) {
         return level * 2654435761L ^ 0x2545F4914F6CDD1DL;
+    }
+
+    /**
+     * Whether this level's building wears a golden cube (once the golden hammer has been
+     * seen): one level in every run of four by the plate, which one picked by a hash. A plain
+     * draw against a chance went in long droughts, since the first draw of a generator
+     * seeded with neighbouring numbers is far from random: none at all from 102 to 118.
+     */
+    static boolean cubeLevel(int lv) {
+        int plate = lv + 1;
+        return plate >= 2 && plate % 4 == (int) (mix(seedOf(plate / 4) ^ 0x601DL) >>> 62);
+    }
+
+    /** Scrambles all the bits of a number into all the others. */
+    static long mix(long z) {
+        z += 0x9E3779B97F4A7C15L;
+        z = (z ^ (z >>> 30)) * 0xBF58476D1CE4E5B9L;
+        z = (z ^ (z >>> 27)) * 0x94D049BB133111EBL;
+        return z ^ (z >>> 31);
     }
 
     // the next building, grown on a thread of its own while the gods are watching
@@ -385,7 +403,7 @@ final class World implements Physics.Listener {
             }
         }
         goldCube = null;
-        if (goldSeen && lv > 0 && new java.util.Random(seed ^ 0x601DL).nextFloat() < CUBE_CHANCE) crown(made);
+        if (goldSeen && cubeLevel(lv)) crown(made);
         hammer = new Body(0.42f, 0.08f, 0.17f, Body.HAMMER, 0xFFD9A066);
         hammer.ghost = true;
         hammer.asleep = false;
@@ -576,17 +594,29 @@ final class World implements Physics.Listener {
         stateTime = 0f;
     }
 
-    /** Sets the golden cube on the highest flat top of the building; it does not count as weight. */
+    /**
+     * Sets the golden cube on the highest flat top of the building that nothing stands on
+     * (a ball or a board on the very top sends it lower down); it does not count as weight.
+     */
     private void crown(ArrayList<Body> made) {
         Body top = null;
-        for (Body b : made)
-            if (b.radius == 0f && b.material != Body.WATER && b.hx > 0.16f && b.hz > 0.12f
-                    && (top == null || b.maxY > top.maxY)) top = b;
+        for (Body t : made) {
+            if (t.radius != 0f || t.material == Body.WATER || t.hx <= 0.16f || t.hz <= 0.12f) continue;
+            if (top != null && t.maxY <= top.maxY) continue;
+            boolean free = true;
+            for (Body b : made)
+                if (b != t && b.minY > t.maxY - 0.02f && b.minY < t.maxY + 0.45f
+                        && Math.abs(b.px - t.px) < t.hx + b.hx && Math.abs(b.pz - t.pz) < t.hz + b.hz
+                        // nor may anything pass through where the cube would sit
+                        || b != t && b.maxY > t.maxY + 0.01f && b.minY < t.maxY + 0.4f
+                        && Math.abs(b.px - t.px) < b.hx + 0.2f && Math.abs(b.pz - t.pz) < b.hz + 0.2f) {
+                    free = false;
+                    break;
+                }
+            if (free) top = t;
+        }
         if (top == null) return;
         float c = 0.19f;
-        // nothing may already stand on it
-        for (Body b : made)
-            if (b != top && b.minY > top.maxY - 0.02f && Math.abs(b.px - top.px) < top.hx + b.hx) return;
         Body g = new Body(c, c, c, Body.GOLD, 0xFFF2C230);
         g.setPose(top.px, top.maxY + c + 0.002f, top.pz, 1, 0, 0, 0);
         g.homeX = g.px;

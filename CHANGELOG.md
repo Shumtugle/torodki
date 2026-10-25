@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.65
+- Golden cubes come evenly: one building in every four levels wears one, which one picked
+  at random within the four. Before, each building drew against a chance on its own, and
+  the draws for neighbouring levels were far from random: from the 102nd to the 118th not
+  one building out at sea had a cube.
+- A cube no longer gives up when something lies on the very top of a building: it goes to
+  the highest flat top that is free.
+
 ## 0.64
 - The screens of the bridge take after their world: wooden color sets with channel drums
   for the street, round green radar scopes with bolted housings for the sea, black and
