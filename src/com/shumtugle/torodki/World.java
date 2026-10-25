@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.61";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.62";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -318,6 +318,7 @@ final class World implements Physics.Listener {
             fails = 0;
             host.saveFails(0);
         }
+        episodeRun(lv);
         level = lv;
         goldOn = fails >= GOLD_AFTER;
         host.saveLevel(level);
@@ -2415,6 +2416,10 @@ final class World implements Physics.Listener {
             if (backT >= TILT + 0.2f) fromSky = false;
         }
         marksStep(dt);
+        if (chapterT >= 0f) {
+            chapterT += dt;
+            if (chapterT >= CHAPTER_RISE + CHAPTER_FADE) chapterT = -1f;
+        }
         // now and then, before a building, the view turns round to the alley behind
         if (state == PLAY && golem == null && !atSea && alleyLevel(level) && host.loadInt("alley") != level + 1 && stateTime > 0.8f
                 && hs == HAND && !aiming && throwsMade == 0) {
@@ -2447,7 +2452,14 @@ final class World implements Physics.Listener {
                 if (stateTime >= TILT) setState(SKY_HOLD);
                 break;
             case SKY_HOLD:
-                if (stateTime >= holdFor) {
+                // an episode ended with a scene still to come: the light rises first
+                if (stateTime >= holdFor && chapterDue && chapterT < 0f) {
+                    chapterT = 0f;
+                    chapters++;
+                    host.sound(Synth.WHOOSH, 0.7f, 0.7f);
+                }
+                if (stateTime >= holdFor && (chapterT < 0f || chapterT >= CHAPTER_RISE)) {
+                    chapterDue = false;
                     if (bossNext) {
                         startBoss(level + nextAfterVanish);
                         buildFromSky = false;
@@ -2579,6 +2591,7 @@ final class World implements Physics.Listener {
             wonAt = stars;
             cleared = true;
             earnCube();
+            episodeWin();
             setState(WON);
         }
     }
@@ -2601,10 +2614,64 @@ final class World implements Physics.Listener {
         host.saveInt("cube" + (level + 1), 1);
         cubesDue++;
         host.saveInt("cubesDue", cubesDue);
+        String k = "ep" + Episode.of(level + 1) + "cubes";
+        host.saveInt(k, host.loadInt(k) + 1);
+    }
+
+    // ---- episodes ----
+    // Each building won adds the stars left to the run through its episode; a run counts
+    // only if it began at the episode's first level and went on level after level. The
+    // episode's last building won marks it done and keeps the best run. Where an episode
+    // ends with a scene still to come, a burst of light stands in for it between the levels.
+
+    static final float CHAPTER_RISE = 0.45f, CHAPTER_FADE = 0.6f;
+    private float chapterT = -1f;          // the light between two episodes, running
+    private boolean chapterDue;            // the next way down from the sky goes through it
+    int chapters;                          // how many have run, for the stand
+
+    private void episodeRun(int lv) {
+        int plate = lv + 1;
+        if (Episode.first(plate)) {
+            host.saveInt("epRun", 0);
+            host.saveInt("epRunOk", 1);
+        } else if (lv != level && lv != level + 1) host.saveInt("epRunOk", 0);
+    }
+
+    private void episodeWin() {
+        int plate = level + 1, e = Episode.of(plate);
+        int run = host.loadInt("epRun") + Math.max(0, wonAt);
+        host.saveInt("epRun", run);
+        if (!Episode.last(plate)) return;
+        host.saveInt("ep" + e + "done", 1);
+        if (host.loadInt("epRunOk") == 1 && run > host.loadInt("ep" + e + "stars")) host.saveInt("ep" + e + "stars", run);
+        if (Episode.ENDS[e] == Episode.NEW) chapterDue = true;
+    }
+
+    /** For the stand: where the game is among the episodes. */
+    String episodeState() {
+        int plate = level + 1, e = Episode.of(plate);
+        StringBuilder done = new StringBuilder();
+        for (int i = 0; i < Episode.COUNT; i++)
+            done.append(host.loadInt("ep" + i + "done") == 1 ? String.valueOf(host.loadInt("ep" + i + "stars")) : ".").append(' ');
+        return String.format("plate %d, episode %d (%d-%d), run %d%s, best stars by episode: %s, lights %d",
+                plate, e + 1, Episode.FIRST[e], Episode.LAST[e], host.loadInt("epRun"), host.loadInt("epRunOk") == 1 ? "" : " (not whole)",
+                done.toString().trim(), chapters);
+    }
+
+    private float chapterLight() {
+        if (chapterT < 0f) return 0f;
+        if (chapterT < CHAPTER_RISE) {
+            float u = chapterT / CHAPTER_RISE;
+            return u * u;
+        }
+        float u = Math.min(1f, (chapterT - CHAPTER_RISE) / CHAPTER_FADE);
+        return (1f - u) * (1f - u);
     }
 
     void standWin(int throwsCount) {
         earnCube();
+        wonAt = stars;
+        episodeWin();
         throwsMade = throwsCount;
         cleared = true;
         setState(WON);
@@ -3315,6 +3382,7 @@ final class World implements Physics.Listener {
         }
         drawWorld(f);
         if (intro != null) burst(f, intro.light(), false);
+        if (chapterT >= 0f) burst(f, chapterLight(), chapterT < CHAPTER_RISE);
     }
 
     private void drawWorld(Px f) {

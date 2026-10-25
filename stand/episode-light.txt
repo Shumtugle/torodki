@@ -1,0 +1,18 @@
+# The end of the first episode: the gods, the light rising over the sky, the next episode's first building out of the white.
+screen 1096 2560
+level 8
+wait 0.5
+win 1
+wait 6.0
+shot l0_gods
+wait 0.4
+shot l1_rising
+wait 0.25
+shot l2_white
+wait 0.3
+shot l3_fading
+wait 0.5
+shot l4_level10
+wait 1.5
+shot l5_level10
+episode

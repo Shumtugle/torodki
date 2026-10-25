@@ -1,0 +1,86 @@
+# Every episode's last level won: what follows it, and what the save keeps.
+screen 1096 2560
+level 8
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 19
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 38
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 49
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 64
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 78
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 89
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 100
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 118
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 125
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 138
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate
+level 150
+wait 0.5
+win 2
+wait 9
+episode
+state
+alleystate

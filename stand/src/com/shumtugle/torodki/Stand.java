@@ -391,6 +391,8 @@ public final class Stand implements World.Host {
             float[] a = world.aimPoint(), w = world.standRingWorld();
             System.out.println(String.format("%7.2fs  ring at %.1f, %.1f on screen; %.2f m across, %.2f m up from the iceberg's middle",
                     time, a[0], a[1], w[0], w[1]));
+        } else if (c.equals("episode")) {
+            System.out.println(String.format("%7.2fs  %s", time, world.episodeState()));
         } else if (c.equals("aim")) {
             float[] a = world.aimPoint();
             System.out.println(String.format("%7.2fs  aim at %.1f, %.1f", time, a[0], a[1]));

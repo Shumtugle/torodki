@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.62
+- The levels are gathered into twelve episodes, set where the game turns: 1-9, 10-20,
+  21-39, 40-50, 51-65, 66-79, 80-90, 91-101, 102-119, 120-126, 127-139, 140-151. Each opens
+  with something new; four end where the game already turns (the alley before the 51st and
+  the 91st, the portal after the 101st, the stones on the water after the 126th and the
+  151st), the others will end with a scene of their own.
+- Until those scenes come, the end of such an episode is a burst of light: the sky of the
+  gods rushes toward its middle and whitens, and the next episode's first building comes
+  out of the white.
+- The game keeps, for every episode, whether it is done, the best sum of stars left over a
+  run through it from its first level, level after level, and the golden cubes earned in
+  it. A jump into the middle of an episode does not count as a run.
+
 ## 0.61
 - In the opening, people are seen only from afar: little figures of boxes do not bear a
   close look. They keep to the far pavements, past the road behind the square, past the
