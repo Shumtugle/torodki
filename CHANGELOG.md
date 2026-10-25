@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.59
+- A new opening, made in code, that tells the game in a few seconds. The summer street, a
+  long pedestal, and out of the sky, letter by letter, the blocks of the name come down
+  onto it, each landing with a knock, wood and paint of the buildings' own colors. The
+  hammer waits in the hand, then flies; the name flies to pieces at its touch, as the first
+  building of the game does, with thunder; the pieces tumble off the pedestal and the
+  street gives way to the game. A tap goes straight on.
+- The painted opening picture is gone, and the game is almost two megabytes lighter.
+
 ## 0.58
 - The gods hand over the golden cubes one at a time: one for each figure felled in the
   alley, as long as they hold any the player has earned on the street. Before, the first

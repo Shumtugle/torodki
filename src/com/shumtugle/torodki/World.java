@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.58";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.59";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -231,7 +231,7 @@ final class World implements Physics.Listener {
         }
         atSea = oceanLevel(level);
         if (!Builder.hasWinter()) Builder.readWinter(host.asset("winter.bin"));
-        readSplash(host.asset("splash.bin"));
+        intro = new Intro(host);
         phys.listener = this;
     }
 
@@ -670,7 +670,7 @@ final class World implements Physics.Listener {
     void touch(int type, float x, float y) {
         if (splashing()) {
             // a tap goes straight on to the game
-            if (type == DOWN) splashT = SPLASH_T;
+            if (type == DOWN) intro.skip();
             return;
         }
         if (booth >= 0f) {
@@ -2303,14 +2303,14 @@ final class World implements Physics.Listener {
     // ---- simulation ----
 
     void update(float dt) {
-        if (splashT >= 0f) {
-            splashT += dt;
-            if (splashT >= SPLASH_T + SPLASH_FADE) {
-                splashT = -1f;
-                splashImg = null;
+        if (intro != null) {
+            intro.update(dt);
+            if (intro.over()) {
+                intro = null;
+                introRas = null;
             }
-            // the game waits behind the picture, and starts as it fades
-            if (splashing()) return;
+            // the game waits behind the opening, and starts as it fades
+            else if (splashing()) return;
         }
         if (booth >= 0f) {
             booth += dt;
@@ -3182,88 +3182,120 @@ final class World implements Physics.Listener {
     // ---- drawing ----
 
     // ---- the opening picture ----
-    // When the game starts: the golem bursting into the street, the view drifting slowly from
-    // its glowing head toward the fist coming at the player, the game's name over the dust.
-    // A tap goes straight on; the picture fades into the street.
+    // ---- the opening ----
+    // When the game starts, the game in a few seconds: the name built of blocks on a pedestal
+    // in the street, thrown down from the sky letter by letter, and smashed by the hammer.
+    // It is played and drawn here; a tap goes straight on, and it fades into the game.
 
-    static final float SPLASH_T = 3.8f, SPLASH_FADE = 0.7f;
-    private float splashT = -1f;
-    private byte[] splashImg;
-    private int splashW, splashH;
-    private static final int[] TITLE_ROWS = {0xFFFFF0B8, 0xFFFFE08A, 0xFFFFD060, 0xFFF6BC40, 0xFFE8A030, 0xFFD88A24, 0xFFC2721C};
+    private Intro intro;
+    private Raster introRas;
+    private int[] introCol;
+    private float[] introZ;
+    private byte[] introLit;
 
-    private void readSplash(byte[] b) {
-        if (b == null || b.length < 4) return;
-        int ww = ((b[0] & 0xFF) << 8) | (b[1] & 0xFF), hh = ((b[2] & 0xFF) << 8) | (b[3] & 0xFF);
-        if (b.length < 4 + ww * hh * 3) return;
-        splashImg = b;
-        splashW = ww;
-        splashH = hh;
-        splashT = 0f;
-    }
-
-    /** For the desktop stand: no opening picture, or the opening picture again. */
+    /** For the desktop stand: no opening, or the opening again. */
     void skipSplash() {
-        splashT = -1f;
+        intro = null;
+        introRas = null;
     }
 
     void showSplash() {
-        readSplash(host.asset("splash.bin"));
+        intro = new Intro(host);
     }
 
     private boolean splashing() {
-        return splashT >= 0f && splashT < SPLASH_T;
+        return intro != null && !intro.fading();
     }
 
-    private void drawSplash(Px f, float alpha) {
-        float t = Math.min(1f, splashT / SPLASH_T), e = t * t * (3f - 2f * t);
-        // the picture fills the height; the window drifts from the head toward the fist, closing in a little
-        float zoom = 1f + 0.06f * e, sc = h * zoom / splashH;
-        float center = 0.62f + (0.44f - 0.62f) * e;
-        float left = center * splashW * sc - W * 0.5f, top = (h * zoom - h) * 0.5f;
-        float inv = 1f / sc;
-        byte[] img = splashImg;
-        int a = (int) (alpha * 256f);
-        for (int y = 0; y < h; y++) {
-            int iy = Math.min(splashH - 1, (int) ((y + top) * inv));
-            int row = 4 + iy * splashW * 3;
-            for (int x = 0; x < W; x++) {
-                int ix = Math.max(0, Math.min(splashW - 1, (int) ((x + left) * inv)));
-                int p = row + ix * 3;
-                int c = 0xFF000000 | ((img[p] & 0xFF) << 16) | ((img[p + 1] & 0xFF) << 8) | (img[p + 2] & 0xFF);
-                int k = y * W + x;
-                f.a[k] = a >= 256 ? c : Backdrop.mix(f.a[k], c, alpha);
-            }
+    /** The opening's camera: from where the player stands, a little closer in on the name. */
+    private void prepareIntro() {
+        introRas = new Raster(W, h);
+        float dx = -Intro.CAM_X, dz = Intro.Z - Intro.CAM_Z;
+        float dist = (float) Math.sqrt(dx * dx + dz * dz);
+        introRas.camera(Intro.CAM_X, Intro.CAM_Y, Intro.CAM_Z, (float) Math.atan2(dx, dz),
+                (float) Math.atan2(Intro.LOOK_Y - Intro.CAM_Y, dist), focal, h * 0.5f);
+        Raster.overcast(false);
+        backdrop.paint(introRas, 11L);
+        introCol = introRas.col.clone();
+        introZ = introRas.zb.clone();
+        introLit = introRas.lit.clone();
+    }
+
+    private void drawIntro(Px f, float alpha) {
+        if (alpha <= 0f) return;
+        if (introRas == null || introRas.h != h) prepareIntro();
+        Raster keep = ras;
+        boolean sea = atSea;
+        ras = introRas;
+        atSea = false;
+        Raster.overcast(false);
+        System.arraycopy(introCol, 0, ras.col, 0, introCol.length);
+        System.arraycopy(introZ, 0, ras.zb, 0, introZ.length);
+        System.arraycopy(introLit, 0, ras.lit, 0, introLit.length);
+        java.util.Arrays.fill(ras.idb, 0);
+        ras.shadowBegin(6f, Intro.Z + 1f, 12f);
+        Body p = intro.pedestal;
+        drawBody(p, 1f, 0f, 1);
+        ras.shadowBox(p.px, p.py, p.pz, 1, 0, 0, 0, 1, 0, 0, 0, 1, p.hx, p.hy, p.hz);
+        for (int i = 0; i < intro.blocks.size(); i++) {
+            float drop = intro.drop(i);
+            if (drop < 0f) continue;
+            Body b = intro.blocks.get(i);
+            drawBody(b, 1f, drop, i + 2);
+            ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22, b.hx, b.hy, b.hz);
         }
-        // the name, rising out of the dust
-        float show = Math.max(0f, Math.min(1f, (splashT - 0.5f) / 0.6f)) * alpha;
-        if (show <= 0f) return;
-        String name = "TORODKI";
-        int scale = 5, tw = PixelFont.width(name, scale), tx = (W - tw) / 2;
-        int ty = Math.round(h * 0.78f + (1f - show) * 14f);
-        if (show < 1f) {
-            // fading in: drawn into a copy, blended back
-            int[] keep = f.a.clone();
-            title(f, name, tx, ty, scale);
-            for (int k = 0; k < keep.length; k++) if (f.a[k] != keep[k]) f.a[k] = Backdrop.mix(keep[k], f.a[k], show);
-        } else title(f, name, tx, ty, scale);
-    }
-
-    private static void title(Px f, String name, int tx, int ty, int scale) {
-        for (int dy = -2; dy <= 3; dy++)
-            for (int dx = -2; dx <= 2; dx++)
-                if (dx != 0 || dy != 0) PixelFont.draw(f, name, tx + dx, ty + dy, scale, 0xFF2A140A);
-        PixelFont.draw(f, name, tx, ty, scale, 0, TITLE_ROWS);
+        Body hm = intro.hammer;
+        if (!intro.thrown) {
+            // in the hand, as in the game, until it is thrown
+            eyeX = Intro.CAM_X;
+            eyeY = Intro.CAM_Y;
+            eyeZ = Intro.CAM_Z;
+            heldPose(0.3f, -0.7f + (float) Math.sin(intro.t * 1.7f) * 0.008f, 1.35f, -0.42f, 0.86f, 0.28f, 0.94f, 0.2f, -0.28f);
+            pose[0] -= pose[3] * 0.05f;
+            pose[1] -= pose[6] * 0.05f;
+            pose[2] -= pose[9] * 0.05f;
+            eyeX = CAM_X;
+            eyeY = CAM_Y;
+            eyeZ = 0f;
+        } else {
+            pose[0] = hm.px;
+            pose[1] = hm.py;
+            pose[2] = hm.pz;
+            pose[3] = hm.r00;
+            pose[4] = hm.r01;
+            pose[5] = hm.r02;
+            pose[6] = hm.r10;
+            pose[7] = hm.r11;
+            pose[8] = hm.r12;
+            pose[9] = hm.r20;
+            pose[10] = hm.r21;
+            pose[11] = hm.r22;
+            ras.shadowBox(hm.px, hm.py, hm.pz, hm.r00, hm.r01, hm.r02, hm.r10, hm.r11, hm.r12, hm.r20, hm.r21, hm.r22, hm.hx, hm.hy * 0.8f, hm.hz);
+        }
+        drawParts(false, 1f, 900, false);
+        ras.shadowApply(0, 0, W - 1, h - 1);
+        ras.outlines(0, 0, W - 1, h - 1, 1);
+        int[] c = ras.col;
+        // out of the dark at the very start
+        float in = Math.min(1f, intro.t / 0.35f);
+        if (alpha >= 1f && in >= 1f) System.arraycopy(c, 0, f.a, 0, Math.min(f.a.length, c.length));
+        else
+            for (int k = 0; k < Math.min(f.a.length, c.length); k++) {
+                int v = in < 1f ? Backdrop.mix(0xFF000000, c[k], in) : c[k];
+                f.a[k] = alpha >= 1f ? v : Backdrop.mix(f.a[k], v, alpha);
+            }
+        ras = keep;
+        atSea = sea;
     }
 
     void draw(Px f) {
         if (ras == null) return;
-        if (splashing() && splashImg != null) {
-            drawSplash(f, 1f);
+        if (splashing()) {
+            drawIntro(f, 1f);
             return;
         }
         drawWorld(f);
-        if (splashT >= SPLASH_T && splashImg != null) drawSplash(f, 1f - (splashT - SPLASH_T) / SPLASH_FADE);
+        if (intro != null) drawIntro(f, 1f - (intro.t - Intro.END) / Intro.FADE);
     }
 
     private void drawWorld(Px f) {
@@ -4696,11 +4728,14 @@ final class World implements Physics.Listener {
      * A hammer held near the camera: at a point given in view space, its handle along one
      * view direction, the faces of its head across another. Fills pose: position, then axes.
      */
+    // where the eye is that holds the hammer: the player's, or the opening's camera
+    private float eyeX = CAM_X, eyeY = CAM_Y, eyeZ = 0f;
+
     private void heldPose(float vx, float vy, float vz, float ux, float uy, float uz, float wx, float wy, float wz) {
         ras.viewToWorld(vx, vy, vz, tmp);
-        pose[0] = tmp[0] + CAM_X;
-        pose[1] = tmp[1] + CAM_Y;
-        pose[2] = tmp[2];
+        pose[0] = tmp[0] + eyeX;
+        pose[1] = tmp[1] + eyeY;
+        pose[2] = tmp[2] + eyeZ;
         ras.viewToWorld(ux, uy, uz, dirA);
         float ax = dirA[0], ay = dirA[1], az = dirA[2];
         float l = (float) Math.sqrt(ax * ax + ay * ay + az * az);
