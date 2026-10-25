@@ -1,0 +1,17 @@
+# The last episode done: the portal on the iceberg after the 151st, a throw through it, and the bridge, where the two games' screens light up.
+screen 1096 2560
+level 150
+best 151
+cubes 3
+wait 1.0
+portalopen
+wait 4.0
+shot f0_portal
+portalthrow
+wait 7.0
+shot f1_through
+bridgestate
+bridgeswipe 200 -140 236
+wait 2.0
+bridgestate
+shot f2_games

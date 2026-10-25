@@ -1,0 +1,40 @@
+# The bridge at work: a cube into the current episode's slot, a throw into it, a dark screen, the lever, the alley's monitor.
+screen 1096 2560
+level 74
+best 75
+cubes 2
+wait 1.5
+bridge
+wait 0.6
+bridgestate
+bridgetap 137 236
+wait 0.15
+shot c0_throw
+wait 0.45
+shot c1_cube_flying
+wait 0.8
+shot c2_cube_in
+bridgestate
+bridgetap 137 236
+wait 0.15
+shot c3_enter
+wait 1.0
+bridgestate
+shot c4_episode_start
+wait 2.0
+bridge
+wait 0.6
+bridgeswipe 200 -70 236
+wait 1.5
+bridgestate
+bridgetap 137 236
+wait 0.6
+shot c5_busy
+bridgetap 137 590
+wait 0.6
+bridgestate
+bridge
+wait 0.6
+bridgetap 55 500
+wait 1.5
+bridgestate

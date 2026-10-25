@@ -1,0 +1,22 @@
+# The bridge: three rings of the red button, the ring of screens, a swipe, a cube into a slot, a throw into an episode.
+screen 1096 2560
+level 74
+best 75
+cubes 2
+wait 2.0
+press
+wait 0.8
+press
+wait 0.8
+press
+wait 0.6
+shot b0_open
+bridgestate
+bridgeswipe 200 -140 250
+wait 1.2
+shot b1_turned
+bridgestate
+bridgeswipe 60 280 250
+wait 1.5
+shot b2_back
+bridgestate

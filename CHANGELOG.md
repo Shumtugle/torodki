@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.63
+- The red button no longer brings up the booth: three presses open the dispatcher's
+  bridge. A ring of screens, one for every episode, one for the crossroads of the five
+  cubes and two still dark for the games to come, turns about its axis under a sweep of
+  the hammer and settles on the nearest screen; a tap throws the hammer at what it should
+  choose.
+- Screens of episodes already reached are lit and show their levels and the best stars of
+  a run; screens of the future are dark and answer only with snow.
+- Under every screen is a slot. A golden cube put into it opens that episode for good, and
+  it cannot be taken back; the first episode's slot is filled from the start. An open
+  screen takes the game back to the first level of its episode, as often as wanted.
+- The console below keeps what the booth did: the alley and the golem on the street, the
+  stones on the water at sea; the lever marked HOME goes back to the level left.
+- After the 151st, the portal no longer leads to the start: it opens onto the bridge,
+  facing the last episode.
+
 ## 0.62
 - The levels are gathered into twelve episodes, set where the game turns: 1-9, 10-20,
   21-39, 40-50, 51-65, 66-79, 80-90, 91-101, 102-119, 120-126, 127-139, 140-151. Each opens

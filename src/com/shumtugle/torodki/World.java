@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.62";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.63";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -674,8 +674,8 @@ final class World implements Physics.Listener {
             if (type == DOWN) intro.skip();
             return;
         }
-        if (booth >= 0f) {
-            boothTouch(type, x, y);
+        if (bridge != null) {
+            bridge.touch(type, x, y);
             return;
         }
         if (alley != null) {
@@ -810,7 +810,7 @@ final class World implements Physics.Listener {
     }
 
     void back() {
-        if (booth >= 0f) closeBooth();
+        if (bridge != null) closeBridge();
         else host.quit();
     }
 
@@ -1179,15 +1179,14 @@ final class World implements Physics.Listener {
     }
 
     // ---- the call box ----
-    // On the lamp post to the right a call box with a red button. Each press rings the
-    // dispatcher; three in a row and a phone booth opens: inside, a button for every level
-    // reached, and one at the bottom that calls the golem.
+    // On the lamp post to the right (out at sea, on a buoy) a call box with a red button.
+    // Each press rings the dispatcher; three in a row and the bridge opens.
 
     static final float CALL_Z = 16f, CALL_Y = 1.45f, CALL_X = 4.55f - 0.2f;
     private float tapX, tapY, tapFar;
     private int calls;
     private float callAt = -9f;
-    float booth = -1f;                   // seconds since the booth opened, or -1 when shut
+    Bridge bridge;                       // the dispatcher's bridge, while it is open
 
     int best() {
         return Math.max(level + 1, host.loadInt("best"));
@@ -1213,15 +1212,49 @@ final class World implements Physics.Listener {
         host.buzz(20);
         if (calls >= 3) {
             calls = 0;
-            booth = 0f;
-            dialled.setLength(0);
-            host.sound(Synth.DOOR, 1f, 1f);
+            openBridge();
         }
     }
 
-    private void closeBooth() {
-        booth = -1f;
+    void openBridge() {
+        if (zoomed) setZoomed(false);
+        zoomK = 0f;
+        aiming = false;
+        bridge = new Bridge(this, host);
+        host.sound(Synth.DOOR, 1f, 0.8f);
+    }
+
+    private void closeBridge() {
+        bridge = null;
         host.sound(Synth.DOOR, 0.8f, 1.15f);
+    }
+
+    /** A console monitor or the lever, answered. */
+    void bridgeAct(int which) {
+        closeBridge();
+        if (which == Bridge.ALLEY) startAlley();
+        else if (which == Bridge.GOLEM) startBoss(level);
+        else if (which == Bridge.SKIP) startSkip();
+    }
+
+    /** A screen with its cube, thrown at: to the first level of its episode, or the crossroads. */
+    void bridgeEnter(int which) {
+        bridge = null;
+        if (which == Bridge.HUB) {
+            startHub();
+            return;
+        }
+        startLevel(Episode.FIRST[which] - 1, true);
+        buildFromSky = false;
+        // through the light, as between episodes
+        chapterT = CHAPTER_RISE;
+    }
+
+    /** A golden cube from the row by the stars, gone into a slot for good. */
+    void spendCube() {
+        if (cubes <= 0) return;
+        cubes--;
+        host.saveInt("cubes", cubes);
     }
 
     /** The button on the post: red, and lit for a moment after each press. */
@@ -1236,116 +1269,7 @@ final class World implements Physics.Listener {
         ras.disc(scr[0] - r * 0.3f, scr[1] - r * 0.35f, Math.max(0.6f, r * 0.3f), 1f / (vz - 0.32f), 0xFFFFB0A0, 990 << 3);
     }
 
-    // the booth on screen: doors, glass, and a telephone inside. The level is dialled on
-    // its keypad and called; the red button below calls the golem; the hook hangs up.
-    private static final int BX0 = 18, BX1 = World.W - 18;
-    private final StringBuilder dialled = new StringBuilder();
-    private float wrongAt = -9f, keyAt = -9f;
-    private int keyDown = -1;
-    private static final String[] KEYS = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "CALL"};
-
-    private int boothTop() {
-        return 44;
-    }
-
-    // the keypad: three columns, four rows
-    private static final int KW = 64, KH = 60, KG = 9;
-
-    private int keysX() {
-        return (W - (3 * KW + 2 * KG)) / 2;
-    }
-
-    private int keysY() {
-        return boothTop() + 112;
-    }
-
-    private int golemY() {
-        return keysY() + 4 * (KH + KG) + 22;
-    }
-
-    private void boothTouch(int type, float x, float y) {
-        if (booth < 0.6f || type != DOWN) return;
-        boothKey(x, y);
-    }
-
-    private void boothKey(float x, float y) {
-        int kx = keysX(), ky = keysY();
-        int col = (int) Math.floor((x - kx) / (KW + KG)), row = (int) Math.floor((y - ky) / (KH + KG));
-        if (col >= 0 && col < 3 && row >= 0 && row < 4 && x - kx - col * (KW + KG) < KW && y - ky - row * (KH + KG) < KH) {
-            int k = row * 3 + col;
-            keyDown = k;
-            keyAt = booth;
-            host.sound(Synth.DTMF + k, 0.8f, 1f);
-            host.buzz(8);
-            String key = KEYS[k];
-            if (key.equals("C")) dialled.setLength(Math.max(0, dialled.length() - 1));
-            else if (key.equals("CALL")) {
-                int lv = dialled.length() == 0 ? -1 : Integer.parseInt(dialled.toString());
-                if (lv < 2 || lv > best()) {
-                    // no such number: the line says so in three rising beeps, the display shakes
-                    wrongAt = booth;
-                    dialled.setLength(0);
-                    host.sound(Synth.BUSY, 0.7f, 1f);
-                    host.buzz(30);
-                    return;
-                }
-                dialled.setLength(0);
-                booth = -1f;
-                host.sound(Synth.RING, 0.7f, 1.1f);
-                startLevel(lv - 1, true);
-            } else if (dialled.length() < 3) dialled.append(key);
-            return;
-        }
-        int gy = golemY();
-        // three buttons in a row: the golem, the alley, the stones on the water. Out at sea
-        // only the stones answer; on the street only the first two
-        int which = y >= gy && y < gy + 34 ? boothButton(x) : -1;
-        if (which == 2 && atSea) {
-            dialled.setLength(0);
-            booth = -1f;
-            host.sound(Synth.SPLASH, 0.8f, 1.2f);
-            startSkip();
-            return;
-        }
-        if (!atSea && which == 0) {
-            dialled.setLength(0);
-            booth = -1f;
-            host.sound(Synth.ROAR, 0.8f, 1f);
-            startBoss(level);
-            return;
-        }
-        if (!atSea && which == 1) {
-            dialled.setLength(0);
-            booth = -1f;
-            host.sound(Synth.DOOR, 0.8f, 1.15f);
-            startAlley();
-            return;
-        }
-        // the hook: hang up and go back to the street
-        if (y >= gy + 42 && y < gy + 70) {
-            dialled.setLength(0);
-            closeBooth();
-        }
-    }
-
-    /** The row of three buttons under the keypad: their left edges, and the right edge of the last. */
-    private void boothRow(int[] out) {
-        int x0 = BX0 + 14, x3 = BX1 - 14, w3 = (x3 - x0) / 3;
-        out[0] = x0;
-        out[1] = x0 + w3;
-        out[2] = x0 + 2 * w3;
-        out[3] = x3;
-    }
-
-    private int boothButton(float x) {
-        int[] bx = new int[4];
-        boothRow(bx);
-        if (x < bx[0] || x >= bx[3]) return -1;
-        return x < bx[1] - 3 ? 0 : x < bx[1] + 3 ? -1 : x < bx[2] - 3 ? 1 : x < bx[2] + 3 ? -1 : 2;
-    }
-
-    // a flat stone skipping over the waves
-    private static final String[] SKIP = {
+    static final String[] SKIP = {
             ".XX..........",
             "XXXX...X...X.",
             ".XX...X.X.X.X",
@@ -1355,13 +1279,8 @@ final class World implements Physics.Listener {
             ".X.X.X.X.X.X."};
 
     // pictures for the keys, a cell to a character
-    private static final String[] HANDSET = {
-            ".XXXXXXX.",
-            "XXXXXXXXX",
-            "XXX...XXX",
-            "XX.....XX"};
     // a ball rolling at a pin
-    private static final String[] BOWL = {
+    static final String[] BOWL = {
             "..........X..",
             ".........XXX.",
             "..........X..",
@@ -1371,105 +1290,12 @@ final class World implements Physics.Listener {
             "XXX.XX..XXXXX",
             "XXXXXX..XXXXX",
             ".XXXX....XXX."};
-    private static final String[] ERASE = {
-            "...X.....",
-            "..XX.....",
-            ".XXXXXXXX",
-            "..XX.....",
-            "...X....."};
-
     /** A little picture of cells, centered on a point. */
-    private static void glyph(Px f, String[] rows, int cx, int cy, int s, int c) {
+    static void glyph(Px f, String[] rows, int cx, int cy, int s, int c) {
         int x0 = cx - rows[0].length() * s / 2, y0 = cy - rows.length * s / 2;
         for (int j = 0; j < rows.length; j++)
             for (int i = 0; i < rows[j].length(); i++)
                 if (rows[j].charAt(i) == 'X') f.rect(x0 + i * s, y0 + j * s, x0 + (i + 1) * s, y0 + (j + 1) * s, c);
-    }
-
-    private void drawBooth(Px f) {
-        for (int k = 0; k < f.a.length; k++) f.a[k] = Backdrop.mix(f.a[k], 0xFF101418, 0.55f);
-        int top = boothTop(), bot = h - 10;
-        // the booth: painted iron, a lit sign on the roof
-        f.rect(BX0 - 6, top - 22, BX1 + 6, bot, 0xFF5E1612);
-        f.rect(BX0 - 10, top - 30, BX1 + 10, top - 20, 0xFF4A100C);
-        f.rect(W / 2 - 40, top - 19, W / 2 + 40, top - 7, 0xFF2A2420);
-        glyph(f, HANDSET, W / 2, top - 13, 2, 0xFFFFE6A0);
-        f.rect(BX0, top, BX1, bot - 6, 0xFF2A2E33);
-        // the telephone: a steel case, a small green display
-        int cx0 = BX0 + 8, cx1 = BX1 - 8;
-        f.rect(cx0, top + 8, cx1, golemY() - 6, 0xFF8E959C);
-        f.rect(cx0 + 2, top + 10, cx1 - 2, golemY() - 8, 0xFFA8AFB6);
-        int dy = top + 24;
-        f.rect(cx0 + 12, dy, cx1 - 12, dy + 52, 0xFF1A1E16);
-        f.rect(cx0 + 14, dy + 2, cx1 - 14, dy + 50, 0xFF9DB86A);
-        float since = booth - wrongAt;
-        boolean wrong = since < 1f;
-        int ink = 0xFF243014;
-        if (wrong) {
-            // a number that is not there: the display blinks dark and shakes its dashes
-            boolean dark = ((int) (since * 10f) & 1) == 0;
-            if (dark) f.rect(cx0 + 14, dy + 2, cx1 - 14, dy + 50, 0xFF5E7040);
-            int sh = Math.round((float) Math.sin(since * 60f) * 4f * (1f - since));
-            for (int i = -1; i <= 1; i++) f.rect(W / 2 + i * 22 - 7 + sh, dy + 24, W / 2 + i * 22 + 7 + sh, dy + 28, ink);
-        } else {
-            if (dialled.length() > 0) {
-                String shown = dialled.toString();
-                PixelFont.draw(f, shown, W / 2 - PixelFont.width(shown, 3) / 2, dy + 8, 3, ink);
-            } else if (((int) (booth * 2f) & 1) == 0) f.rect(W / 2 - 7, dy + 26, W / 2 + 7, dy + 29, ink);
-            // the numbers that answer: from the second to the farthest reached
-            String up = "2-" + best();
-            PixelFont.draw(f, up, W / 2 - PixelFont.width(up, 1) / 2, dy + 38, 1, 0xFF4A5E2A);
-        }
-        // the keypad: steel keys, the pressed one sunk for a moment
-        int kx = keysX(), ky = keysY();
-        for (int k = 0; k < 12; k++) {
-            int bx = kx + (k % 3) * (KW + KG), by = ky + (k / 3) * (KH + KG);
-            boolean pressed = k == keyDown && booth - keyAt < 0.15f;
-            boolean call = k == 11, clear = k == 9;
-            int face = call ? 0xFF4CA04C : clear ? 0xFFC8B070 : 0xFFDCE0E4;
-            if (pressed) face = Backdrop.scale(face, 0.8f);
-            f.rect(bx, by + 3, bx + KW, by + KH + 3, 0xFF5A5F64);
-            int o = pressed ? 2 : 0;
-            f.rect(bx, by + o, bx + KW, by + KH + o, 0xFF6A7076);
-            f.rect(bx + 2, by + 2 + o, bx + KW - 2, by + KH - 2 + o, face);
-            if (call) glyph(f, HANDSET, bx + KW / 2, by + KH / 2 + o, 4, 0xFFF2F8EC);
-            else if (clear) glyph(f, ERASE, bx + KW / 2, by + KH / 2 + o, 4, 0xFF2A2420);
-            else PixelFont.draw(f, KEYS[k], bx + KW / 2 - PixelFont.width(KEYS[k], 2) / 2, by + KH / 2 - 6 + o, 2, 0xFF2A2420);
-        }
-        // the golem's red button, the alley's blue one, the sea-green one for stones on the
-        // water, and the hook to hang up on
-        int gy = golemY();
-        int[] bx = new int[4];
-        boothRow(bx);
-        f.rect(bx[0], gy, bx[1] - 3, gy + 34, 0xFF3A1A10);
-        f.rect(bx[0] + 2, gy + 2, bx[1] - 5, gy + 32, ((int) (clock * 3f + booth * 3f) & 1) == 0 ? 0xFFD8402A : 0xFFB8301E);
-        int gx = (bx[0] + bx[1] - 3) / 2;
-        PixelFont.draw(f, "GOLEM", gx - PixelFont.width("GOLEM", 2) / 2, gy + 10, 2, 0xFFFFE8D8);
-        f.rect(bx[1] + 3, gy, bx[2] - 3, gy + 34, 0xFF14243A);
-        f.rect(bx[1] + 5, gy + 2, bx[2] - 5, gy + 32, 0xFF2F5D8C);
-        glyph(f, BOWL, (bx[1] + bx[2]) / 2, gy + 17, 3, 0xFFF3EDE0);
-        f.rect(bx[2] + 3, gy, bx[3], gy + 34, 0xFF103A3A);
-        f.rect(bx[2] + 5, gy + 2, bx[3] - 2, gy + 32, 0xFF2A7A78);
-        glyph(f, SKIP, (bx[2] + 3 + bx[3]) / 2, gy + 17, 3, 0xFFF3EDE0);
-        // what does not answer here is dimmed
-        int d0 = atSea ? bx[0] : bx[2] + 3, d1 = atSea ? bx[2] - 3 : bx[3];
-        for (int yy = gy; yy < gy + 34; yy++)
-            for (int xx = d0; xx < d1; xx++) f.a[yy * W + xx] = Backdrop.mix(f.a[yy * W + xx], 0xFF2A2E33, 0.75f);
-        f.rect(W / 2 - 46, gy + 46, W / 2 + 46, gy + 66, 0xFF1E1C1A);
-        f.rect(W / 2 - 40, gy + 42, W / 2 + 40, gy + 50, 0xFF2E2C2A);
-        PixelFont.draw(f, "HOME", W / 2 - PixelFont.width("HOME", 1) / 2, gy + 54, 1, 0xFFE8E2D6);
-        // the doors fold away to the sides as it opens
-        float k = Math.min(1f, booth / 0.6f);
-        int half = (BX1 - BX0) / 2, open = Math.round(half * k * k * (3f - 2f * k));
-        for (int side = 0; side < 2; side++) {
-            int a = side == 0 ? BX0 : W / 2 + open, b = side == 0 ? W / 2 - open : BX1;
-            if (b <= a) continue;
-            f.rect(a, top, b, bot - 6, 0xFF8E2018);
-            for (int py = top + 6; py < bot - 12; py += 26)
-                for (int px = a + 4; px < b - 4; px += 1)
-                    for (int yy = py; yy < Math.min(bot - 12, py + 20); yy++)
-                        f.a[yy * W + px] = Backdrop.mix(f.a[yy * W + px], 0xFFAFC8D2, 0.35f);
-        }
     }
 
     // ---- the fight with the golem ----
@@ -2313,8 +2139,9 @@ final class World implements Physics.Listener {
             // the game waits behind the opening, and starts as it fades
             else if (splashing()) return;
         }
-        if (booth >= 0f) {
-            booth += dt;
+        if (bridge != null) {
+            bridge.update(dt);
+            if (chapterT >= 0f) chapterT = -1f;
             return;
         }
         if (alley != null) {
@@ -2645,6 +2472,21 @@ final class World implements Physics.Listener {
         host.saveInt("ep" + e + "done", 1);
         if (host.loadInt("epRunOk") == 1 && run > host.loadInt("ep" + e + "stars")) host.saveInt("ep" + e + "stars", run);
         if (Episode.ENDS[e] == Episode.NEW) chapterDue = true;
+    }
+
+    /** For the stand: the ring of the portal raised now, and a throw through its middle. */
+    void standPortalOpen() {
+        openPortal();
+    }
+
+    void standPortalThrow() {
+        float[] o = screenOf(portalX(), portalY(), Builder.CZ);
+        throwAt(o[0], o[1], 13f);
+    }
+
+    /** For the stand: the farthest level reached, as if played that far. */
+    void standBest(int plate) {
+        host.saveInt("best", plate);
     }
 
     /** For the stand: where the game is among the episodes. */
@@ -3380,6 +3222,12 @@ final class World implements Physics.Listener {
             burst(f, intro.light(), true);
             return;
         }
+        if (bridge != null) {
+            // the world behind fades as the bridge comes up, and is not drawn once it is up
+            if (bridge.t < Bridge.OPEN_T) drawWorld(f);
+            bridge.draw(f, Math.min(1f, bridge.t / Bridge.OPEN_T));
+            return;
+        }
         drawWorld(f);
         if (intro != null) burst(f, intro.light(), false);
         if (chapterT >= 0f) burst(f, chapterLight(), chapterT < CHAPTER_RISE);
@@ -3661,7 +3509,12 @@ final class World implements Physics.Listener {
             portalIn += dt;
             if (portalIn >= PORTAL_IN) {
                 portalIn = -1f;
-                if (atSea) {
+                if (atSea && level + 1 >= Episode.LAST[Episode.COUNT - 1]) {
+                    // the last episode done: onto the bridge, where two more screens light up
+                    host.saveInt("finale", 1);
+                    startLevel(level, false);
+                    openBridge();
+                } else if (atSea) {
                     // out of the ice into the crossroads of five cubes, the next building waiting
                     startLevel(level + 1, true);
                     startHub();
@@ -4093,7 +3946,6 @@ final class World implements Physics.Listener {
                 drawFightHud(f);
                 drawFlash(f);
             } else if (!noHud) drawHud(f);
-            if (booth >= 0f) drawBooth(f);
         }
         dream(f);
     }

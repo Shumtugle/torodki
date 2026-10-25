@@ -1,4 +1,4 @@
-# The alley comes by itself before the 51st building, once; the booth has its own button.
+# The alley comes by itself before the 51st building, once; the bridge has its own monitor for it.
 screen 1096 2560
 level 49
 wait 1.0
@@ -14,8 +14,8 @@ press
 wait 0.2
 press
 wait 1.0
-shot s2_booth
-tap 190 470
+shot s2_bridge
+bridgetap 55 500
 wait 0.6
-shot s3_from_booth
+shot s3_from_bridge
 alleystate

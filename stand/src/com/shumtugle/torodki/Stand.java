@@ -391,6 +391,40 @@ public final class Stand implements World.Host {
             float[] a = world.aimPoint(), w = world.standRingWorld();
             System.out.println(String.format("%7.2fs  ring at %.1f, %.1f on screen; %.2f m across, %.2f m up from the iceberg's middle",
                     time, a[0], a[1], w[0], w[1]));
+        } else if (c.equals("portalopen")) {
+            world.standPortalOpen();
+            step();
+        } else if (c.equals("portalthrow")) {
+            world.standPortalThrow();
+            step();
+        } else if (c.equals("bridge")) {
+            world.openBridge();
+            step();
+        } else if (c.equals("bridgetap")) {
+            world.touch(World.DOWN, f(p[1]), f(p[2]));
+            step();
+            world.touch(World.UP, f(p[1]), f(p[2]));
+            step();
+        } else if (c.equals("bridgeswipe")) {
+            // a swipe across the ring by so many pixels, over a fifth of a second
+            float x0 = f(p[1]), dx = f(p[2]), y = f(p[3]);
+            world.touch(World.DOWN, x0, y);
+            step();
+            for (int i = 1; i <= 12; i++) {
+                world.touch(World.MOVE, x0 + dx * i / 12f, y);
+                step();
+            }
+            world.touch(World.UP, x0 + dx, y);
+            step();
+        } else if (c.equals("bridgestate")) {
+            Bridge b = world.bridge;
+            System.out.println(String.format("%7.2fs  %s; cubes %d, level %d", time,
+                    b == null ? "no bridge" : String.format("bridge: ring at %.2f, facing %d", b.pos, Math.round(b.pos) % Bridge.SCREENS),
+                    world.cubes, world.level + 1) + (world.alley != null ? ", in the alley" : ""));
+        } else if (c.equals("cubes")) {
+            world.cubes = Integer.parseInt(p[1]);
+        } else if (c.equals("best")) {
+            world.standBest(Integer.parseInt(p[1]));
         } else if (c.equals("episode")) {
             System.out.println(String.format("%7.2fs  %s", time, world.episodeState()));
         } else if (c.equals("aim")) {
