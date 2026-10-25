@@ -1,25 +1,32 @@
-# The opening: the name of blocks thrown down onto a pedestal, smashed by the hammer, the fade into the game.
+# The opening: down from over the town to the square, the name thrown down block by block,
+# the hammer, the pieces, the glide onto them, the light, and the game behind it.
 screen 1096 2560
 splash
-wait 0.2
-shot o0_dark
+wait 0.4
+shot o0_high
+wait 0.6
+shot o1_falling
+wait 0.6
+shot o2_arc
+wait 0.6
+shot o3_lower
+wait 0.6
+shot o4_down
+wait 0.4
+shot o5_hand
 wait 0.5
-shot o1_first
-wait 0.6
-shot o2_coming
-wait 0.8
-shot o3_word
-wait 0.75
-shot o4_word_held
-wait 0.6
-shot o5_flight
-wait 0.2
-shot o6_blow
+shot o6_flight
 wait 0.3
-shot o7_scatter
-wait 0.8
-shot o8_fallen
-wait 1.3
-shot o9_fade
-wait 0.9
-shot o10_game
+shot o7_blow
+wait 0.5
+shot o8_glide
+wait 0.6
+shot o9_onto
+wait 0.35
+shot o10_light
+wait 0.3
+shot o11_white
+wait 0.35
+shot o12_game
+wait 1.0
+shot o13_game

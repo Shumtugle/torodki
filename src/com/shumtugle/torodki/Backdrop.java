@@ -424,6 +424,11 @@ final class Backdrop {
         for (int i = 0; i < pmN; i++) palm(r, rnd, pmX[i], pmZ[i], pmH[i], pmL[i]);
     }
 
+    /** One palm anywhere, drawn the same way each time from its own seed. */
+    void palmAt(Raster r, long seed, float x, float z, float height, float lean) {
+        palm(r, new Random(seed), x, z, height, lean);
+    }
+
     private void palm(Raster r, Random rnd, float x, float z, float height, float lean) {
         float sunSideX = -Raster.sunX();
         float rad0 = 0.28f, rad1 = 0.2f;

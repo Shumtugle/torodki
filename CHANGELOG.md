@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.60
+- The opening flies. It begins high over the seaside town, roofs of old tiles with their
+  chimneys, the sea at the edge, and glides down in an arc to a square in another corner
+  of the same town: paved in rings round a long pedestal, a road behind it and another
+  along its right with cars going both ways, people crossing the square, palms along the
+  promenade, the old pastel houses all round. The name comes down onto the pedestal block
+  by block as the view comes down; on the ground the hammer comes up in the hand, flies,
+  and the name flies to pieces; the view glides on in another arc over the pedestal's
+  corner and down onto the pieces.
+- A burst of light carries the opening over into the game, wherever the game waits, on
+  the summer street or out on the ice: the picture rushes toward its middle and whitens,
+  and the game comes out of the white. A tap goes straight to the light.
+- The square is drawn afresh every frame and kept light for it: the roofs are drawn before
+  the walls, so the tops of the walls cost nothing, and the ground and the sky are filled
+  in last, only where nothing stands.
+
 ## 0.59
 - A new opening, made in code, that tells the game in a few seconds. The summer street, a
   long pedestal, and out of the sky, letter by letter, the blocks of the name come down

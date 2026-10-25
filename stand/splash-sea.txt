@@ -1,0 +1,12 @@
+# The opening when the game waits out on the ice: the light carries the summer square over into winter.
+screen 1096 2560
+level 121
+splash
+wait 5.0
+shot w0_light
+wait 0.3
+shot w1_white
+wait 0.35
+shot w2_winter
+wait 0.5
+shot w3_winter

@@ -5,20 +5,25 @@ import java.util.Random;
 
 /**
  * The opening: the game told in a few seconds, with no picture and no words but its name.
- * The summer street, a long pedestal, and out of the sky, letter by letter, the blocks of
- * the name come down onto it, each landing with a knock, as the gods throw the buildings
- * down. Then the hammer leaves the hand, the name flies to pieces as the first building of
- * the game does, and the street gives way to the game itself. A tap goes straight on.
+ * High over the seaside town the view glides down in an arc to a square, where out of the
+ * sky, letter by letter, the blocks of the name come down onto a long pedestal, each landing
+ * with a knock, as the gods throw the buildings down; cars go by, people cross the square.
+ * Down on the ground the hammer comes up in the hand and flies; the name flies to pieces
+ * as the first building of the game does; the view glides on in an arc down onto the
+ * pieces, and a burst of light carries it over into the game, wherever the game is, on the
+ * street or out on the ice. A tap goes straight on.
  *
- * Pure Java: its own physics, its own timeline; the world draws it.
+ * Pure Java: its own physics, its own timeline and camera; the world draws it.
  */
 final class Intro {
-    static final float END = 4.6f, FADE = 0.7f;      // the fade into the game starts at END
+    static final float END = 5.3f, FADE = 0.6f;      // the light: up to END over the opening, then off the game
+    static final float BURST = 0.45f;                 // how long the light takes to fill the screen
+    static final float LAND = 2.7f, GLIDE_AT = 3.65f; // the view down on the ground; and off again
     static final float B = 0.14f, BH = 0.2f;          // one cell of a letter, across and up, meters
     static final float DEPTH = 0.12f;                 // half the depth of every block
     static final float Z = Builder.BASE_CZ;           // where the pedestal stands
     static final float PED_HX = 2.5f, PED_HY = 0.3f, PED_HZ = 0.55f;
-    static final float THROW_AT = 2.6f, FALL_T = 0.42f, FALL_H = 6.5f;
+    static final float THROW_AT = 3.0f, FALL_T = 0.42f, FALL_H = 6.5f;
     // the camera: in the street before the pedestal, a little to the left, eyes at the name
     static final float CAM_X = -0.7f, CAM_Y = 1.75f, CAM_Z = Z - 9.6f, LOOK_Y = 1.15f;
 
@@ -50,6 +55,8 @@ final class Intro {
     boolean thrown, struck;
     private float acc, soundBudget;
     float hitX, hitY, hitZ;
+    // where the pieces are, followed softly, for the view to glide down onto
+    private float shX = 0f, shY = 0.8f, shZ = Z;
 
     Intro(World.Host host) {
         this.host = host;
@@ -137,6 +144,23 @@ final class Intro {
                 host.sound(Synth.TOCK, 0.16f + b.hx * 0.08f, 0.8f + rnd.nextFloat() * 0.5f);
             }
         if (!thrown && t >= THROW_AT) throwHammer();
+        if (struck) {
+            float mx = 0f, my = 0f, mz = 0f;
+            int n = 0;
+            for (Body b : blocks)
+                if (Math.abs(b.px) < 12f && b.pz < Z + 12f) {
+                    mx += b.px;
+                    my += b.py;
+                    mz += b.pz;
+                    n++;
+                }
+            if (n > 0) {
+                float k = Math.min(1f, dt * 2.5f);
+                shX += (mx / n - shX) * k;
+                shY += (my / n - shY) * k;
+                shZ += (mz / n - shZ) * k;
+            }
+        }
         acc += dt;
         while (acc >= 1f / 60f) {
             phys.step(1f / 60f);
@@ -193,6 +217,62 @@ final class Intro {
         }
     }
 
+    /**
+     * Where the view is now and what it looks at: x, y, z, then the point looked at. Down
+     * from high over the town in an arc that swings out over the promenade, to the player's
+     * eyes before the name; after the blow, on in another arc, up a little and over the
+     * pedestal's corner, down onto the pieces.
+     */
+    void view(float[] o) {
+        if (t < LAND) {
+            float u = Math.max(0f, t / LAND), e = u * u * (3f - 2f * u);
+            bez(-30f, 38f, Z - 30f, -24f, 15f, Z - 24f, CAM_X, CAM_Y, CAM_Z, e, o, 0);
+            o[3] = 0f;
+            o[4] = 0.4f + (LOOK_Y - 0.4f) * e;
+            o[5] = Z;
+        } else if (t < GLIDE_AT) {
+            o[0] = CAM_X;
+            o[1] = CAM_Y;
+            o[2] = CAM_Z;
+            o[3] = 0f;
+            o[4] = LOOK_Y;
+            o[5] = Z;
+        } else {
+            float u = Math.min(1f, (t - GLIDE_AT) / (END - GLIDE_AT)), e = u * u * (3f - 2f * u);
+            bez(CAM_X, CAM_Y, CAM_Z, 4.2f, 3.8f, Z - 6f, 2.6f, 2.3f, Z - 1.4f, e, o, 0);
+            o[3] = shX * e;
+            o[4] = LOOK_Y + (Math.min(shY, 0.6f) - LOOK_Y) * e;
+            o[5] = Z + (shZ - Z) * e;
+        }
+    }
+
+    private static void bez(float ax, float ay, float az, float bx, float by, float bz, float cx, float cy, float cz,
+                            float e, float[] o, int at) {
+        float a = (1f - e) * (1f - e), b = 2f * e * (1f - e), c = e * e;
+        o[at] = a * ax + b * bx + c * cx;
+        o[at + 1] = a * ay + b * by + c * cy;
+        o[at + 2] = a * az + b * bz + c * cz;
+    }
+
+    /** How far up out of sight the hand with the hammer is: it comes up once the view is down. */
+    float handDown() {
+        float u = (t - (LAND - 0.15f)) / 0.35f;
+        if (u <= 0f) return 1f;
+        if (u >= 1f) return 0f;
+        return (1f - u) * (1f - u);
+    }
+
+    /** The light that carries the opening over into the game: 0 none, 1 the screen all white. */
+    float light() {
+        if (t < END - BURST) return 0f;
+        if (t < END) {
+            float u = (t - (END - BURST)) / BURST;
+            return u * u;
+        }
+        float u = Math.min(1f, (t - END) / FADE);
+        return (1f - u) * (1f - u);
+    }
+
     boolean fading() {
         return t >= END;
     }
@@ -201,8 +281,8 @@ final class Intro {
         return t >= END + FADE;
     }
 
-    /** A tap: straight on to the fade. */
+    /** A tap: straight on to the burst of light. */
     void skip() {
-        if (t < END) t = END;
+        if (t < END - BURST) t = END - BURST;
     }
 }

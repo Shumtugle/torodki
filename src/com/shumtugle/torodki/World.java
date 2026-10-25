@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.59";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.60";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -3183,15 +3183,16 @@ final class World implements Physics.Listener {
 
     // ---- the opening picture ----
     // ---- the opening ----
-    // When the game starts, the game in a few seconds: the name built of blocks on a pedestal
-    // in the street, thrown down from the sky letter by letter, and smashed by the hammer.
-    // It is played and drawn here; a tap goes straight on, and it fades into the game.
+    // When the game starts, the game in a few seconds: over the town and down onto a square,
+    // the name built of blocks on a pedestal, thrown down from the sky letter by letter, and
+    // smashed by the hammer; a burst of light carries it over into the game. It is played
+    // and drawn here, the square drawn afresh every frame; a tap goes straight on.
 
     private Intro intro;
     private Raster introRas;
-    private int[] introCol;
-    private float[] introZ;
-    private byte[] introLit;
+    private Town town;
+    private final float[] introView = new float[6];
+    private int[] burstBuf;
 
     /** For the desktop stand: no opening, or the opening again. */
     void skipSplash() {
@@ -3207,33 +3208,21 @@ final class World implements Physics.Listener {
         return intro != null && !intro.fading();
     }
 
-    /** The opening's camera: from where the player stands, a little closer in on the name. */
-    private void prepareIntro() {
-        introRas = new Raster(W, h);
-        float dx = -Intro.CAM_X, dz = Intro.Z - Intro.CAM_Z;
-        float dist = (float) Math.sqrt(dx * dx + dz * dz);
-        introRas.camera(Intro.CAM_X, Intro.CAM_Y, Intro.CAM_Z, (float) Math.atan2(dx, dz),
-                (float) Math.atan2(Intro.LOOK_Y - Intro.CAM_Y, dist), focal, h * 0.5f);
-        Raster.overcast(false);
-        backdrop.paint(introRas, 11L);
-        introCol = introRas.col.clone();
-        introZ = introRas.zb.clone();
-        introLit = introRas.lit.clone();
-    }
-
-    private void drawIntro(Px f, float alpha) {
-        if (alpha <= 0f) return;
-        if (introRas == null || introRas.h != h) prepareIntro();
+    private void drawIntro(Px f) {
+        if (introRas == null || introRas.h != h) introRas = new Raster(W, h);
+        if (town == null) town = new Town();
         Raster keep = ras;
         boolean sea = atSea;
         ras = introRas;
         atSea = false;
         Raster.overcast(false);
-        System.arraycopy(introCol, 0, ras.col, 0, introCol.length);
-        System.arraycopy(introZ, 0, ras.zb, 0, introZ.length);
-        System.arraycopy(introLit, 0, ras.lit, 0, introLit.length);
-        java.util.Arrays.fill(ras.idb, 0);
-        ras.shadowBegin(6f, Intro.Z + 1f, 12f);
+        intro.view(introView);
+        float[] v = introView;
+        float dx = v[3] - v[0], dy = v[4] - v[1], dz = v[5] - v[2];
+        ras.camera(v[0], v[1], v[2], (float) Math.atan2(dx, dz), (float) Math.atan2(dy, (float) Math.sqrt(dx * dx + dz * dz)), focal, h * 0.5f);
+        town.begin(ras);
+        ras.shadowBegin(0f, Intro.Z + 2f, 16f);
+        town.build(ras);
         Body p = intro.pedestal;
         drawBody(p, 1f, 0f, 1);
         ras.shadowBox(p.px, p.py, p.pz, 1, 0, 0, 0, 1, 0, 0, 0, 1, p.hx, p.hy, p.hz);
@@ -3244,20 +3233,23 @@ final class World implements Physics.Listener {
             drawBody(b, 1f, drop, i + 2);
             ras.shadowBox(b.px, b.py + drop, b.pz, b.r00, b.r01, b.r02, b.r10, b.r11, b.r12, b.r20, b.r21, b.r22, b.hx, b.hy, b.hz);
         }
+        town.life(ras, intro.t, 300);
         Body hm = intro.hammer;
-        if (!intro.thrown) {
-            // in the hand, as in the game, until it is thrown
-            eyeX = Intro.CAM_X;
-            eyeY = Intro.CAM_Y;
-            eyeZ = Intro.CAM_Z;
-            heldPose(0.3f, -0.7f + (float) Math.sin(intro.t * 1.7f) * 0.008f, 1.35f, -0.42f, 0.86f, 0.28f, 0.94f, 0.2f, -0.28f);
+        float down = intro.handDown();
+        if (!intro.thrown && down < 1f) {
+            // in the hand, as in the game, once the view is down on the ground
+            eyeX = v[0];
+            eyeY = v[1];
+            eyeZ = v[2];
+            heldPose(0.3f, -0.7f - 0.6f * down + (float) Math.sin(intro.t * 1.7f) * 0.008f, 1.35f, -0.42f, 0.86f, 0.28f, 0.94f, 0.2f, -0.28f);
             pose[0] -= pose[3] * 0.05f;
             pose[1] -= pose[6] * 0.05f;
             pose[2] -= pose[9] * 0.05f;
             eyeX = CAM_X;
             eyeY = CAM_Y;
             eyeZ = 0f;
-        } else {
+            drawParts(false, 1f, 900, false);
+        } else if (intro.thrown) {
             pose[0] = hm.px;
             pose[1] = hm.py;
             pose[2] = hm.pz;
@@ -3271,31 +3263,58 @@ final class World implements Physics.Listener {
             pose[10] = hm.r21;
             pose[11] = hm.r22;
             ras.shadowBox(hm.px, hm.py, hm.pz, hm.r00, hm.r01, hm.r02, hm.r10, hm.r11, hm.r12, hm.r20, hm.r21, hm.r22, hm.hx, hm.hy * 0.8f, hm.hz);
+            drawParts(false, 1f, 900, false);
         }
-        drawParts(false, 1f, 900, false);
+        town.ground(ras);
         ras.shadowApply(0, 0, W - 1, h - 1);
         ras.outlines(0, 0, W - 1, h - 1, 1);
         int[] c = ras.col;
+        int n = Math.min(f.a.length, c.length);
         // out of the dark at the very start
         float in = Math.min(1f, intro.t / 0.35f);
-        if (alpha >= 1f && in >= 1f) System.arraycopy(c, 0, f.a, 0, Math.min(f.a.length, c.length));
-        else
-            for (int k = 0; k < Math.min(f.a.length, c.length); k++) {
-                int v = in < 1f ? Backdrop.mix(0xFF000000, c[k], in) : c[k];
-                f.a[k] = alpha >= 1f ? v : Backdrop.mix(f.a[k], v, alpha);
-            }
+        if (in >= 1f) System.arraycopy(c, 0, f.a, 0, n);
+        else for (int k = 0; k < n; k++) f.a[k] = Backdrop.mix(0xFF000000, c[k], in);
         ras = keep;
         atSea = sea;
+    }
+
+    /**
+     * The light between the opening and the game: the picture rushes toward its middle, as
+     * if flown into, and whitens; on the far side the game comes out of the white.
+     */
+    private void burst(Px f, float light, boolean rush) {
+        if (light <= 0f) return;
+        int n = W * h;
+        if (rush) {
+            if (burstBuf == null || burstBuf.length != n) burstBuf = new int[n];
+            System.arraycopy(f.a, 0, burstBuf, 0, n);
+            float cxp = W * 0.5f, cyp = h * 0.5f, k = 0.12f * light;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < W; x++) {
+                    int r = 0, g = 0, b = 0;
+                    for (int s = 0; s < 4; s++) {
+                        float q = 1f - k * s / 3f;
+                        int sx = (int) (cxp + (x - cxp) * q), sy = (int) (cyp + (y - cyp) * q);
+                        int col = burstBuf[sy * W + sx];
+                        r += (col >> 16) & 0xFF;
+                        g += (col >> 8) & 0xFF;
+                        b += col & 0xFF;
+                    }
+                    f.a[y * W + x] = 0xFF000000 | ((r >> 2) << 16) | ((g >> 2) << 8) | (b >> 2);
+                }
+        }
+        for (int i = 0; i < n; i++) f.a[i] = Backdrop.mix(f.a[i], 0xFFFFFCF2, light);
     }
 
     void draw(Px f) {
         if (ras == null) return;
         if (splashing()) {
-            drawIntro(f, 1f);
+            drawIntro(f);
+            burst(f, intro.light(), true);
             return;
         }
         drawWorld(f);
-        if (intro != null) drawIntro(f, 1f - (intro.t - Intro.END) / Intro.FADE);
+        if (intro != null) burst(f, intro.light(), false);
     }
 
     private void drawWorld(Px f) {
