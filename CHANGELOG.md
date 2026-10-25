@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.66
+- The hammer thrown on the bridge is the game's own hammer: the grained wooden head bound
+  with two iron hoops, on its handle and grip, drawn in the round and lit. It leaves the
+  hand big at the lower right and turns end over end as it flies off to what was tapped,
+  smaller as it goes.
+
 ## 0.65
 - Golden cubes come evenly: one building in every four levels wears one, which one picked
   at random within the four. Before, each building drew against a chance on its own, and

@@ -38,7 +38,7 @@ final class Bridge {
     static final int ALLEY = 0, GOLEM = 1, SKIP = 2, HOME = 3;
     private static final int AT_SCREEN = 0, AT_SLOT = 1, AT_CONSOLE = 2;
     private static final int SET = 0, SCOPE = 1, MONITOR = 2;
-    static final float OPEN_T = 0.3f, THROW_T = 0.32f, INSERT_T = 0.55f;
+    static final float OPEN_T = 0.3f, THROW_T = 0.42f, INSERT_T = 0.55f;
     static final float LEVER_T = 0.12f, OFF_T = 0.42f, TV_ON_T = 0.3f;
     private static final float CHARGE_T = 0.45f, TEAR_T = 0.1f;
 
@@ -443,11 +443,13 @@ final class Bridge {
             int s = Math.round(9 + 3 * e);
             cube(f, Math.round(x - s * 0.5f), Math.round(y - s * 0.5f), s);
         }
-        // the hammer in flight to what was tapped
+        // the hammer in flight to what was tapped: from the hand at the lower right, turning
+        // end over end, smaller as it goes away
         if (aimKind >= 0) {
-            float u = aimT / THROW_T;
-            float x = W - 20 + (aimX - (W - 20)) * u, y = h + 10 + (aimY - (h + 10)) * u - (float) Math.sin(u * Math.PI) * 30f;
-            hammer(f, x, y, u * 9f, 1.2f - 0.5f * u);
+            float u = Math.min(1f, aimT / THROW_T), e = u * (2f - u);
+            float x0 = W - 20, y0 = h - 40;
+            float x = x0 + (aimX - x0) * e, y = y0 + (aimY - y0) * e - (float) Math.sin(u * Math.PI) * 46f;
+            hammer(f, x, y, 2.1f + 5.2f * u, 260f - 205f * e);
         }
         // the jolt of a cube going home: down three pixels and back
         if (shakeT < 0.2f) {
@@ -1225,17 +1227,94 @@ final class Bridge {
         f.rect(cx - 3, cy - 1, cx + 4, cy + 2, c);
     }
 
-    /** The hammer, small, turning as it flies. */
-    private static void hammer(Px f, float cx, float cy, float ang, float s) {
-        float ca = (float) Math.cos(ang), sa = (float) Math.sin(ang);
-        int r = Math.round(16 * s);
-        for (int y = -r; y <= r; y++)
-            for (int x = -r; x <= r; x++) {
-                float u = (x * ca + y * sa) / (14f * s), v = (-x * sa + y * ca) / (14f * s);
-                int c = 0;
-                if (u > 0.3f && u < 1.05f && Math.abs(v) < 0.42f) c = (u > 0.42f && u < 0.52f) || (u > 0.82f && u < 0.92f) ? 0xFF3A3430 : 0xFFD9A066;
-                else if (u > -1f && u <= 0.3f && Math.abs(v) < 0.1f) c = 0xFF8A5A32;
-                if (c != 0) f.set(Math.round(cx) + x, Math.round(cy) + y, c);
+    // the hammer, as in the game: a handle, a darker grip, a grained wooden head bound with
+    // two iron hoops near its ends; boxes by their middle and half sizes, in meters, the
+    // handle along x, the head's long side along z
+    private static final float[][] PARTS = {
+            {-0.1f, 0f, 0f, 0.31f, 0.03f, 0.03f},
+            {-0.36f, 0f, 0f, 0.07f, 0.036f, 0.036f},
+            {0.31f, 0f, 0f, 0.1f, 0.078f, 0.17f},
+            {0.31f, 0f, 0.12f, 0.104f, 0.082f, 0.016f},
+            {0.31f, 0f, -0.12f, 0.104f, 0.082f, 0.016f}};
+    private static final int[] PART_COL = {0xFF9A6638, 0xFF6E3F27, 0xFFDFA868, 0xFF55524F, 0xFF55524F};
+
+    /**
+     * The hammer in the air at (cx, cy), so many pixels to a meter: turned in the plane of
+     * the frame by spin (radians), and a little toward the eye so the head shows its depth.
+     * Each box is drawn face by face, far ones first, lit from the upper left.
+     */
+    private static void hammer(Px f, float cx, float cy, float spin, float ppm) {
+        // the hammer's own axes in view space, before the turn: the handle across the frame and
+        // a little toward the eye, the head's long side upright and leaning back, so it reads
+        // as a T with the depth of its faces showing
+        float[] ax = norm(1f, 0f, 0.32f), az = norm(0f, 1f, -0.42f);
+        float d = ax[0] * az[0] + ax[1] * az[1] + ax[2] * az[2];
+        az = norm(az[0] - d * ax[0], az[1] - d * ax[1], az[2] - d * ax[2]);
+        float[] ay = {az[1] * ax[2] - az[2] * ax[1], az[2] * ax[0] - az[0] * ax[2], az[0] * ax[1] - az[1] * ax[0]};
+        float[][] m = {{ax[0], ay[0], az[0]}, {ax[1], ay[1], az[1]}, {ax[2], ay[2], az[2]}};
+        float cs = (float) Math.cos(spin), sn = (float) Math.sin(spin);
+        float[][] r = new float[3][3];
+        for (int c = 0; c < 3; c++) {
+            r[0][c] = cs * m[0][c] - sn * m[1][c];
+            r[1][c] = sn * m[0][c] + cs * m[1][c];
+            r[2][c] = m[2][c];
+        }
+        float lx = -0.45f, ly = 0.6f, lz = 0.66f;
+        // far parts first; the hoops wrap the head, so they always go on after it
+        float zh = r[2][0] * PARTS[0][0], zg = r[2][0] * PARTS[1][0], zd = r[2][0] * PARTS[2][0];
+        int[] ord = zd < Math.min(zh, zg) ? new int[]{2, 3, 4, zh < zg ? 0 : 1, zh < zg ? 1 : 0}
+                : zd > Math.max(zh, zg) ? new int[]{zh < zg ? 0 : 1, zh < zg ? 1 : 0, 2, 3, 4}
+                : new int[]{zh < zg ? 0 : 1, 2, 3, 4, zh < zg ? 1 : 0};
+        for (int o = 0; o < 5; o++) {
+            int i = ord[o];
+            float[] p = PARTS[i];
+            float px = r[0][0] * p[0] + r[0][1] * p[1] + r[0][2] * p[2];
+            float py = r[1][0] * p[0] + r[1][1] * p[1] + r[1][2] * p[2];
+            // the six faces: an axis k, a side; visible when the outward normal faces the eye
+            for (int k = 0; k < 3; k++)
+                for (int sd = -1; sd <= 1; sd += 2) {
+                    float nx = r[0][k] * sd, ny = r[1][k] * sd, nz = r[2][k] * sd;
+                    if (nz <= 0.02f) continue;
+                    int a1 = (k + 1) % 3, a2 = (k + 2) % 3;
+                    float h0 = p[3 + k] * sd, h1 = p[3 + a1], h2 = p[3 + a2];
+                    // the face's middle and its two half edges, on screen (y down)
+                    float mx = cx + (px + r[0][k] * h0) * ppm, my = cy - (py + r[1][k] * h0) * ppm;
+                    float e1x = r[0][a1] * h1 * ppm, e1y = -r[1][a1] * h1 * ppm;
+                    float e2x = r[0][a2] * h2 * ppm, e2y = -r[1][a2] * h2 * ppm;
+                    float lit = 0.62f + 0.48f * Math.max(0f, nx * lx + ny * ly + nz * lz);
+                    // the grain runs along the box's longest side
+                    int along = p[3] >= p[4] && p[3] >= p[5] ? 0 : p[5] >= p[4] ? 2 : 1;
+                    boolean grainA = along == a1, grainB = along == a2;
+                    face(f, mx, my, e1x, e1y, e2x, e2y, PART_COL[i], lit, i == 0 || i == 2 ? (grainA ? 2 : grainB ? 1 : 0) : 0, i * 7 + k * 3 + sd);
+                }
+        }
+    }
+
+    private static float[] norm(float x, float y, float z) {
+        float l = (float) Math.sqrt(x * x + y * y + z * z);
+        return new float[]{x / l, y / l, z / l};
+    }
+
+    /**
+     * A parallelogram filled pixel by pixel: middle (mx, my), half edges e1 and e2. grain 1
+     * draws faint stripes across e1 (running along e2), grain 2 across e2.
+     */
+    private static void face(Px f, float mx, float my, float e1x, float e1y, float e2x, float e2y, int col, float lit, int grain, int seed) {
+        float det = e1x * e2y - e1y * e2x;
+        if (Math.abs(det) < 0.05f) return;
+        float ext = Math.abs(e1x) + Math.abs(e2x), eyt = Math.abs(e1y) + Math.abs(e2y);
+        int x0 = (int) Math.floor(mx - ext), x1 = (int) Math.ceil(mx + ext), y0 = (int) Math.floor(my - eyt), y1 = (int) Math.ceil(my + eyt);
+        for (int y = y0; y <= y1; y++)
+            for (int x = x0; x <= x1; x++) {
+                float dx = x + 0.5f - mx, dy = y + 0.5f - my;
+                float a = (dx * e2y - dy * e2x) / det, b = (e1x * dy - e1y * dx) / det;
+                if (a < -1f || a > 1f || b < -1f || b > 1f) continue;
+                float k = lit;
+                if (grain == 1) k *= 0.93f + 0.07f * (float) Math.sin(a * 9.5f + seed) + 0.04f * (float) Math.sin(a * 23f);
+                else if (grain == 2) k *= 0.93f + 0.07f * (float) Math.sin(b * 9.5f + seed) + 0.04f * (float) Math.sin(b * 23f);
+                // edges a shade darker, so the box keeps its shape when small
+                if (Math.abs(a) > 0.9f || Math.abs(b) > 0.9f) k *= 0.86f;
+                f.set(x, y, Backdrop.scale(col, k));
             }
     }
 }

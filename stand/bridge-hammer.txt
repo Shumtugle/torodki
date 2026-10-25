@@ -1,0 +1,22 @@
+# The hammer thrown on the bridge, frame by frame: the same hammer as in the game.
+screen 1096 2560
+level 116
+best 117
+cubes 3
+wait 1.0
+bridge
+wait 0.6
+bridgetap 137 256
+wait 0.03
+shot h0
+wait 0.08
+shot h1
+wait 0.08
+shot h2
+wait 0.08
+shot h3
+wait 0.08
+shot h4
+bridgetap 137 500
+wait 0.2
+shot h5_console
