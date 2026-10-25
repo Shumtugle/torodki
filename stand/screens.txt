@@ -1,0 +1,39 @@
+# The bridge's screens at sea: radar scopes, a cube going into a slot (the tube folds to a
+# line and opens again), the crossroads' black and white monitor, the spring settling, the
+# lever and the room going out like a set switched off, the street coming back on.
+screen 1096 2560
+level 129
+best 140
+cubes 4
+wait 1.5
+bridge
+wait 0.6
+shot s0_scope
+bridgeswipe 120 70 256
+wait 1.2
+shot s1_left
+bridgetap 137 256
+wait 0.9
+shot s2_fold
+wait 0.12
+shot s3_open
+wait 0.6
+shot s4_charged
+bridgeswipe 120 -200 256
+wait 0.25
+shot s5_turning
+wait 1.2
+shot s6_settled
+bridgestate
+bridgetap 137 590
+wait 0.38
+shot s7_lever
+wait 0.18
+shot s8_off
+wait 0.2
+shot s9_dot
+wait 0.12
+shot s10_on
+wait 0.4
+shot s11_street
+bridgestate

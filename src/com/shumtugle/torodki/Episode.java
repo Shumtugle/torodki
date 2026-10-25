@@ -14,6 +14,8 @@ final class Episode {
     // how each ends: a scene still to come, or a turn the game already takes there
     static final int[] ENDS = {NEW, NEW, NEW, ALLEY, NEW, NEW, ALLEY, PORTAL, NEW, SKIP, NEW, SKIP};
     static final int COUNT = FIRST.length;
+    // the first episode out at sea
+    static final int SEA = 8;
 
     private Episode() {
     }

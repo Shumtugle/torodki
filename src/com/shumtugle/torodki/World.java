@@ -19,7 +19,7 @@ import java.util.Random;
  */
 final class World implements Physics.Listener {
     static final int W = 274;              // game pixels across; the height follows the screen
-    static final String VERSION = "0.63";   // shown on screen; keep in step with versionName
+    static final String VERSION = "0.64";   // shown on screen; keep in step with versionName
 
     static final int DOWN = 0, MOVE = 1, UP = 2;
 
@@ -1187,6 +1187,7 @@ final class World implements Physics.Listener {
     private int calls;
     private float callAt = -9f;
     Bridge bridge;                       // the dispatcher's bridge, while it is open
+    private float tvOn = -1f;            // the picture coming back on after the bridge, running
 
     int best() {
         return Math.max(level + 1, host.loadInt("best"));
@@ -1229,9 +1230,10 @@ final class World implements Physics.Listener {
         host.sound(Synth.DOOR, 0.8f, 1.15f);
     }
 
-    /** A console monitor or the lever, answered. */
+    /** A console monitor or the lever, answered, once the room has gone out: the game comes on like a set. */
     void bridgeAct(int which) {
-        closeBridge();
+        bridge = null;
+        tvOn = 0f;
         if (which == Bridge.ALLEY) startAlley();
         else if (which == Bridge.GOLEM) startBoss(level);
         else if (which == Bridge.SKIP) startSkip();
@@ -2144,6 +2146,7 @@ final class World implements Physics.Listener {
             if (chapterT >= 0f) chapterT = -1f;
             return;
         }
+        if (tvOn >= 0f && (tvOn += dt) > Bridge.TV_ON_T) tvOn = -1f;
         if (alley != null) {
             clock += dt;
             seaFade = Math.max(0f, seaFade - dt / 1.4f);
@@ -3231,6 +3234,7 @@ final class World implements Physics.Listener {
         drawWorld(f);
         if (intro != null) burst(f, intro.light(), false);
         if (chapterT >= 0f) burst(f, chapterLight(), chapterT < CHAPTER_RISE);
+        if (tvOn >= 0f) Bridge.switchOn(f, h, tvOn / Bridge.TV_ON_T);
     }
 
     private void drawWorld(Px f) {

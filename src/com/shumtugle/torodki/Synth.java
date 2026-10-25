@@ -22,13 +22,16 @@ final class Synth {
     // more thunder, each made differently: near and sharp, rolling, far and low, a double crack, a long roll
     static final int THUNDERS = 6;
     private static final int THUNDER_MORE = DTMF + 21;
+    // the bridge: the transformers' hum, laid end to end, and a picture tube switched off
+    static final int HUM = THUNDER_MORE + THUNDERS - 1, TV_OFF = HUM + 1;
+    static final float HUM_EVERY = 0.5f;
 
     /** One of the thunders: 0 the plain one, then the others. */
     static int thunder(int k) {
         return k <= 0 ? THUNDER : THUNDER_MORE + (k - 1) % (THUNDERS - 1);
     }
 
-    final float[][] bank = new float[DTMF + 21 + THUNDERS - 1][];
+    final float[][] bank = new float[TV_OFF + 1][];
 
     Synth() {
         Random r = new Random(7);
@@ -67,6 +70,8 @@ final class Synth {
         bank[MATTRESS] = mattress(r);
         bank[TEAR] = tear(r);
         bank[ROLL] = roll(r);
+        bank[HUM] = hum(r);
+        bank[TV_OFF] = tvOff(r);
         // near: a split crack, a short hard rumble
         bank[THUNDER_MORE] = thunder(r, 2.0f, 1.1f, 0f, 0.05f, 1.6f, 1100);
         // overhead, rolling on in waves
@@ -299,6 +304,41 @@ final class Synth {
             lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.1f;
             v += lp * 0.8f * (float) Math.exp(-60f * t);
             s[i] = v * Math.min(1f, t * 800f) * 0.7f;
+        }
+        return s;
+    }
+
+    /**
+     * Mains hum: a whole number of cycles at 50 Hz and its overtones, so pieces laid one
+     * after another every HUM_EVERY seconds keep in step; the ends fade, the pieces overlap.
+     */
+    private static float[] hum(Random r) {
+        int n = (int) ((HUM_EVERY + 0.1f) * RATE);
+        float[] s = new float[n];
+        float lp = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            float env = Math.min(1f, t / 0.1f) * Math.min(1f, (HUM_EVERY + 0.1f - t) / 0.1f);
+            lp += ((r.nextFloat() * 2f - 1f) - lp) * 0.02f;
+            float v = 0.5f * (float) Math.sin(2 * Math.PI * 50f * t) + 0.32f * (float) Math.sin(2 * Math.PI * 100f * t + 0.6f)
+                    + 0.14f * (float) Math.sin(2 * Math.PI * 150f * t + 1.3f) + 0.06f * (float) Math.sin(2 * Math.PI * 250f * t);
+            s[i] = (v * (1f + lp * 0.8f)) * 0.22f * env;
+        }
+        return s;
+    }
+
+    /** A picture tube switched off: a falling whine, a soft thump of the coil, a tick. */
+    private static float[] tvOff(Random r) {
+        int n = (int) (0.5f * RATE);
+        float[] s = new float[n];
+        float ph = 0f;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) RATE;
+            ph += (2600f * (float) Math.exp(-9f * t) + 60f) / RATE;
+            float whine = (float) Math.sin(2 * Math.PI * ph) * (float) Math.exp(-6f * t) * 0.22f;
+            float thump = (float) Math.sin(2 * Math.PI * 70f * t) * (float) Math.exp(-14f * t) * 0.5f;
+            float tick = t < 0.004f ? (r.nextFloat() * 2f - 1f) * 0.6f : 0f;
+            s[i] = whine + thump + tick;
         }
         return s;
     }

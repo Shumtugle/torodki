@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.64
+- The screens of the bridge take after their world: wooden color sets with channel drums
+  for the street, round green radar scopes with bolted housings for the sea, black and
+  white monitors for the crossroads and the two games. Each shows, behind bulging glass, a
+  still of a level of its episode being played; the scopes show it as echoes under a beam
+  that goes round once in four seconds. The episode being played shivers, its colors a
+  little apart. Screens still ahead are dead grey glass; snow comes only when one is hit.
+- On the plate under each screen: its levels, the best stars, the golden cubes won there.
+- The ring is seen from inside: the rails it hangs on and the seams of the wall bow away
+  toward the sides, a screen turned away is taller at its outer edge, and the wall turns
+  slower than the screens. Let go, the ring springs onto the nearest screen with a click,
+  a little past and back; the picture tears for a moment as it comes to rest.
+- A caged lamp over the middle lights the screen in front. The more slots hold a cube, the
+  warmer the room. The transformers hum.
+- A slot is a shaft with copper contacts. A cube going in jolts the room; the tube folds to
+  a line and opens again brighter, the lamp on the case turns green, the slot keeps an
+  amber glow.
+- The golden cubes in hand sit in a rack in the corner. On the console: a dial that shows
+  the whole ring from above, glow tubes with the number of the level the lever goes back
+  to, a clearer picture for the alley. The HOME lever swings over, and the room goes out
+  like a set switched off; the game comes back on from a line.
+
 ## 0.63
 - The red button no longer brings up the booth: three presses open the dispatcher's
   bridge. A ring of screens, one for every episode, one for the crossroads of the five
