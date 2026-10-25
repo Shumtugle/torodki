@@ -41,6 +41,7 @@ final class Town {
 
     // people: a walk from a to b and back, a pace, colors of shirt and trousers
     private static final int PEOPLE = 14;
+    private static final float NEAREST = 18f;     // no nearer to the eye than this, ever
     private final float[] pAx = new float[PEOPLE], pAz = new float[PEOPLE], pBx = new float[PEOPLE], pBz = new float[PEOPLE];
     private final float[] pV = new float[PEOPLE], pPh = new float[PEOPLE];
     private final int[] pShirt = new int[PEOPLE], pLegs = new int[PEOPLE], pSkin = new int[PEOPLE];
@@ -109,17 +110,25 @@ final class Town {
             carCol[i] = CAR_COLORS[r.nextInt(CAR_COLORS.length)];
         }
         for (int i = 0; i < PEOPLE; i++) {
-            // across the square, round the pedestal, along the promenade
-            if (i < 9) {
-                pAx[i] = -SQ_X + 2f + r.nextFloat() * (2f * SQ_X - 4f);
-                pAz[i] = r.nextBoolean() ? SQ_Z0 + 1f + r.nextFloat() * 4f : Z + 2.5f + r.nextFloat() * 7f;
-                pBx[i] = -SQ_X + 2f + r.nextFloat() * (2f * SQ_X - 4f);
-                pBz[i] = pAz[i] + (r.nextFloat() - 0.5f) * 3f;
+            // people are seen only from afar: little figures of boxes do not bear a close look.
+            // They keep to the far pavements: past the road behind the square, past the road
+            // on its right, and along the promenade, out of the near views
+            if (i < 6) {
+                pAx[i] = -12f + r.nextFloat() * 24f;
+                pAz[i] = BACK_Z1 + 0.8f + r.nextFloat() * 1.6f;
+                pBx[i] = pAx[i] + (r.nextBoolean() ? 1f : -1f) * (6f + r.nextFloat() * 10f);
+                pBz[i] = pAz[i] + (r.nextFloat() - 0.5f) * 0.8f;
+            } else if (i < 10) {
+                pAx[i] = RIGHT_X1 + 0.8f + r.nextFloat() * 1.4f;
+                pAz[i] = Z - 20f + r.nextFloat() * 20f;
+                pBx[i] = pAx[i] + (r.nextFloat() - 0.5f) * 0.6f;
+                pBz[i] = pAz[i] + 8f + r.nextFloat() * 14f;
             } else {
+                // the far end of the promenade: the view comes down over its near end
                 pAx[i] = -19f + (r.nextFloat() - 0.5f) * 2f;
-                pAz[i] = Z - 20f + r.nextFloat() * 10f;
+                pAz[i] = Z + 5f + r.nextFloat() * 8f;
                 pBx[i] = pAx[i];
-                pBz[i] = pAz[i] + 22f + r.nextFloat() * 8f;
+                pBz[i] = pAz[i] + 12f + r.nextFloat() * 8f;
             }
             pV[i] = 1.1f + r.nextFloat() * 0.5f;
             pPh[i] = r.nextFloat() * 60f;
@@ -310,6 +319,8 @@ final class Town {
             float w = (pPh[i] + t * pV[i]) % (2f * len);
             float k = w < len ? w / len : 2f - w / len;
             float yaw = (float) Math.atan2(dx, dz) + (w < len ? 0f : (float) Math.PI);
+            float px = pAx[i] + dx * k, pz = pAz[i] + dz * k, ex = px - r.camX, ey = 1f - r.camY, ez = pz - r.camZ;
+            if (ex * ex + ey * ey + ez * ez < NEAREST * NEAREST) continue;
             person(r, pAx[i] + dx * k, pAz[i] + dz * k, yaw, t * pV[i] * 3.2f + i, pShirt[i], pLegs[i], pSkin[i], (id++) << 3);
         }
     }

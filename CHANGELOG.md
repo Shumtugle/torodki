@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.61
+- In the opening, people are seen only from afar: little figures of boxes do not bear a
+  close look. They keep to the far pavements, past the road behind the square, past the
+  road on its right and along the far end of the promenade, so the view never comes within
+  eighteen meters of anyone; should it ever, they are not drawn.
+
 ## 0.60
 - The opening flies. It begins high over the seaside town, roofs of old tiles with their
   chimneys, the sea at the edge, and glides down in an arc to a square in another corner
